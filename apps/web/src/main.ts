@@ -352,7 +352,7 @@ function setupDemo() {
       pulse.halo.remove();
       return false;
     });
-    cmd.textContent = `myci switch ${next}`;
+    cmd.textContent = `relayrunner switch ${next}`;
     for (const check of checks[next]) if (check.state === 'passed') check.state = 'idle';
     renderRoute();
     lastPush = elapsed;
@@ -494,7 +494,7 @@ function setupDemo() {
   if (reducedMotion.matches) {
     route = 'local';
     autoFlip = false;
-    cmd.textContent = 'myci switch local';
+    cmd.textContent = 'relayrunner switch local';
     for (const check of checks.local) check.state = 'passed';
   }
   renderRoute();
