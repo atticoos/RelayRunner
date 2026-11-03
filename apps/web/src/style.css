@@ -144,6 +144,11 @@ main > section { position: relative; z-index: 1; }
 .copy-btn.copied .i-copy { display: none; }
 .alt { margin-top: 14px; font-size: 15px; color: var(--mute); }
 .alt code { color: var(--ink); font-size: 14px; }
+.copy-inline { display: inline-flex; align-items: center; gap: 6px; padding: 2px 4px; border: 0; background: none; cursor: pointer; }
+.copy-inline svg { width: 14px; height: 14px; fill: none; stroke: var(--mute); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: stroke 0.2s; }
+.copy-inline:hover svg { stroke: var(--ink); }
+.copy-inline.copied code { color: var(--go); }
+.copy-inline.copied svg { display: none; }
 .caveat { margin-top: 6px; font-size: 15px; color: var(--mute); }
 .caveat a { color: var(--ink-2); }
 .caveat a:hover { color: var(--ink); }

@@ -92,6 +92,26 @@ function setupCopy() {
   }
 }
 
+function setupInlineCopy() {
+  for (const button of document.querySelectorAll<HTMLButtonElement>('[data-copy-inline]')) {
+    const code = button.querySelector('code');
+    const text = button.dataset.copyInline ?? '';
+    if (!code) continue;
+    let timer = 0;
+    button.addEventListener('click', async () => {
+      const ok = await copyText(text);
+      code.textContent = ok ? 'Copied' : 'Copy failed';
+      button.classList.toggle('copied', ok);
+      announce(code.textContent);
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        code.textContent = text;
+        button.classList.remove('copied');
+      }, 2600);
+    });
+  }
+}
+
 /* ---------- Header ---------- */
 
 function setupHeader() {
@@ -516,6 +536,7 @@ function setupDemo() {
 }
 
 setupCopy();
+setupInlineCopy();
 setupHeader();
 setupQuota();
 setupRouteControls();
