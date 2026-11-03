@@ -66,14 +66,14 @@ async function install(dir: string, endpoint: string) {
 
 function runnerDirectory(target: Repository) {
   if (!Number.isSafeInteger(target.id)) throw new SetupError('GITHUB_REQUEST_FAILED', 'GitHub returned an invalid repository ID.');
-  return resolve(process.env.RUNNERDUTY_HOME || join(homedir(), '.runnerduty'), String(target.id));
+  return resolve(process.env.MYCI_HOME || join(homedir(), '.myci'), String(target.id));
 }
 
 export function runnerLabel(target: Repository) {
   const identity = join(runnerDirectory(target), 'identity');
   if (!existsSync(identity)) return null;
   const label = readFileSync(identity, 'utf8');
-  if (!/^runnerduty-[a-f\d-]{36}$/.test(label)) throw new SetupError('RUNNER_STATE', 'Runner identity is invalid.');
+  if (!/^myci-[a-f\d-]{36}$/.test(label)) throw new SetupError('RUNNER_STATE', 'Runner identity is invalid.');
   return label;
 }
 
@@ -106,7 +106,7 @@ export async function withRunner<T>(target: Repository, finish: (runner: { id: n
     const endpoint = `repos/${target.repo}/actions/runners`;
     const identity = join(dir, 'identity');
     if (!existsSync(identity)) {
-      writeFileSync(`${identity}.tmp`, `runnerduty-${randomUUID()}`, { mode: 0o600 });
+      writeFileSync(`${identity}.tmp`, `myci-${randomUUID()}`, { mode: 0o600 });
       renameSync(`${identity}.tmp`, identity);
     }
     const label = runnerLabel(target);

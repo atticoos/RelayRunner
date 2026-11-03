@@ -1,10 +1,10 @@
 {
-  "name": "runnerduty",
+  "name": "myci",
   "version": "0.1.1",
   "description": "Switch selected GitHub Actions jobs between GitHub-hosted runners and your machine.",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/atticoos/RunnerDuty.git",
+    "url": "git+https://github.com/atticoos/myCI.git",
     "directory": "apps/cli"
   },
   "type": "module",
@@ -12,14 +12,14 @@
     "node": ">=22"
   },
   "bin": {
-    "runnerduty": "./dist/cli.js"
+    "myci": "./dist/cli.js"
   },
   "files": [
     "dist"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "prepack": "pnpm run build && cp ../../skills/runnerduty/SKILL.md dist/SKILL.md",
+    "prepack": "pnpm run build && cp ../../skills/myci/SKILL.md dist/SKILL.md",
     "test": "vitest run"
   },
   "dependencies": {

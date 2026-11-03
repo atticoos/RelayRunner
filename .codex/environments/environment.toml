@@ -1,5 +1,5 @@
 version = 1
-name = "RunnerDuty"
+name = "myCI"
 
 [setup]
 script = "pnpm run setup:worktree"
