@@ -5,14 +5,6 @@ switch future jobs back to GitHub-hosted runners.
 
 ## Install
 
-```sh
-npm install --global runnerduty
-runnerduty --help
-```
-
-RunnerDuty requires Node.js 22+, Git, and an authenticated GitHub CLI. Runner
-setup supports macOS and Linux on x64 and ARM64.
-
 ### Install with an agent
 
 Paste this into your agent from the checkout you want to set up:
@@ -20,6 +12,16 @@ Paste this into your agent from the checkout you want to set up:
 ```text
 Set up RunnerDuty in this checkout using https://raw.githubusercontent.com/atticoos/RunnerDuty/main/docs/agent-install.md
 ```
+
+### Install manually
+
+```sh
+npm install --global runnerduty
+runnerduty --help
+```
+
+RunnerDuty requires Node.js 22+, Git, and an authenticated GitHub CLI. Runner
+setup supports macOS and Linux on x64 and ARM64.
 
 ## Set up a repository
 
