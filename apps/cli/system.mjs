@@ -40,5 +40,5 @@ export function api(endpoint, args = []) {
     }
     throw new SetupError('GITHUB_REQUEST_FAILED', 'GitHub API request failed. Check network access and retry.');
   }
-  return JSON.parse(result.stdout);
+  return result.stdout.trim() ? JSON.parse(result.stdout) : undefined;
 }

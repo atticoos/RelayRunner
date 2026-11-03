@@ -3,10 +3,13 @@ import { parseArgs, styleText } from 'node:util';
 import { api, git, SetupError } from './system.mjs';
 import { repository, workflows, plan } from './workflows.mjs';
 import { withRunner } from './runner.mjs';
+import { routeJobs } from './routing.mjs';
 
 const usage = `runnerduty discover [--cwd PATH] [--json]
 runnerduty preview --job PATH:JOB [--job PATH:JOB ...] [--cwd PATH] [--json]
-runnerduty setup --job PATH:JOB [--job PATH:JOB ...] --approve FINGERPRINT [--cwd PATH] [--json]`;
+runnerduty setup --job PATH:JOB [--job PATH:JOB ...] --approve FINGERPRINT [--cwd PATH] [--json]
+runnerduty switch <local|hosted> [--cwd PATH] [--json]
+runnerduty status [--cwd PATH] [--json]`;
 
 async function main() {
   const { values, positionals } = parseArgs({
@@ -19,9 +22,29 @@ async function main() {
       help: { type: 'boolean', short: 'h' },
     },
   });
-  const [command] = positionals;
+  const [command, mode] = positionals;
   if (values.help || !command) {
     console.log(usage);
+    return;
+  }
+  const routing = command === 'switch' || command === 'status';
+  if (routing) {
+    const valid = command === 'status' ? positionals.length === 1
+      : positionals.length === 2 && ['local', 'hosted'].includes(mode);
+    if (!valid || values.job || values.approve !== undefined) throw new SetupError('USAGE', usage);
+    const result = await routeJobs(repository(values.cwd), mode ?? command);
+    if (values.json) {
+      console.log(JSON.stringify({ ok: true, ...result }));
+    } else {
+      console.log(`${result.repo}: ${result.route === 'local' ? `local on ${result.branch}` : 'GitHub-hosted'}`);
+      if (result.runner) console.log(`Runner ${result.runner.label}: ${result.runner.status}`);
+      else if (command === 'status') console.log('No local runner configured.');
+      if (result.warning) console.log(result.warning);
+      if (result.queuedJobs) {
+        console.log(`Jobs still queued for the local runner: ${result.queuedJobs.length}`);
+        for (const job of result.queuedJobs) console.log(`  ${job.name} ${job.url}`);
+      }
+    }
     return;
   }
   if (positionals.length !== 1 || !['discover', 'preview', 'setup'].includes(command) ||

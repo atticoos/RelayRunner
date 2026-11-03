@@ -46,11 +46,27 @@ async function install(dir, endpoint) {
   }
 }
 
-export async function withRunner(target, finish) {
+function runnerDirectory(target) {
   if (!Number.isSafeInteger(target.id)) throw new SetupError('GITHUB_REQUEST_FAILED', 'GitHub returned an invalid repository ID.');
-  const dir = resolve(process.env.RUNNERDUTY_HOME || join(homedir(), '.runnerduty'), String(target.id));
-  const cwd = join(dir, 'runner');
-  const endpoint = `repos/${target.repo}/actions/runners`;
+  return resolve(process.env.RUNNERDUTY_HOME || join(homedir(), '.runnerduty'), String(target.id));
+}
+
+export function runnerLabel(target) {
+  const identity = join(runnerDirectory(target), 'identity');
+  if (!existsSync(identity)) return null;
+  const label = readFileSync(identity, 'utf8');
+  if (!/^runnerduty-[a-f\d-]{36}$/.test(label)) throw new SetupError('RUNNER_STATE', 'Runner identity is invalid.');
+  return label;
+}
+
+export function registeredRunner(target, label) {
+  if (!label) return null;
+  return api(`repos/${target.repo}/actions/runners?per_page=100`, ['--paginate', '--slurp'])
+    .flatMap(page => page.runners).find(runner => runner.name === label) ?? null;
+}
+
+export async function withRunnerLock(target, work) {
+  const dir = runnerDirectory(target);
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   const lock = join(dir, 'setup.lock');
   try {
@@ -60,15 +76,23 @@ export async function withRunner(target, finish) {
     throw new SetupError('SETUP_LOCKED', `Setup is locked at ${lock}. If its recorded PID has exited, remove the lock and retry.`);
   }
   try {
+    return await work(dir);
+  } finally {
+    rmSync(lock);
+  }
+}
+
+export async function withRunner(target, finish) {
+  return withRunnerLock(target, async dir => {
+    const cwd = join(dir, 'runner');
+    const endpoint = `repos/${target.repo}/actions/runners`;
     const identity = join(dir, 'identity');
     if (!existsSync(identity)) {
       writeFileSync(`${identity}.tmp`, `runnerduty-${randomUUID()}`, { mode: 0o600 });
       renameSync(`${identity}.tmp`, identity);
     }
-    const label = readFileSync(identity, 'utf8');
-    if (!/^runnerduty-[a-f\d-]{36}$/.test(label)) throw new SetupError('RUNNER_STATE', 'Runner identity is invalid.');
-    const lookup = () => api(`${endpoint}?per_page=100`, ['--paginate', '--slurp'])
-      .flatMap(page => page.runners).find(runner => runner.name === label);
+    const label = runnerLabel(target);
+    const lookup = () => registeredRunner(target, label);
     const existing = lookup();
     if (!existsSync(cwd)) await install(dir, endpoint);
     const config = join(cwd, '.runner');
@@ -120,7 +144,5 @@ export async function withRunner(target, finish) {
       throw new SetupError('RUNNER_OFFLINE', `GitHub has not confirmed the runner online with label ${label}. Check runner diagnostics under ${cwd}/_diag and retry.`);
     }
     return finish({ id: runner.id, label, status: runner.status });
-  } finally {
-    rmSync(lock);
-  }
+  });
 }
