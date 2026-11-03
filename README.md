@@ -14,7 +14,8 @@ commands and flags directly, for example `pnpm runnerduty discover --json`.
 
 ## Install the CLI and skill
 
-From a trusted RunnerDuty checkout, run `pnpm install --frozen-lockfile` and
+From a trusted RunnerDuty checkout, run `pnpm install --frozen-lockfile`,
+`pnpm --filter @runnerduty/cli build` and
 `npm install --global ./apps/cli`. This installs the `runnerduty` executable
 from the checkout. Node.js 22+, Git and an authorized GitHub CLI are required.
 Setup supports macOS and Linux on x64 or ARM64 and requires curl, tar, and the

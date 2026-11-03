@@ -3,26 +3,32 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync, lstatSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { isMap, isScalar, parseDocument } from 'yaml';
-import { api, git, run, SetupError } from './system.mjs';
+import { api, git, run, SetupError } from './system.ts';
 
 const hosted = /^(?:ubuntu-(?:latest|(?:20|22|24|26)\.04(?:-arm)?)|macos-(?:latest|(?:13|14|15|26)(?:-intel)?)|windows-(?:latest|2019|2022|2025))$/;
 const legacyRoute = "${{ github.event_name == 'push' && github.ref_type == 'branch' && github.ref == vars.RUNNERDUTY_REF && vars.RUNNERDUTY_LABEL != '' && vars.RUNNERDUTY_LABEL || '{hosted}' }}";
 const branchRoute = "${{ ((github.event.pull_request && github.event.pull_request.head.repo.id == fromJSON(github.repository_id) && format('refs/heads/{0}', github.head_ref) == vars.RUNNERDUTY_REF) || (!github.event.pull_request && github.ref_type == 'branch' && github.ref == vars.RUNNERDUTY_REF)) && vars.RUNNERDUTY_LABEL != '' && vars.RUNNERDUTY_LABEL || '{hosted}' }}";
 const route = "${{ vars.RUNNERDUTY_LABEL || '{hosted}' }}";
 
-export function repository(cwd) {
+export interface Repository {
+  root: string;
+  repo: string;
+  id: number;
+}
+
+export function repository(cwd: string): Repository {
   const root = git(cwd, ['rev-parse', '--show-toplevel']).trim();
   const origin = git(root, ['remote', 'get-url', 'origin']).trim();
   const remote = origin.match(/^(?:https:\/\/github\.com\/|git@github\.com:|ssh:\/\/git@github\.com\/)([\w-]+\/[\w.-]+?)\/?$/i);
   if (!remote) throw new SetupError('UNSUPPORTED_REMOTE', 'Use a checkout with a github.com origin.');
-  const repo = api(`repos/${remote[1].replace(/\.git$/, '')}`);
+  const repo = api<{ visibility: string; fork: boolean; full_name: string; id: number }>(`repos/${remote[1].replace(/\.git$/, '')}`);
   if (repo.visibility !== 'private' || repo.fork || !/^[\w-]+\/[\w.-]+$/.test(repo.full_name)) {
     throw new SetupError('UNSUPPORTED_REPO', 'Setup requires a private, non-fork GitHub repository.');
   }
   return { root, repo: repo.full_name, id: repo.id };
 }
 
-export function workflows(root) {
+export function workflows(root: string) {
   const files = git(root, ['ls-files', '-z', '--', '.github/workflows']).split('\0')
     .filter(file => /^\.github\/workflows\/[\w.-]+\.ya?ml$/.test(file));
   return [...new Set(files)].flatMap(file => {
@@ -31,7 +37,7 @@ export function workflows(root) {
       if (!lstatSync(path).isFile() || !lstatSync(join(root, '.github')).isDirectory() ||
           !lstatSync(join(root, '.github/workflows')).isDirectory()) return [];
     } catch (error) {
-      if (error.code === 'ENOENT') return [];
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
       throw error;
     }
     const source = readFileSync(path, 'utf8');
@@ -43,7 +49,7 @@ export function workflows(root) {
       if (!isScalar(key) || typeof key.value !== 'string' || !isMap(value) || value.anchor) return [];
       const node = value.get('runs-on', true);
       if (!isScalar(node) || typeof node.value !== 'string' || node.anchor || node.tag ||
-          !['PLAIN', 'QUOTE_SINGLE', 'QUOTE_DOUBLE'].includes(node.type)) return [];
+          !['PLAIN', 'QUOTE_SINGLE', 'QUOTE_DOUBLE'].includes(node.type ?? '') || !node.range) return [];
       const [start, end] = node.range;
       if (/[\r\n]/.test(source.slice(start, end))) return [];
       const fallback = node.value.match(/\|\| '([^']+)' \}\}$/)?.[1];
@@ -59,7 +65,7 @@ export function workflows(root) {
   });
 }
 
-function patchFor(file, before, after) {
+function patchFor(file: string, before: string, after: string) {
   const dir = mkdtempSync(join(tmpdir(), 'runnerduty-patch-'));
   try {
     writeFileSync(join(dir, 'before'), before);
@@ -75,7 +81,7 @@ function patchFor(file, before, after) {
   }
 }
 
-export function plan(target, ids) {
+export function plan(target: Repository, ids: string[]) {
   const available = workflows(target.root);
   const selected = [...new Set(ids)].sort().map(id => {
     const job = available.find(candidate => candidate.id === id);

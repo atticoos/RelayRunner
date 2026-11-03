@@ -2,9 +2,21 @@
   "name": "@runnerduty/cli",
   "version": "0.1.0",
   "type": "module",
-  "engines": { "node": ">=22" },
-  "bin": { "runnerduty": "./cli.mjs" },
-  "files": ["cli.mjs", "runner.mjs", "system.mjs", "workflows.mjs"],
-  "scripts": { "test": "vitest run" },
-  "dependencies": { "yaml": "2.9.0" }
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "runnerduty": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "prepack": "pnpm run build",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "yaml": "2.9.0"
+  }
 }
