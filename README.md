@@ -14,23 +14,28 @@ commands and flags directly, for example `pnpm runnerduty discover --json`.
 
 ## Install the CLI and skill
 
-From a trusted RunnerDuty checkout, run `pnpm install --frozen-lockfile`,
-`pnpm --filter @runnerduty/cli build` and
-`npm install --global ./apps/cli`. This installs the `runnerduty` executable
-from the checkout. Node.js 22+, Git and an authorized GitHub CLI are required.
-Setup supports macOS and Linux on x64 or ARM64 and requires curl, tar, and the
-official runner's OS dependencies. Run as the developer account.
+After the first npm release, install the CLI and verify it:
 
-An agent can install the skill on the user's behalf by copying
-`skills/runnerduty/SKILL.md` from the trusted RunnerDuty checkout into the
-agent's personal skill directory. For Codex, run these commands from that
-checkout with permission to write to the user's skill directory:
+```sh
+npm install --global runnerduty
+runnerduty --help
+```
+
+Node.js 22+, Git, and an authorized GitHub CLI are required. Repository setup
+supports macOS and Linux on x64 or ARM64 and requires curl, tar, and the official
+runner's OS dependencies. Run as the developer account.
+
+For agent-assisted setup, point your agent at this README and ask it to install
+RunnerDuty and show a setup preview for the target checkout. The agent can
+install a specific release with `npm install --global runnerduty@<version>` and
+use the bundled skill from that version.
+
+For Codex, install the optional skill with:
 
 ```sh
 runnerduty_skill_dir="${CODEX_HOME:-$HOME/.codex}/skills/runnerduty"
 mkdir -p "$runnerduty_skill_dir"
-cp -i skills/runnerduty/SKILL.md "$runnerduty_skill_dir/SKILL.md"
-runnerduty --help
+cp -i "$(npm root --global)/runnerduty/dist/SKILL.md" "$runnerduty_skill_dir/SKILL.md"
 ```
 
 If the destination already has a skill, compare it before replacing it.
@@ -105,3 +110,20 @@ GitHub Actions runs all three checks on pushes and pull requests.
 
 `pnpm check` runs all three checks locally. `pnpm install` sets up the Husky
 pre-commit hook, which runs lint and type checking before each commit.
+
+
+## Prepare an npm release
+
+From the repository root, install dependencies with
+`pnpm install --frozen-lockfile` and run `pnpm check`. Set the release version
+in `apps/cli/package.json`, then pack the release:
+
+```sh
+cd apps/cli
+pnpm pack
+```
+
+Install the generated tarball into a temporary npm prefix and run its
+`runnerduty --help`. Verify that the installed `dist/SKILL.md` matches
+`skills/runnerduty/SKILL.md` in the source tree. With npm publish access,
+publish the verified tarball using `npm publish ./runnerduty-<version>.tgz`.

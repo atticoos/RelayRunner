@@ -22,3 +22,10 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
+      - name: Verify npm package
+        working-directory: apps/cli
+        run: |
+          pnpm pack --pack-destination "$RUNNER_TEMP"
+          npm install --prefix "$RUNNER_TEMP/runnerduty-install" "$RUNNER_TEMP"/runnerduty-*.tgz
+          "$RUNNER_TEMP/runnerduty-install/node_modules/.bin/runnerduty" --help
+          cmp ../../skills/runnerduty/SKILL.md "$RUNNER_TEMP/runnerduty-install/node_modules/runnerduty/dist/SKILL.md"
