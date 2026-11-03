@@ -18,6 +18,7 @@
     "packages/**/*.ts",
     "packages/**/*.mts",
     "packages/**/*.cts",
+    "tests/**/*.ts",
     "tests/**/*.mts"
   ],
   "exclude": [
