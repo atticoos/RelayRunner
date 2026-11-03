@@ -51,6 +51,24 @@ function clock(seconds: number) {
 
 /* ---------- Copy buttons ---------- */
 
+async function copyText(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    const area = document.createElement('textarea');
+    area.value = text;
+    area.setAttribute('readonly', '');
+    area.style.position = 'fixed';
+    area.style.opacity = '0';
+    document.body.append(area);
+    area.select();
+    const ok = document.execCommand('copy');
+    area.remove();
+    return ok;
+  }
+}
+
 function setupCopy() {
   for (const box of document.querySelectorAll<HTMLElement>('[data-instruction]')) {
     const button = box.querySelector<HTMLButtonElement>('[data-copy]');
@@ -61,19 +79,9 @@ function setupCopy() {
     let timer = 0;
     button.addEventListener('click', async () => {
       const text = source.textContent?.trim() ?? '';
-      let ok = true;
-      try {
-        await navigator.clipboard.writeText(text);
-      } catch {
-        ok = false;
-        const range = document.createRange();
-        range.selectNodeContents(source);
-        const selection = window.getSelection();
-        selection?.removeAllRanges();
-        selection?.addRange(range);
-      }
+      const ok = await copyText(text);
       button.classList.toggle('copied', ok);
-      label.textContent = ok ? 'Copied. Paste it into your agent.' : 'Selected. Press Cmd+C to copy.';
+      label.textContent = ok ? 'Copied' : 'Copy failed. Select the text instead.';
       announce(label.textContent);
       window.clearTimeout(timer);
       timer = window.setTimeout(() => {
