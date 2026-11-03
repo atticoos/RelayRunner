@@ -22,7 +22,7 @@ jobs:
 `;
 
 function fixture(t: TestContext) {
-  const dir = mkdtempSync(join(tmpdir(), 'runnerduty-test-'));
+  const dir = mkdtempSync(join(tmpdir(), 'myci-test-'));
   t.onTestFinished(() => rmSync(dir, { recursive: true, force: true }));
   const bin = join(dir, 'bin');
   const cwd = join(dir, 'repo');
@@ -41,7 +41,7 @@ function fixture(t: TestContext) {
 const fs = require('node:fs');
 const path = require('node:path');
 const endpoint = process.argv[5];
-const dir = process.env.RUNNERDUTY_HOME + '/42';
+const dir = process.env.MYCI_HOME + '/42';
 const runner = dir + '/runner';
 let result;
 if (process.env.DENY || (process.env.DENY_REGISTER && endpoint.endsWith('/registration-token'))) {
@@ -112,7 +112,7 @@ chmod +x "$4/config.sh" "$4/run.sh"
   const invoke = (args: string[], env: NodeJS.ProcessEnv = {}, json = true) => {
     const processResult = spawnSync(process.execPath, [cli, ...args, ...(json ? ['--json'] : [])], {
       cwd, encoding: 'utf8',
-      env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, RUNNERDUTY_HOME: state,
+      env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, MYCI_HOME: state,
         GH_TOKEN: 'fake-gh-token', ...env },
     });
     assert.equal(processResult.stderr, '');
@@ -130,7 +130,7 @@ test('discovers and previews selected jobs in a workflow without a push trigger 
   assert.deepEqual(result.jobs.map((job: { id: string | number }) => job.id), [`${workflow}:test`, `${workflow}:lint`]);
   const preview = invoke(['preview', ...selection]);
   assert.equal(preview.status, 0);
-  assert.match(preview.result.patch, /\+    runs-on: "\$\{\{ vars\.RUNNERDUTY_LABEL \|\| 'ubuntu-latest' \}\}" # keep this comment/);
+  assert.match(preview.result.patch, /\+    runs-on: "\$\{\{ vars\.MYCI_LABEL \|\| 'ubuntu-latest' \}\}" # keep this comment/);
   assert.doesNotMatch(preview.result.patch, /^[-+].*ubuntu-24\.04/m);
   const text = invoke(['discover'], {}, false);
   assert.equal(text.status, 0);
@@ -157,10 +157,10 @@ test('registers, starts, confirms online, applies the patch, and reuses registra
   assert.equal(first.status, 0, JSON.stringify(first.result));
   assert.equal(first.result.workflowChanges, 'applied');
   assert.equal(first.result.runner.status, 'online');
-  assert.match(identity, /^runnerduty-/);
+  assert.match(identity, /^myci-/);
   assert.equal(first.result.runner.label, identity);
   const source = readFileSync(join(cwd, workflow), 'utf8');
-  assert.doesNotMatch(source, /RUNNERDUTY_REF/);
+  assert.doesNotMatch(source, /MYCI_REF/);
   const discovery = invoke(['discover'], {}, false);
   assert.equal(discovery.status, 0);
   assert.match(discovery.result, /ci\.yml:test \(💻  local runner .* otherwise ☁️  GitHub-hosted ubuntu-latest\)/);
@@ -176,7 +176,7 @@ test('registers, starts, confirms online, applies the patch, and reuses registra
 
 test('switches a configured repository to local and restores hosted while the runner is offline', t => {
   const { cwd, state, invoke } = fixture(t);
-  const label = 'runnerduty-12345678-1234-1234-1234-123456789abc';
+  const label = 'myci-12345678-1234-1234-1234-123456789abc';
   const runner = join(state, '42/runner');
   mkdirSync(runner, { recursive: true });
   writeFileSync(join(state, '42/identity'), label);
@@ -188,9 +188,9 @@ test('switches a configured repository to local and restores hosted while the ru
   execFileSync('git', ['apply', '-'], { cwd, input: patch });
   writeFileSync(join(runner, 'online'), '');
   const variables = join(state, '42/variables.json');
-  writeFileSync(variables, JSON.stringify({ RUNNERDUTY_REF: 'refs/heads/main' }));
+  writeFileSync(variables, JSON.stringify({ MYCI_REF: 'refs/heads/main' }));
   assert.equal(invoke(['switch', 'local']).result.route, 'local');
-  assert.deepEqual(JSON.parse(readFileSync(variables, 'utf8')), { RUNNERDUTY_LABEL: label });
+  assert.deepEqual(JSON.parse(readFileSync(variables, 'utf8')), { MYCI_LABEL: label });
 
   execFileSync('git', ['switch', '-q', '--detach'], { cwd });
   assert.equal(invoke(['switch', 'local']).result.route, 'local');

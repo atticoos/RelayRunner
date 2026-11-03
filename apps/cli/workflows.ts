@@ -6,9 +6,9 @@ import { isMap, isScalar, parseDocument } from 'yaml';
 import { api, git, run, SetupError } from './system.ts';
 
 const hosted = /^(?:ubuntu-(?:latest|(?:20|22|24|26)\.04(?:-arm)?)|macos-(?:latest|(?:13|14|15|26)(?:-intel)?)|windows-(?:latest|2019|2022|2025))$/;
-const legacyRoute = "${{ github.event_name == 'push' && github.ref_type == 'branch' && github.ref == vars.RUNNERDUTY_REF && vars.RUNNERDUTY_LABEL != '' && vars.RUNNERDUTY_LABEL || '{hosted}' }}";
-const branchRoute = "${{ ((github.event.pull_request && github.event.pull_request.head.repo.id == fromJSON(github.repository_id) && format('refs/heads/{0}', github.head_ref) == vars.RUNNERDUTY_REF) || (!github.event.pull_request && github.ref_type == 'branch' && github.ref == vars.RUNNERDUTY_REF)) && vars.RUNNERDUTY_LABEL != '' && vars.RUNNERDUTY_LABEL || '{hosted}' }}";
-const route = "${{ vars.RUNNERDUTY_LABEL || '{hosted}' }}";
+const legacyRoute = "${{ github.event_name == 'push' && github.ref_type == 'branch' && github.ref == vars.MYCI_REF && vars.MYCI_LABEL != '' && vars.MYCI_LABEL || '{hosted}' }}";
+const branchRoute = "${{ ((github.event.pull_request && github.event.pull_request.head.repo.id == fromJSON(github.repository_id) && format('refs/heads/{0}', github.head_ref) == vars.MYCI_REF) || (!github.event.pull_request && github.ref_type == 'branch' && github.ref == vars.MYCI_REF)) && vars.MYCI_LABEL != '' && vars.MYCI_LABEL || '{hosted}' }}";
+const route = "${{ vars.MYCI_LABEL || '{hosted}' }}";
 
 export interface Repository {
   root: string;
@@ -66,7 +66,7 @@ export function workflows(root: string) {
 }
 
 function patchFor(file: string, before: string, after: string) {
-  const dir = mkdtempSync(join(tmpdir(), 'runnerduty-patch-'));
+  const dir = mkdtempSync(join(tmpdir(), 'myci-patch-'));
   try {
     writeFileSync(join(dir, 'before'), before);
     writeFileSync(join(dir, 'after'), after);

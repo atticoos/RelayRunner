@@ -15,8 +15,8 @@ interface WorkflowRunJob {
   html_url: string;
 }
 
-const refKey = 'RUNNERDUTY_REF';
-const labelKey = 'RUNNERDUTY_LABEL';
+const refKey = 'MYCI_REF';
+const labelKey = 'MYCI_LABEL';
 
 function pages<T>(endpoint: string, query = '') {
   return api<T[]>(`${endpoint}?per_page=100${query}`, ['--paginate', '--slurp']);
@@ -64,7 +64,7 @@ function routing(target: Repository, mode: RoutingMode) {
 
   const localLabel = runnerLabel(target);
   if (mode === 'local' && label && label !== localLabel) {
-    throw new SetupError('ROUTE_CONFLICT', `Local routing already targets ${label}. Run runnerduty switch hosted first.`);
+    throw new SetupError('ROUTE_CONFLICT', `Local routing already targets ${label}. Run myci switch hosted first.`);
   }
 
   const selectedLabel = label || localLabel;

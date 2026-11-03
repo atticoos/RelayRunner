@@ -1,4 +1,4 @@
-# Install RunnerDuty with an agent
+# Install myCI with an agent
 
 Use the user's current checkout unless they specify another path.
 
@@ -7,28 +7,28 @@ Use the user's current checkout unless they specify another path.
    runner's OS dependencies. Verify the existing GitHub session with
    `gh auth status --hostname github.com`.
 2. Use the exact npm version the user requests. Otherwise, resolve the current
-   stable version with `npm view runnerduty@latest version`. If no version is
+   stable version with `npm view myci@latest version`. If no version is
    published, tell the user that the npm install is unavailable. Install the
-   resolved version with `npm install --global runnerduty@<version>` and verify
-   it with `runnerduty --help`.
-3. For a local session, copy `$(npm root --global)/runnerduty/dist/SKILL.md`
+   resolved version with `npm install --global myci@<version>` and verify
+   it with `myci --help`.
+3. For a local session, copy `$(npm root --global)/myci/dist/SKILL.md`
    from the installed package to the personal skill directory for the agent
    the user is running:
 
    | Agent | Destination |
    | --- | --- |
-   | Codex | `${CODEX_HOME:-$HOME/.codex}/skills/runnerduty/SKILL.md` |
-   | Claude Code | `$HOME/.claude/skills/runnerduty/SKILL.md` |
-   | Cursor | `$HOME/.cursor/skills/runnerduty/SKILL.md` |
+   | Codex | `${CODEX_HOME:-$HOME/.codex}/skills/myci/SKILL.md` |
+   | Claude Code | `$HOME/.claude/skills/myci/SKILL.md` |
+   | Cursor | `$HOME/.cursor/skills/myci/SKILL.md` |
 
    Create the destination directory if needed. If the destination file is
    identical, reuse it. If it differs, show the diff and ask before replacing
    it. The bundled skill describes the setup flow and can be read directly
    during this chat.
 
-4. Run `runnerduty discover --cwd <checkout> --json` and ask the user which jobs
+4. Run `myci discover --cwd <checkout> --json` and ask the user which jobs
    to opt in. Check that the selected jobs can run on the user's machine.
-5. Run `runnerduty preview --cwd <checkout> --job <id> --json`, repeating
+5. Run `myci preview --cwd <checkout> --job <id> --json`, repeating
    `--job` for each selected job. Show the patch, target branch, and hosted
    fallback. Stop for review before running setup, which registers and starts
    a runner under the user's local account.
