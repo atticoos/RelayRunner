@@ -23,4 +23,4 @@ TypeScript and place Vitest tests next to the code they cover, using
 GitHub Actions runs all three checks on pushes and pull requests.
 
 `pnpm check` runs all three checks locally. `pnpm install` sets up the Husky
-pre-commit hook, which runs `pnpm check` before each commit.
+pre-commit hook, which runs lint and type checking before each commit.
