@@ -31,8 +31,7 @@ async function main() {
   const target = repository(values.cwd);
   let result;
   if (command === 'discover') {
-    result = { repo: target.repo, jobs: workflows(target.root).map(({ id, runsOn, alreadySetUp }) =>
-      ({ id, runsOn, alreadySetUp })) };
+    result = { repo: target.repo, jobs: workflows(target.root) };
   } else {
     const preview = plan(target, values.job);
     result = preview;
@@ -63,10 +62,18 @@ async function main() {
     }
   }
 
-  if (values.json) console.log(JSON.stringify({ ok: true, ...result }));
-  else if (command === 'discover') {
+  if (values.json) {
+    const output = command === 'discover'
+      ? { repo: result.repo, jobs: result.jobs.map(({ id, runsOn, alreadySetUp }) => ({ id, runsOn, alreadySetUp })) }
+      : result;
+    console.log(JSON.stringify({ ok: true, ...output }));
+  } else if (command === 'discover') {
     console.log(result.repo);
-    for (const job of result.jobs) console.log(`  ${job.id} (${job.alreadySetUp ? 'configured' : job.runsOn})`);
+    for (const job of result.jobs) {
+      const hosted = `GitHub-hosted ${job.hostedRunner}`;
+      const routing = job.alreadySetUp ? `local runner for the selected branch when enabled, otherwise ${hosted}` : hosted;
+      console.log(`  ${job.id} (${routing})`);
+    }
   } else if (command === 'preview') {
     console.log(`${result.repo} on ${result.branch}\n${result.patch || 'No workflow changes needed.\n'}\nApproval fingerprint ${result.fingerprint}`);
   } else {
