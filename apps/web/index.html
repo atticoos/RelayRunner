@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>RunnerDuty: run your GitHub Actions on your own machine</title>
-  <meta name="description" content="Coding agents burn through GitHub Actions minutes. RunnerDuty routes a private repo's CI jobs to your computer on demand, then switches them back to GitHub-hosted runners.">
+  <title>myCI: run your GitHub Actions on your own machine</title>
+  <meta name="description" content="Coding agents burn through GitHub Actions minutes. myCI routes a private repo's CI jobs to your computer on demand, then switches them back to GitHub-hosted runners.">
   <meta name="theme-color" content="#0b0d10">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/src/style.css">
@@ -14,9 +14,9 @@
 
   <header class="site-header" data-header>
     <div class="wrap header-row">
-      <a class="brand" href="#top" aria-label="RunnerDuty home">
+      <a class="brand" href="#top" aria-label="myCI home">
         <svg class="brand-mark" viewBox="0 0 28 28" aria-hidden="true"><path d="M4 14h7c4.5 0 5-7.5 10-7.5h3M11 14c4.5 0 5 7.5 10 7.5h3"/></svg>
-        RunnerDuty
+        myCI
       </a>
       <nav aria-label="Primary">
         <ul class="nav-links">
@@ -24,7 +24,7 @@
           <li><a href="#cli">Agent or CLI</a></li>
           <li><a href="#safety">Is it safe?</a></li>
           <li class="route-status"><a href="#top"><i></i><span class="route-word">CI route: </span><b data-route-label>GitHub-hosted</b></a></li>
-          <li><a class="nav-gh" href="https://github.com/atticoos/RunnerDuty">GitHub</a></li>
+          <li><a class="nav-gh" href="https://github.com/atticoos/myCI">GitHub</a></li>
         </ul>
       </nav>
     </div>
@@ -49,14 +49,14 @@
           <div class="instruction-head">
             <span>Paste into Claude Code, Codex or Cursor</span>
           </div>
-          <code class="instruction-text" data-copy-text>Set up RunnerDuty in this checkout using https://<wbr>raw.githubusercontent.com/<wbr>atticoos/<wbr>RunnerDuty/<wbr>main/<wbr>docs/<wbr>agent-install.md</code>
+          <code class="instruction-text" data-copy-text>Set up myCI in this checkout using https://<wbr>raw.githubusercontent.com/<wbr>atticoos/<wbr>myCI/<wbr>main/<wbr>docs/<wbr>agent-install.md</code>
           <button class="copy-btn" type="button" data-copy>
             <svg class="i-copy" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2.5"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>
             <svg class="i-check" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
             <span data-copy-label>Copy instruction for your agent</span>
           </button>
         </div>
-        <p class="alt">Prefer the CLI? <code>npm install -g runnerduty</code></p>
+        <p class="alt">Prefer the CLI? <code>npm install -g myci</code></p>
         <p class="caveat">For private repos you control. Jobs run as you, on your machine. <a href="#safety">Is it safe?</a></p>
       </div>
 
@@ -82,7 +82,7 @@
             <button type="button" role="radio" aria-checked="false" data-route="local">Your machine</button>
             <span class="route-thumb" aria-hidden="true"></span>
           </div>
-          <div class="junction-cmd" aria-live="polite"><span class="prompt">$</span> <span data-cmd>runnerduty status</span></div>
+          <div class="junction-cmd" aria-live="polite"><span class="prompt">$</span> <span data-cmd>myci status</span></div>
         </div>
 
         <div class="panels">
@@ -137,15 +137,15 @@
         <li class="step">
           <div class="step-copy">
             <h3>Your agent sets it up</h3>
-            <p>It finds the jobs that can run on your machine, lets you pick, and shows the patch before applying anything. RunnerDuty downloads GitHub's official runner, registers it to the repo, and waits until GitHub reports it online.</p>
+            <p>It finds the jobs that can run on your machine, lets you pick, and shows the patch before applying anything. myCI downloads GitHub's official runner, registers it to the repo, and waits until GitHub reports it online.</p>
             <p class="note">The only workflow change: one line per opted-in job.</p>
           </div>
           <div class="code-card run">
             <div class="code-head">Agent setup, start to finish</div>
             <ol class="run-log">
               <li><span class="tick"></span>Checked Node.js, Git and your GitHub CLI session</li>
-              <li><span class="tick"></span>Installed <code>runnerduty</code> and its skill</li>
-              <li><span class="tick"></span>Ran <code>runnerduty discover</code> and found 4 jobs</li>
+              <li><span class="tick"></span>Installed <code>myci</code> and its skill</li>
+              <li><span class="tick"></span>Ran <code>myci discover</code> and found 4 jobs</li>
               <li class="ask"><span class="tick tick-q"></span>Which jobs should run on your machine?
                 <span class="picks"><span class="pick on">test</span><span class="pick on">lint</span><span class="pick on">typecheck</span><span class="pick">deploy</span></span>
               </li>
@@ -153,7 +153,7 @@
 <pre class="diff"><code><span class="ctx">  jobs:</span>
 <span class="ctx">    test:</span>
 <span class="del">-     runs-on: ubuntu-latest</span>
-<span class="add">+     runs-on: ${{ vars.RUNNERDUTY_LABEL || 'ubuntu-latest' }}</span>
+<span class="add">+     runs-on: ${{ vars.MYCI_LABEL || 'ubuntu-latest' }}</span>
 <span class="ctx">      steps:</span></code></pre>
               </li>
               <li><span class="tick"></span>Downloaded GitHub's official runner and registered it to the repo</li>
@@ -164,14 +164,14 @@
         <li class="step" data-step="local">
           <div class="step-copy">
             <h3>Flip CI to your machine</h3>
-            <p>Every opted-in job across branches and pull requests now runs locally. RunnerDuty checks that your runner is online before it moves anything.</p>
+            <p>Every opted-in job across branches and pull requests now runs locally. myCI checks that your runner is online before it moves anything.</p>
             <p class="note">No workflow edits, no commits. It sets a repository Actions variable.</p>
           </div>
           <div class="code-card term-card">
             <div class="code-head code-head-run"><span>Terminal</span><button type="button" class="run-btn" data-set-route="local">Run in the demo</button></div>
-<pre><code><span class="prompt">$</span> runnerduty switch local
+<pre><code><span class="prompt">$</span> myci switch local
 <span class="out">you/sideproject: local (repository-wide)</span>
-<span class="out">Runner runnerduty-3f9c…: <span class="ok">online</span></span></code></pre>
+<span class="out">Runner myci-3f9c…: <span class="ok">online</span></span></code></pre>
           </div>
         </li>
         <li class="step" data-step="hosted">
@@ -182,7 +182,7 @@
           </div>
           <div class="code-card term-card">
             <div class="code-head code-head-run"><span>Terminal</span><button type="button" class="run-btn" data-set-route="hosted">Run in the demo</button></div>
-<pre><code><span class="prompt">$</span> runnerduty switch hosted
+<pre><code><span class="prompt">$</span> myci switch hosted
 <span class="out">you/sideproject: GitHub-hosted</span>
 <span class="out">Jobs still queued for the local runner: 0</span></code></pre>
           </div>
@@ -198,22 +198,22 @@
         <div class="chat" aria-label="Example agent conversation">
           <div class="msg me">CI is eating my minutes again. Run it on my laptop for now.</div>
           <div class="msg agent">
-            <span class="tool"><span class="prompt">$</span> runnerduty switch local --json</span>
+            <span class="tool"><span class="prompt">$</span> myci switch local --json</span>
             Done. Your runner is online and opted-in jobs in <b>you/sideproject</b> now run on this machine.
           </div>
           <div class="msg me">Shipping for the night. Put CI back on GitHub.</div>
           <div class="msg agent">
-            <span class="tool"><span class="prompt">$</span> runnerduty switch hosted --json</span>
+            <span class="tool"><span class="prompt">$</span> myci switch hosted --json</span>
             Switched back to GitHub-hosted runners. No jobs were left queued for your machine.
           </div>
         </div>
         <dl class="cmds">
-          <div><dt>runnerduty discover</dt><dd>List jobs that can move to your machine.</dd></div>
-          <div><dt>runnerduty preview <span class="nb">--job</span> .github/workflows/ci.yml:test</dt><dd>Show the exact workflow patch and an approval fingerprint.</dd></div>
-          <div><dt>runnerduty setup <span class="nb">--job</span> .github/workflows/ci.yml:test <span class="nb">--approve</span> <span class="nb">&lt;fingerprint&gt;</span></dt><dd>Register the runner and apply the reviewed patch.</dd></div>
-          <div><dt>runnerduty switch local</dt><dd>Route opted-in jobs to this machine.</dd></div>
-          <div><dt>runnerduty status</dt><dd>Current route and runner availability.</dd></div>
-          <div><dt>runnerduty switch hosted</dt><dd>Send future jobs back to GitHub.</dd></div>
+          <div><dt>myci discover</dt><dd>List jobs that can move to your machine.</dd></div>
+          <div><dt>myci preview <span class="nb">--job</span> .github/workflows/ci.yml:test</dt><dd>Show the exact workflow patch and an approval fingerprint.</dd></div>
+          <div><dt>myci setup <span class="nb">--job</span> .github/workflows/ci.yml:test <span class="nb">--approve</span> <span class="nb">&lt;fingerprint&gt;</span></dt><dd>Register the runner and apply the reviewed patch.</dd></div>
+          <div><dt>myci switch local</dt><dd>Route opted-in jobs to this machine.</dd></div>
+          <div><dt>myci status</dt><dd>Current route and runner availability.</dd></div>
+          <div><dt>myci switch hosted</dt><dd>Send future jobs back to GitHub.</dd></div>
         </dl>
       </div>
     </section>
@@ -253,7 +253,7 @@
       <h2 id="close-h">Get your minutes back.</h2>
       <p class="section-lede">Paste this into your agent from the checkout you want to set up.</p>
       <div class="instruction instruction-wide" data-instruction>
-        <code class="instruction-text" data-copy-text>Set up RunnerDuty in this checkout using https://<wbr>raw.githubusercontent.com/<wbr>atticoos/<wbr>RunnerDuty/<wbr>main/<wbr>docs/<wbr>agent-install.md</code>
+        <code class="instruction-text" data-copy-text>Set up myCI in this checkout using https://<wbr>raw.githubusercontent.com/<wbr>atticoos/<wbr>myCI/<wbr>main/<wbr>docs/<wbr>agent-install.md</code>
         <button class="copy-btn" type="button" data-copy>
           <svg class="i-copy" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2.5"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>
           <svg class="i-check" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
@@ -269,12 +269,12 @@
     <div class="wrap footer-row">
       <span class="brand brand-sm">
         <svg class="brand-mark" viewBox="0 0 28 28" aria-hidden="true"><path d="M4 14h7c4.5 0 5-7.5 10-7.5h3M11 14c4.5 0 5 7.5 10 7.5h3"/></svg>
-        RunnerDuty
+        myCI
       </span>
       <ul>
-        <li><a href="https://github.com/atticoos/RunnerDuty">GitHub</a></li>
-        <li><a href="https://www.npmjs.com/package/runnerduty">npm</a></li>
-        <li><a href="https://github.com/atticoos/RunnerDuty/blob/main/docs/agent-install.md">Agent install guide</a></li>
+        <li><a href="https://github.com/atticoos/myCI">GitHub</a></li>
+        <li><a href="https://www.npmjs.com/package/myci">npm</a></li>
+        <li><a href="https://github.com/atticoos/myCI/blob/main/docs/agent-install.md">Agent install guide</a></li>
       </ul>
     </div>
   </footer>
