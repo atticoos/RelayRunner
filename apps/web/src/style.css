@@ -62,6 +62,7 @@ html { scrollbar-color: #2f3540 var(--bg); }
 .header-row { display: flex; align-items: center; justify-content: space-between; height: 72px; }
 .brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 700; font-size: 20px; letter-spacing: -0.01em; text-decoration: none; }
 .brand-mark { width: 26px; height: 26px; fill: none; stroke: var(--go); stroke-width: 2.4; stroke-linecap: round; }
+.brand-mark .mark-top { stroke: var(--run); }
 .nav-links { display: flex; align-items: center; gap: 32px; font-size: 15px; }
 .nav-links a { color: var(--mute); text-decoration: none; transition: color 0.2s; }
 .nav-links a:hover { color: var(--ink); }
