@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { parseArgs } from 'node:util';
+import { parseArgs, styleText } from 'node:util';
 import { api, git, SetupError } from './system.mjs';
 import { repository, workflows, plan } from './workflows.mjs';
 import { withRunner } from './runner.mjs';
@@ -70,8 +70,11 @@ async function main() {
   } else if (command === 'discover') {
     console.log(result.repo);
     for (const job of result.jobs) {
-      const hosted = `GitHub-hosted ${job.hostedRunner}`;
-      const routing = job.alreadySetUp ? `local runner for the selected branch when enabled, otherwise ${hosted}` : hosted;
+      const hosted = styleText('cyan', `☁️  GitHub-hosted ${job.hostedRunner}`);
+      const local = styleText('green', '💻  local runner');
+      const routing = job.alreadySetUp
+        ? `${local} for the selected branch when enabled, otherwise ${hosted}`
+        : hosted;
       console.log(`  ${job.id} (${routing})`);
     }
   } else if (command === 'preview') {

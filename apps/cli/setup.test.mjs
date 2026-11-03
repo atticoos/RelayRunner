@@ -114,7 +114,7 @@ test('discovers and previews selected push jobs without modifying the checkout',
   assert.doesNotMatch(preview.result.patch, /^[-+].*ubuntu-24\.04/m);
   const text = invoke(['discover'], {}, false);
   assert.equal(text.status, 0);
-  assert.match(text.result, /ci\.yml:test \(GitHub-hosted ubuntu-latest\)/);
+  assert.match(text.result, /ci\.yml:test \(☁️  GitHub-hosted ubuntu-latest\)/);
   assert.equal(readFileSync(join(cwd, workflow), 'utf8'), original);
   assert.equal(existsSync(state), false);
   assert.equal(invoke(['setup', ...selection, '--approve', 'wrong']).result.error.code, 'STALE_PREVIEW');
@@ -143,7 +143,7 @@ test('registers, starts, confirms online, applies the patch, and reuses registra
   assert.match(source, /RUNNERDUTY_REF/);
   const discovery = invoke(['discover'], {}, false);
   assert.equal(discovery.status, 0);
-  assert.match(discovery.result, /ci\.yml:test \(local runner .* otherwise GitHub-hosted ubuntu-latest\)/);
+  assert.match(discovery.result, /ci\.yml:test \(💻  local runner .* otherwise ☁️  GitHub-hosted ubuntu-latest\)/);
   assert.match(source, /runs-on: ubuntu-24\.04/);
   assert.equal(setup(before.fingerprint).result.error.code, 'STALE_PREVIEW');
   const after = preview();
