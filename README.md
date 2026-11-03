@@ -25,12 +25,23 @@ Node.js 22+, Git, and an authorized GitHub CLI are required. Repository setup
 supports macOS and Linux on x64 or ARM64 and requires curl, tar, and the official
 runner's OS dependencies. Run as the developer account.
 
-For agent-assisted setup, point your agent at this README and ask it to install
-RunnerDuty and show a setup preview for the target checkout. The agent can
-install a specific release with `npm install --global runnerduty@<version>` and
-use the bundled skill from that version.
+### Install with an agent
 
-For Codex, install the optional skill with:
+Give your agent this README and paste the following prompt. Replace the
+placeholders with a published version and the target checkout.
+
+> Install `runnerduty@<version>` from npm and verify that `runnerduty --help`
+> works. Check that Node.js, Git, curl, and tar are available and that my existing
+> GitHub CLI session works with `gh auth status --hostname github.com`. Install
+> the Codex skill from that same package using the instructions below. If the
+> existing skill differs, show me the differences before replacing it.
+> Run `runnerduty discover --cwd <checkout> --json` and let me select the jobs.
+> Then run `runnerduty preview --cwd <checkout> --job <id> --json` for the
+> selection, show me the patch, and stop for review.
+
+### Install the optional Codex skill
+
+With the CLI installed, copy the bundled skill:
 
 ```sh
 runnerduty_skill_dir="${CODEX_HOME:-$HOME/.codex}/skills/runnerduty"
