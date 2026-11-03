@@ -1,7 +1,6 @@
-import assert from "node:assert/strict";
-import { test } from "node:test";
+import { expect, test } from "vitest";
 
 test("the test runner executes TypeScript", () => {
   const result: string = typeof test;
-  assert.equal(result, "function");
+  expect(result).toBe("function");
 });

@@ -6,13 +6,15 @@
     "@types/node": "^22.20.5",
     "husky": "^9.1.7",
     "oxlint": "^1.91.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^5.1.0"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "lint": "oxlint --deny-warnings apps packages tests",
-    "test": "node --test",
+    "test": "vitest run",
     "prepare": "husky",
-    "check": "pnpm lint && pnpm typecheck && pnpm test"
+    "check": "pnpm lint && pnpm typecheck && pnpm test",
+    "test:watch": "vitest watch"
   }
 }
