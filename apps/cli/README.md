@@ -13,7 +13,21 @@ runnerduty --help
 RunnerDuty requires Node.js 22+, Git, and an authenticated GitHub CLI. Runner
 setup supports macOS and Linux on x64 and ARM64.
 
+### Install with an agent
+
+Paste this into your agent from the checkout you want to set up:
+
+```text
+Set up RunnerDuty in this checkout using https://raw.githubusercontent.com/atticoos/RunnerDuty/main/docs/agent-install.md
+```
+
 ## Set up a repository
+
+If RunnerDuty is installed, paste this into your agent from the target checkout:
+
+```text
+Use the RunnerDuty skill to set up this repository. Show me the eligible jobs, let me choose which ones to opt in, and show me the workflow patch for approval before applying it.
+```
 
 From a private GitHub repository checkout, discover eligible jobs and preview
 the workflow change for the job you want to opt in:
