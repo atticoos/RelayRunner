@@ -1,4 +1,4 @@
-import { api, git, SetupError } from './system.ts';
+import { api, SetupError } from './system.ts';
 import { registeredRunner, runnerLabel, withRunnerLock } from './runner.ts';
 import { workflows } from './workflows.ts';
 
@@ -34,7 +34,7 @@ function setVariable(endpoint: string, variables: Map<string, string>, name: str
 function queuedJobs(actions: string, label: string | null) {
   if (!label) return [];
   const runIds = new Set(['queued', 'in_progress'].flatMap(status =>
-    pages<{ workflow_runs: { id: number }[] }>(`${actions}/runs`, `&event=push&status=${status}`)
+    pages<{ workflow_runs: { id: number }[] }>(`${actions}/runs`, `&status=${status}`)
       .flatMap(page => page.workflow_runs.map(run => run.id))));
   return [...runIds]
     .flatMap(id => pages<{ jobs: WorkflowRunJob[] }>(`${actions}/runs/${id}/jobs`).flatMap(page => page.jobs))
@@ -47,15 +47,13 @@ function routing(target: Repository, mode: RoutingMode) {
   const endpoint = `${actions}/variables`;
   const variables = new Map(pages<{ variables: ActionsVariable[] }>(endpoint).flatMap(page => page.variables)
     .map(({ name, value }) => [name, value]));
-  const ref = variables.get(refKey);
   const label = variables.get(labelKey);
-  const active = ref && label;
 
   if (mode === 'hosted') {
-    for (const name of [refKey, labelKey]) {
+    for (const name of [labelKey, refKey]) {
       if (variables.has(name)) api(`${endpoint}/${name}`, ['-X', 'DELETE']);
     }
-    const result = { repo: target.repo, route: 'hosted', branch: null };
+    const result = { repo: target.repo, route: 'hosted' };
     try {
       return { ...result, queuedJobs: queuedJobs(actions, label || runnerLabel(target)) };
     } catch (error) {
@@ -65,41 +63,27 @@ function routing(target: Repository, mode: RoutingMode) {
   }
 
   const localLabel = runnerLabel(target);
-  const branch = git(target.root, ['branch', '--show-current']).trim() || null;
-  if (mode === 'local' && !branch) throw new SetupError('DETACHED_HEAD', 'Switch to a named branch before enabling local routing.');
-  const nextRef = `refs/heads/${branch}`;
-  if (mode === 'local' && active && (ref !== nextRef || label !== localLabel)) {
-    throw new SetupError('ROUTE_CONFLICT', `Local routing already targets ${ref} on ${label}. Run runnerduty switch hosted first.`);
+  if (mode === 'local' && label && label !== localLabel) {
+    throw new SetupError('ROUTE_CONFLICT', `Local routing already targets ${label}. Run runnerduty switch hosted first.`);
   }
 
-  const selectedLabel = mode === 'local' ? localLabel : (active ? label : localLabel);
+  const selectedLabel = label || localLabel;
   const runner = registeredRunner(target, selectedLabel);
   const online = runner?.status === 'online' && runner.labels?.some(item => item.name === selectedLabel);
   const availability = !selectedLabel ? null : online ? (runner.busy ? 'busy' : 'online') : 'offline';
   const runnerStatus = selectedLabel ? { label: selectedLabel, status: availability } : null;
 
   if (mode === 'status') {
-    return { repo: target.repo, route: active ? 'local' : 'hosted',
-      branch: active ? ref.replace(/^refs\/heads\//, '') : null, currentBranch: branch, runner: runnerStatus };
+    return { repo: target.repo, route: label ? 'local' : 'hosted', runner: runnerStatus };
   }
 
-  if (!online || !localLabel || !branch) throw new SetupError('RUNNER_OFFLINE', 'Set up this checkout and verify its local runner is online before switching.');
-  if (!workflows(target.root).some(job => job.alreadySetUp)) {
-    throw new SetupError('WORKFLOW_SETUP_REQUIRED', 'Set up at least one push job and commit and push the workflow changes.');
+  if (!online || !localLabel) throw new SetupError('RUNNER_OFFLINE', 'Set up this checkout and verify its local runner is online before switching.');
+  if (!workflows(target.root).some(job => job.alreadySetUp && !job.needsUpdate)) {
+    throw new SetupError('WORKFLOW_SETUP_REQUIRED', 'Set up or upgrade at least one eligible job and commit and push the workflow changes.');
   }
-  const branches = pages<{ name: string }[]>(`repos/${target.repo}/branches`).flat();
-  if (branches.some(item => item.name !== branch && item.name.toLowerCase() === branch.toLowerCase())) {
-    throw new SetupError('AMBIGUOUS_BRANCH', `GitHub Actions compares refs without regard to case. Another branch differs from ${branch} only by case.`);
-  }
-
-  // Remove a partial ref before installing a label that could activate it.
-  if (!active && ref && ref !== nextRef) {
-    api(`${endpoint}/${refKey}`, ['-X', 'DELETE']);
-    variables.delete(refKey);
-  }
+  if (variables.has(refKey)) api(`${endpoint}/${refKey}`, ['-X', 'DELETE']);
   setVariable(endpoint, variables, labelKey, localLabel);
-  setVariable(endpoint, variables, refKey, nextRef);
-  return { repo: target.repo, route: 'local', branch, runner: runnerStatus };
+  return { repo: target.repo, route: 'local', runner: runnerStatus };
 }
 
 export function routeJobs(target: Repository, mode: RoutingMode) {
