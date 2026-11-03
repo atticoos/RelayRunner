@@ -13,3 +13,5 @@ Use the RunnerDuty CLI from a trusted installed copy. If it is unavailable, use 
 For `GITHUB_ACCESS`, report the need for authorized GitHub CLI credentials and repository administration permission. If the environment restricts existing credential access, use its approved execution mechanism. Keep authentication and runner registration inside the CLI. Setup leaves routing inactive.
 
 After the setup changes are committed and pushed, use `runnerduty switch local` to route opted-in jobs across the repository. Use `runnerduty status` to report the current route and runner availability. Use `runnerduty switch hosted` when the user wants to restore hosted execution for future jobs, and report any queued jobs or warning returned by the command.
+
+When asked for local runner usage or minutes saved, run `runnerduty report --cwd <checkout> --json`. The default window covers workflow runs created in the last 30 days. Use `--days` for a different window. Summarize completed local job attempts, outcomes, and runtime by workflow. Explain that the savings estimate uses measured local runtime and surface any attempts with missing timing.

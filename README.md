@@ -158,3 +158,14 @@ Actions tab and select the matching version tag. The workflow verifies and
 publishes the same tarball using npm's OIDC authentication. If publishing fails
 before the version appears in npm, rerun the workflow for the same tag.
 See [npm Trusted Publishing](https://docs.npmjs.com/trusted-publishers/).
+
+## Local runner usage
+
+Run `runnerduty report` for the last 30 days, or pass `--days 7` for a shorter
+window. Add `--json` for structured output. The report counts completed job
+attempts, including reruns, on this machine’s RunnerDuty runner. It groups
+counts and runtime by workflow using GitHub’s available history for runs
+created in the window.
+
+Estimated hosted minutes saved use measured local job runtime as a proxy.
+Hosted runtimes and billed minutes can differ.

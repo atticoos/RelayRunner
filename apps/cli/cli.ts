@@ -5,12 +5,14 @@ import type { ActionsVariable } from './system.ts';
 import { repository, workflows, plan } from './workflows.ts';
 import { withRunner } from './runner.ts';
 import { routeJobs } from './routing.ts';
+import { reportDays, usageReport } from './report.ts';
 
 const usage = `runnerduty discover [--cwd PATH] [--json]
 runnerduty preview --job PATH:JOB [--job PATH:JOB ...] [--cwd PATH] [--json]
 runnerduty setup --job PATH:JOB [--job PATH:JOB ...] --approve FINGERPRINT [--cwd PATH] [--json]
 runnerduty switch <local|hosted> [--cwd PATH] [--json]
-runnerduty status [--cwd PATH] [--json]`;
+runnerduty status [--cwd PATH] [--json]
+runnerduty report [--days DAYS] [--cwd PATH] [--json]`;
 
 async function main() {
   const { values, positionals } = parseArgs({
@@ -20,6 +22,7 @@ async function main() {
       job: { type: 'string', multiple: true },
       approve: { type: 'string' },
       json: { type: 'boolean' },
+      days: { type: 'string' },
       help: { type: 'boolean', short: 'h' },
     },
   });
@@ -28,6 +31,24 @@ async function main() {
     console.log(usage);
     return;
   }
+  if (command === 'report') {
+    if (positionals.length !== 1 || values.job || values.approve !== undefined) throw new SetupError('USAGE', usage);
+    const days = reportDays(values.days);
+    const report = usageReport(repository(values.cwd), days);
+    if (values.json) console.log(JSON.stringify({ ok: true, ...report }));
+    else {
+      console.log(`${report.repo} · ${report.runner}`);
+      console.log(`Workflow runs created in the last ${days} days · ${report.runsScanned} scanned`);
+      console.log(`${report.jobs} completed local job attempts (${report.succeeded} succeeded, ${report.failed} failed, ${report.other} other)`);
+      console.log(`Estimated hosted minutes saved: ${report.estimatedHostedMinutesSaved.toFixed(1)} (measured local runtime)`);
+      if (report.untimedJobs) console.log(`Job attempts missing usable timing: ${report.untimedJobs}`);
+      for (const workflow of report.workflows) {
+        console.log(`  ${workflow.name}: ${workflow.jobs} job attempts, ${(workflow.runtimeSeconds / 60).toFixed(1)} local minutes`);
+      }
+    }
+    return;
+  }
+  if (values.days !== undefined) throw new SetupError('USAGE', usage);
   const routing = command === 'switch' || command === 'status';
   if (routing) {
     const routeMode = command === 'status' && positionals.length === 1 ? 'status'

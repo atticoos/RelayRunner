@@ -46,3 +46,14 @@ your local account.
 The package includes the RunnerDuty skill for Codex, Claude Code, and Cursor.
 See the [project README](https://github.com/atticoos/RunnerDuty#readme) for
 skill installation, repository setup, and switching runners.
+
+## Local runner usage
+
+Run `runnerduty report` for the last 30 days, or pass `--days 7` for a shorter
+window. Add `--json` for structured output. The report counts completed job
+attempts, including reruns, on this machine’s RunnerDuty runner. It groups
+counts and runtime by workflow using GitHub’s available history for runs
+created in the window.
+
+Estimated hosted minutes saved use measured local job runtime as a proxy.
+Hosted runtimes and billed minutes can differ.
