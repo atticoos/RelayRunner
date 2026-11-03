@@ -1,6 +1,6 @@
 {
   "name": "runnerduty",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Switch selected GitHub Actions jobs between GitHub-hosted runners and your machine.",
   "repository": {
     "type": "git",
