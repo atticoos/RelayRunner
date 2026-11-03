@@ -6,10 +6,12 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "og": "\"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome\" --headless=new --disable-gpu --hide-scrollbars --allow-file-access-from-files --window-size=1200,630 --virtual-time-budget=3000 --screenshot=\"$PWD/public/og-image.png\" \"file://$PWD/og/og-image.html\""
+    "og": "\"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome\" --headless=new --disable-gpu --hide-scrollbars --allow-file-access-from-files --window-size=1200,630 --virtual-time-budget=3000 --screenshot=\"$PWD/public/og-image.png\" \"file://$PWD/og/og-image.html\"",
+    "deploy": "VITE_SITE_URL=https://relayrunner.dev vite build && wrangler deploy"
   },
   "devDependencies": {
-    "vite": "^7.3.7"
+    "vite": "^7.3.7",
+    "wrangler": "^4.157.0"
   },
   "dependencies": {
     "@fontsource-variable/hanken-grotesk": "^5.3.0",
