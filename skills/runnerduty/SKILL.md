@@ -1,6 +1,6 @@
 ---
 name: runnerduty
-description: Set up RunnerDuty, switch between local and GitHub-hosted runners, and check routing for selected GitHub Actions push jobs in a private repository. Discover jobs, show the workflow patch, and install and verify the developer's GitHub runner.
+description: Set up RunnerDuty, switch between local and GitHub-hosted runners, and check routing for selected GitHub Actions jobs in a private repository. Discover jobs, show the workflow patch, and install and verify the developer's GitHub runner.
 ---
 
 Use the RunnerDuty CLI from a trusted installed copy. If it is unavailable, use the installation instructions in the RunnerDuty repository README. Run commands with `--json` and use `--cwd` to target the developer's checkout.
@@ -12,4 +12,4 @@ Use the RunnerDuty CLI from a trusted installed copy. If it is unavailable, use 
 
 For `GITHUB_ACCESS`, report the need for authorized GitHub CLI credentials and repository administration permission. If the environment restricts existing credential access, use its approved execution mechanism. Keep authentication and runner registration inside the CLI. Setup leaves routing inactive.
 
-After the setup changes are committed and pushed, use `runnerduty switch local` from the branch the user wants to route locally. If another branch is active, report the conflict and let the user decide whether to restore hosted routing before switching branches. Use `runnerduty status` to report the current route and runner availability. Use `runnerduty switch hosted` when the user wants to restore hosted execution for future jobs, and report any queued jobs or warning returned by the command.
+After the setup changes are committed and pushed, use `runnerduty switch local` to route opted-in jobs across the repository. Use `runnerduty status` to report the current route and runner availability. Use `runnerduty switch hosted` when the user wants to restore hosted execution for future jobs, and report any queued jobs or warning returned by the command.

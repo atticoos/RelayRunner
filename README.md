@@ -46,8 +46,8 @@ runnerduty setup --job .github/workflows/ci.yml:test --approve <fingerprint>
 ```
 
 Repeat `--job` to select multiple jobs. Review the patch before passing the
-fingerprint. Discovery supports tracked workflows triggered by `push` with
-a literal, recognized GitHub-hosted runner label. Check that the selected jobs
+fingerprint. Discovery supports jobs in tracked workflows with a literal, recognized
+GitHub-hosted runner label. Check that the selected jobs
 can run on your machine. Setup targets a private, non-fork repository on
 github.com through its `origin` remote. Trust everyone who can author
 workflows for that repository. Jobs assigned to the runner execute as your
@@ -79,11 +79,13 @@ Add `--json` for one JSON result on stdout. Errors have `ok: false` and an
 
 After committing and pushing the setup changes, run these commands in the checkout.
 
-- `runnerduty switch local` routes opted-in push jobs on the current branch to this machine after GitHub confirms the runner is online. If another branch is already routed locally, switch to hosted before switching the new branch to local.
-- `runnerduty status` shows the repository route, the branch it applies to, and runner availability.
-- `runnerduty switch hosted` restores the original hosted runner for future jobs. Running jobs can finish, and the command lists jobs GitHub still reports as queued for the local runner.
+- `runnerduty switch local` routes opted-in jobs across the repository to this machine after GitHub confirms the runner is online.
+- `runnerduty status` shows the repository route and runner availability.
+- `runnerduty switch hosted` restores hosted routing for future jobs and reports jobs still queued for the local runner.
 
-All three commands support `--cwd PATH` and `--json`. Switching changes repository Actions variables without editing workflows. Reserve `RUNNERDUTY_REF` and `RUNNERDUTY_LABEL` at the repository and organization levels. Use one machine to manage the route. GitHub compares refs case-insensitively, so avoid branch names that differ only by case.
+The switch applies across branches and workflow triggers, including pull requests that GitHub allows to run. To upgrade existing branch-scoped jobs, preview and apply setup again, then commit and push the patch.
+
+All three commands support `--cwd PATH` and `--json`. Switching uses the repository Actions variable `RUNNERDUTY_LABEL` without editing workflows. Reserve that variable at the repository and organization levels. Use one machine to manage the route.
 
 Runner cleanup, restart-on-login, and queued-job recovery remain manual.
 

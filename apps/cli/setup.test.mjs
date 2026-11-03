@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 const cli = fileURLToPath(new URL('./cli.mjs', import.meta.url));
 const workflow = '.github/workflows/ci.yml';
 const original = `name: Checks
-on: [push, pull_request]
+on: [workflow_dispatch, pull_request]
 jobs:
   test:
     runs-on: ubuntu-latest # keep this comment
@@ -75,8 +75,6 @@ if (endpoint.endsWith('/registration-token')) {
   else values[name] = args.at(-1).slice(6);
   fs.writeFileSync(file, JSON.stringify(values));
   process.exit(0);
-} else if (endpoint.includes('/branches?')) {
-  result = [[{ name: 'main' }, ...(process.env.CASE_COLLISION ? [{ name: 'Main' }] : [])]];
 } else if (endpoint.includes('/runs/123/jobs?')) {
   const label = fs.readFileSync(dir + '/identity', 'utf8');
   result = [{ jobs: [
@@ -126,13 +124,13 @@ chmod +x "$4/config.sh" "$4/run.sh"
 
 const selection = ['--job', `${workflow}:test`];
 
-test('discovers and previews selected push jobs without modifying the checkout', t => {
+test('discovers and previews selected jobs in a workflow without a push trigger without modifying the checkout', t => {
   const { cwd, state, invoke } = fixture(t);
   const { result } = invoke(['discover']);
   assert.deepEqual(result.jobs.map(job => job.id), [`${workflow}:test`, `${workflow}:lint`]);
   const preview = invoke(['preview', ...selection]);
   assert.equal(preview.status, 0);
-  assert.match(preview.result.patch, /\+    runs-on: ".*github.event_name == 'push'.*'ubuntu-latest'.*" # keep this comment/);
+  assert.match(preview.result.patch, /\+    runs-on: "\$\{\{ vars\.RUNNERDUTY_LABEL \|\| 'ubuntu-latest' \}\}" # keep this comment/);
   assert.doesNotMatch(preview.result.patch, /^[-+].*ubuntu-24\.04/m);
   const text = invoke(['discover'], {}, false);
   assert.equal(text.status, 0);
@@ -162,7 +160,7 @@ test('registers, starts, confirms online, applies the patch, and reuses registra
   assert.match(identity, /^runnerduty-/);
   assert.equal(first.result.runner.label, identity);
   const source = readFileSync(join(cwd, workflow), 'utf8');
-  assert.match(source, /RUNNERDUTY_REF/);
+  assert.doesNotMatch(source, /RUNNERDUTY_REF/);
   const discovery = invoke(['discover'], {}, false);
   assert.equal(discovery.status, 0);
   assert.match(discovery.result, /ci\.yml:test \(💻  local runner .* otherwise ☁️  GitHub-hosted ubuntu-latest\)/);
@@ -176,7 +174,7 @@ test('registers, starts, confirms online, applies the patch, and reuses registra
   assert.equal(readFileSync(join(state, '42/registrations'), 'utf8'), 'registered\n');
 });
 
-test('switches a configured branch to local and restores hosted while the runner is offline', t => {
+test('switches a configured repository to local and restores hosted while the runner is offline', t => {
   const { cwd, state, invoke } = fixture(t);
   const label = 'runnerduty-12345678-1234-1234-1234-123456789abc';
   const runner = join(state, '42/runner');
@@ -189,15 +187,15 @@ test('switches a configured branch to local and restores hosted while the runner
   const { patch } = invoke(['preview', ...selection]).result;
   execFileSync('git', ['apply', '-'], { cwd, input: patch });
   writeFileSync(join(runner, 'online'), '');
-  assert.equal(invoke(['switch', 'local'], { CASE_COLLISION: '1' }).result.error.code, 'AMBIGUOUS_BRANCH');
+  const variables = join(state, '42/variables.json');
+  writeFileSync(variables, JSON.stringify({ RUNNERDUTY_REF: 'refs/heads/main' }));
   assert.equal(invoke(['switch', 'local']).result.route, 'local');
-  assert.equal(invoke(['switch', 'local']).result.branch, 'main');
+  assert.deepEqual(JSON.parse(readFileSync(variables, 'utf8')), { RUNNERDUTY_LABEL: label });
 
-  execFileSync('git', ['switch', '-q', '-c', 'other'], { cwd });
-  assert.equal(invoke(['switch', 'local']).result.error.code, 'ROUTE_CONFLICT');
+  execFileSync('git', ['switch', '-q', '--detach'], { cwd });
+  assert.equal(invoke(['switch', 'local']).result.route, 'local');
   const status = invoke(['status']).result;
-  assert.equal(status.branch, 'main');
-  assert.equal(status.currentBranch, 'other');
+  assert.equal(status.route, 'local');
   assert.deepEqual(status.runner, { label, status: 'online' });
 
   rmSync(join(runner, 'online'));
@@ -206,4 +204,6 @@ test('switches a configured branch to local and restores hosted while the runner
   assert.deepEqual(hosted.queuedJobs.map(job => job.id), [1]);
   assert.equal(invoke(['switch', 'hosted']).result.route, 'hosted');
   assert.equal(invoke(['status']).result.runner.status, 'offline');
+  writeFileSync(join(runner, 'online'), '');
+  assert.equal(invoke(['switch', 'local']).result.route, 'local');
 });
