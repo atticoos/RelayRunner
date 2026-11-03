@@ -89,15 +89,15 @@ touch online
 RUN
 chmod +x "$4/config.sh" "$4/run.sh"
 `);
-  const invoke = (args, env = {}) => {
-    const processResult = spawnSync(process.execPath, [cli, ...args, '--json'], {
+  const invoke = (args, env = {}, json = true) => {
+    const processResult = spawnSync(process.execPath, [cli, ...args, ...(json ? ['--json'] : [])], {
       cwd, encoding: 'utf8',
       env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, RUNNERDUTY_HOME: state,
         GH_TOKEN: 'fake-gh-token', ...env },
     });
     assert.equal(processResult.stderr, '');
     assert.doesNotMatch(processResult.stdout, /fixture-private-token|fake-gh-token/);
-    return { status: processResult.status, result: JSON.parse(processResult.stdout) };
+    return { status: processResult.status, result: json ? JSON.parse(processResult.stdout) : processResult.stdout };
   };
   return { cwd, state, invoke };
 }
@@ -112,6 +112,9 @@ test('discovers and previews selected push jobs without modifying the checkout',
   assert.equal(preview.status, 0);
   assert.match(preview.result.patch, /\+    runs-on: ".*github.event_name == 'push'.*'ubuntu-latest'.*" # keep this comment/);
   assert.doesNotMatch(preview.result.patch, /^[-+].*ubuntu-24\.04/m);
+  const text = invoke(['discover'], {}, false);
+  assert.equal(text.status, 0);
+  assert.match(text.result, /ci\.yml:test \(☁️  GitHub-hosted ubuntu-latest\)/);
   assert.equal(readFileSync(join(cwd, workflow), 'utf8'), original);
   assert.equal(existsSync(state), false);
   assert.equal(invoke(['setup', ...selection, '--approve', 'wrong']).result.error.code, 'STALE_PREVIEW');
@@ -138,6 +141,9 @@ test('registers, starts, confirms online, applies the patch, and reuses registra
   assert.equal(first.result.runner.label, identity);
   const source = readFileSync(join(cwd, workflow), 'utf8');
   assert.match(source, /RUNNERDUTY_REF/);
+  const discovery = invoke(['discover'], {}, false);
+  assert.equal(discovery.status, 0);
+  assert.match(discovery.result, /ci\.yml:test \(💻  local runner .* otherwise ☁️  GitHub-hosted ubuntu-latest\)/);
   assert.match(source, /runs-on: ubuntu-24\.04/);
   assert.equal(setup(before.fingerprint).result.error.code, 'STALE_PREVIEW');
   const after = preview();

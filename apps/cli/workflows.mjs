@@ -48,11 +48,14 @@ export function workflows(root) {
           !['PLAIN', 'QUOTE_SINGLE', 'QUOTE_DOUBLE'].includes(node.type)) return [];
       const [start, end] = node.range;
       if (/[\r\n]/.test(source.slice(start, end))) return [];
-      const alreadySetUp = managed.test(node.value) &&
-        [...node.value.matchAll(/\|\| '([^']+)' \}\}$/g)].some(match =>
-          hosted.test(match[1]) && route.replace('{hosted}', match[1]) === node.value);
+      const fallback = managed.test(node.value)
+        ? node.value.match(/\|\| '([^']+)' \}\}$/)?.[1]
+        : undefined;
+      const alreadySetUp = fallback !== undefined && hosted.test(fallback) &&
+        route.replace('{hosted}', fallback) === node.value;
       if (!alreadySetUp && !hosted.test(node.value)) return [];
-      return [{ id: `${file}:${key.value}`, file, source, start, end, runsOn: node.value, alreadySetUp }];
+      const hostedRunner = alreadySetUp ? fallback : node.value;
+      return [{ id: `${file}:${key.value}`, file, source, start, end, runsOn: node.value, alreadySetUp, hostedRunner }];
     });
   });
 }

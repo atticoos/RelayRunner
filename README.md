@@ -9,6 +9,9 @@ Use pnpm 10.13.1 and run `pnpm install` from the repository root.
 - `apps/` holds runnable applications.
 - `packages/` holds shared libraries.
 
+Run the CLI from the repository root with `pnpm runnerduty --help`. Pass
+commands and flags directly, for example `pnpm runnerduty discover --json`.
+
 ## Install the CLI and skill
 
 From a trusted RunnerDuty checkout, run `pnpm install --frozen-lockfile` and
