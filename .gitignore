@@ -5,3 +5,7 @@ coverage/
 
 .impeccable/mocks/
 .impeccable/review/
+
+.env
+.env.*
+!.env.example
