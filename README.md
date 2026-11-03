@@ -8,3 +8,18 @@ Use pnpm 10.13.1 and run `pnpm install` from the repository root.
 
 - `apps/` holds runnable applications.
 - `packages/` holds shared libraries.
+
+## Development checks
+
+Use Node.js 22.18 or later in the 22.x release line. Write workspace code in TypeScript and place tests next to the
+code they cover, using `*.test.ts` or `*.test.mts`. Node runs these tests directly
+using its built-in test runner and type stripping.
+
+- `pnpm lint` runs Oxlint.
+- `pnpm typecheck` checks types without emitting JavaScript.
+- `pnpm test` runs the test suite.
+
+GitHub Actions runs all three checks on pushes and pull requests.
+
+`pnpm check` runs all three checks locally. `pnpm install` sets up the Husky
+pre-commit hook, which runs `pnpm check` before each commit.
