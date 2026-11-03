@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -f .git ] && [ -f package.json ] && [ \"$(git rev-parse --git-dir)\" != \"$(git rev-parse --git-common-dir)\" ]; then pnpm run setup:worktree; fi",
+            "timeout": 300
+          }
+        ]
+      }
+    ]
+  }
+}
