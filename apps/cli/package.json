@@ -1,6 +1,12 @@
 {
-  "name": "@runnerduty/cli",
+  "name": "runnerduty",
   "version": "0.1.0",
+  "description": "Switch selected GitHub Actions jobs between GitHub-hosted runners and your machine.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/atticoos/RunnerDuty.git",
+    "directory": "apps/cli"
+  },
   "type": "module",
   "engines": {
     "node": ">=22"
@@ -13,7 +19,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "prepack": "pnpm run build",
+    "prepack": "pnpm run build && cp ../../skills/runnerduty/SKILL.md dist/SKILL.md",
     "test": "vitest run"
   },
   "dependencies": {
