@@ -6,8 +6,9 @@ import { isMap, isScalar, parseDocument } from 'yaml';
 import { api, git, run, SetupError } from './system.mjs';
 
 const hosted = /^(?:ubuntu-(?:latest|(?:20|22|24|26)\.04(?:-arm)?)|macos-(?:latest|(?:13|14|15|26)(?:-intel)?)|windows-(?:latest|2019|2022|2025))$/;
-const route = "${{ github.event_name == 'push' && github.ref_type == 'branch' && github.ref == vars.RUNNERDUTY_REF && vars.RUNNERDUTY_LABEL != '' && vars.RUNNERDUTY_LABEL || '{hosted}' }}";
-const managed = /^\$\{\{ github\.event_name == 'push'/;
+const legacyRoute = "${{ github.event_name == 'push' && github.ref_type == 'branch' && github.ref == vars.RUNNERDUTY_REF && vars.RUNNERDUTY_LABEL != '' && vars.RUNNERDUTY_LABEL || '{hosted}' }}";
+const branchRoute = "${{ ((github.event.pull_request && github.event.pull_request.head.repo.id == fromJSON(github.repository_id) && format('refs/heads/{0}', github.head_ref) == vars.RUNNERDUTY_REF) || (!github.event.pull_request && github.ref_type == 'branch' && github.ref == vars.RUNNERDUTY_REF)) && vars.RUNNERDUTY_LABEL != '' && vars.RUNNERDUTY_LABEL || '{hosted}' }}";
+const route = "${{ vars.RUNNERDUTY_LABEL || '{hosted}' }}";
 
 export function repository(cwd) {
   const root = git(cwd, ['rev-parse', '--show-toplevel']).trim();
@@ -36,11 +37,8 @@ export function workflows(root) {
     const source = readFileSync(path, 'utf8');
     const doc = parseDocument(source);
     if (doc.errors.length) throw new SetupError('INVALID_WORKFLOW', `Cannot parse ${file}.`);
-    const events = doc.get('on');
-    const push = isMap(events) ? events.has('push') : events?.items
-      ? events.items.some(item => item?.value === 'push') : events === 'push';
     const jobs = doc.get('jobs');
-    if (!push || !isMap(jobs) || jobs.anchor) return [];
+    if (!isMap(jobs) || jobs.anchor) return [];
     return jobs.items.flatMap(({ key, value }) => {
       if (!isScalar(key) || typeof key.value !== 'string' || !isMap(value) || value.anchor) return [];
       const node = value.get('runs-on', true);
@@ -48,14 +46,15 @@ export function workflows(root) {
           !['PLAIN', 'QUOTE_SINGLE', 'QUOTE_DOUBLE'].includes(node.type)) return [];
       const [start, end] = node.range;
       if (/[\r\n]/.test(source.slice(start, end))) return [];
-      const fallback = managed.test(node.value)
-        ? node.value.match(/\|\| '([^']+)' \}\}$/)?.[1]
-        : undefined;
+      const fallback = node.value.match(/\|\| '([^']+)' \}\}$/)?.[1];
       const alreadySetUp = fallback !== undefined && hosted.test(fallback) &&
         route.replace('{hosted}', fallback) === node.value;
-      if (!alreadySetUp && !hosted.test(node.value)) return [];
-      const hostedRunner = alreadySetUp ? fallback : node.value;
-      return [{ id: `${file}:${key.value}`, file, source, start, end, runsOn: node.value, alreadySetUp, hostedRunner }];
+      const needsUpdate = fallback !== undefined && hosted.test(fallback) &&
+        [legacyRoute, branchRoute].some(template => template.replace('{hosted}', fallback) === node.value);
+      if (!alreadySetUp && !needsUpdate && !hosted.test(node.value)) return [];
+      const hostedRunner = alreadySetUp || needsUpdate ? fallback : node.value;
+      return [{ id: `${file}:${key.value}`, file, source, start, end, runsOn: node.value,
+        alreadySetUp: alreadySetUp || needsUpdate, needsUpdate, hostedRunner }];
     });
   });
 }
@@ -83,12 +82,12 @@ export function plan(target, ids) {
     if (!job) throw new SetupError('INELIGIBLE_JOB', `Job is unavailable or unsupported: ${id}`);
     return job;
   });
-  const files = Map.groupBy(selected.filter(job => !job.alreadySetUp), job => job.file);
+  const files = Map.groupBy(selected.filter(job => !job.alreadySetUp || job.needsUpdate), job => job.file);
   const patch = [...files].map(([file, jobs]) => {
     const before = jobs[0].source;
     let after = before;
-    for (const { start, end, runsOn } of jobs.sort((a, b) => b.start - a.start)) {
-      after = after.slice(0, start) + JSON.stringify(route.replace('{hosted}', runsOn)) + after.slice(end);
+    for (const { start, end, hostedRunner } of jobs.sort((a, b) => b.start - a.start)) {
+      after = after.slice(0, start) + JSON.stringify(route.replace('{hosted}', hostedRunner)) + after.slice(end);
     }
     return patchFor(file, before, after);
   }).join('');

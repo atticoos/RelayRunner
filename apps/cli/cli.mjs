@@ -36,7 +36,7 @@ async function main() {
     if (values.json) {
       console.log(JSON.stringify({ ok: true, ...result }));
     } else {
-      console.log(`${result.repo}: ${result.route === 'local' ? `local on ${result.branch}` : 'GitHub-hosted'}`);
+      console.log(`${result.repo}: ${result.route === 'local' ? 'local (repository-wide)' : 'GitHub-hosted'}`);
       if (result.runner) console.log(`Runner ${result.runner.label}: ${result.runner.status}`);
       else if (command === 'status') console.log('No local runner configured.');
       if (result.warning) console.log(result.warning);
@@ -96,7 +96,7 @@ async function main() {
       const hosted = styleText('cyan', `☁️  GitHub-hosted ${job.hostedRunner}`);
       const local = styleText('green', '💻  local runner');
       const routing = job.alreadySetUp
-        ? `${local} for the selected branch when enabled, otherwise ${hosted}`
+        ? `${local} when enabled, otherwise ${hosted}${job.needsUpdate ? ' (rerun setup to enable repository-wide routing)' : ''}`
         : hosted;
       console.log(`  ${job.id} (${routing})`);
     }
