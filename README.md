@@ -49,6 +49,14 @@ checkout you want to set up.
 
 ## Set up a repository
 
+If RunnerDuty is installed, paste this into your agent from the target checkout:
+
+```text
+Use the RunnerDuty skill to set up this repository. Show me the eligible jobs, let me choose which ones to opt in, and show me the workflow patch for approval before applying it.
+```
+
+For manual setup, run the following commands.
+
 Run from the target checkout or pass `--cwd /path/to/checkout`.
 
 ```sh
