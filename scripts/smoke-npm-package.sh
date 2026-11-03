@@ -1,13 +1,22 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+tarball="${1:-}"
+if [[ -n "$tarball" && "$tarball" != /* ]]; then
+  tarball="$PWD/$tarball"
+fi
+
 cd "$(dirname "$0")/../apps/cli"
 smoke_dir="$(mktemp -d)"
 trap 'rm -rf "$smoke_dir"' EXIT
 
-pnpm pack --pack-destination "$smoke_dir"
+if [[ -z "$tarball" ]]; then
+  pnpm pack --pack-destination "$smoke_dir"
+  tarballs=("$smoke_dir"/runnerduty-*.tgz)
+  tarball="${tarballs[0]}"
+fi
 prefix="$smoke_dir/runnerduty-install"
-npm install --global --prefix "$prefix" "$smoke_dir"/runnerduty-*.tgz
+npm install --global --prefix "$prefix" "$tarball"
 cmp ../../skills/runnerduty/SKILL.md "$(npm root --global --prefix "$prefix")/runnerduty/dist/SKILL.md"
 # Serve fixture repository metadata without GitHub credentials.
 stub_bin="$smoke_dir/bin"

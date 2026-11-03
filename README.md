@@ -136,18 +136,25 @@ GitHub Actions runs all three checks on pushes and pull requests.
 pre-commit hook, which runs lint and type checking before each commit.
 
 
-## Prepare an npm release
+## Publish an npm release
 
-From the repository root, install dependencies with
-`pnpm install --frozen-lockfile` and run `pnpm check`. Set the release version
-in `apps/cli/package.json`, then pack the release:
+Run `pnpm install --frozen-lockfile` and `pnpm check` from the repository root.
+Set the release version in `apps/cli/package.json`, merge the release commit,
+and tag it `v<version>`.
+
+For the first publish, a maintainer can sign in to npm and publish the verified
+tarball from the tagged checkout:
 
 ```sh
-cd apps/cli
-pnpm pack
+pnpm --dir apps/cli pack
+bash scripts/smoke-npm-package.sh apps/cli/runnerduty-<version>.tgz
+npm publish apps/cli/runnerduty-<version>.tgz --access public
 ```
 
-Install the generated tarball into a temporary npm prefix and run its
-`runnerduty --help`. Verify that the installed `dist/SKILL.md` matches
-`skills/runnerduty/SKILL.md` in the source tree. With npm publish access,
-publish the verified tarball using `npm publish ./runnerduty-<version>.tgz`.
+In npm package settings, configure a GitHub Actions trusted publisher for
+`atticoos/RunnerDuty` with workflow filename `publish-npm.yml` and permission
+to publish. For subsequent releases, run **Publish to npm** from the repository's
+Actions tab and select the matching version tag. The workflow verifies and
+publishes the same tarball using npm's OIDC authentication. If publishing fails
+before the version appears in npm, rerun the workflow for the same tag.
+See [npm Trusted Publishing](https://docs.npmjs.com/trusted-publishers/).
