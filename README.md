@@ -2,16 +2,6 @@
 
 RunnerDuty helps developers switch GitHub Actions jobs between GitHub-hosted runners and their local machines. Run jobs locally during active development to save GitHub Actions minutes, then switch back to GitHub-hosted runners when you're done.
 
-## Workspace
-
-Use pnpm 10.13.1 and run `pnpm install` from the repository root.
-
-- `apps/` holds runnable applications.
-- `packages/` holds shared libraries.
-
-Run the CLI from the repository root with `pnpm runnerduty --help`. Pass
-commands and flags directly, for example `pnpm runnerduty discover --json`.
-
 ## Install the CLI and skill
 
 After the first npm release, install the CLI and verify it:
@@ -25,12 +15,27 @@ Node.js 22+, Git, and an authorized GitHub CLI are required. Repository setup
 supports macOS and Linux on x64 or ARM64 and requires curl, tar, and the official
 runner's OS dependencies. Run as the developer account.
 
-For agent-assisted setup, point your agent at this README and ask it to install
-RunnerDuty and show a setup preview for the target checkout. The agent can
-install a specific release with `npm install --global runnerduty@<version>` and
-use the bundled skill from that version.
+### Install with an agent
 
-For Codex, install the optional skill with:
+Paste this into your agent from the checkout you want to set up:
+
+```text
+Set up RunnerDuty in this checkout using https://raw.githubusercontent.com/atticoos/RunnerDuty/main/docs/agent-install.md
+```
+
+### Install the optional agent skill
+
+The same bundled skill works with Codex, Claude Code, and Cursor on your
+local machine. Choose your agent's personal skill directory:
+
+| Agent | Directory |
+| --- | --- |
+| Codex | `${CODEX_HOME:-$HOME/.codex}/skills/runnerduty` |
+| Claude Code | `$HOME/.claude/skills/runnerduty` |
+| Cursor | `$HOME/.cursor/skills/runnerduty` |
+
+With the CLI installed, copy the bundled skill. The example uses the Codex
+directory. Replace it with the directory for your agent.
 
 ```sh
 runnerduty_skill_dir="${CODEX_HOME:-$HOME/.codex}/skills/runnerduty"
@@ -39,9 +44,18 @@ cp -i "$(npm root --global)/runnerduty/dist/SKILL.md" "$runnerduty_skill_dir/SKI
 ```
 
 If the destination already has a skill, compare it before replacing it.
-In a new Codex chat, invoke `$runnerduty` and identify the checkout to set up.
+In a new local session, ask your agent to use the RunnerDuty skill in the
+checkout you want to set up.
 
 ## Set up a repository
+
+If RunnerDuty is installed, paste this into your agent from the target checkout:
+
+```text
+Use the RunnerDuty skill to set up this repository. Show me the eligible jobs, let me choose which ones to opt in, and show me the workflow patch for approval before applying it.
+```
+
+For manual setup, run the following commands.
 
 Run from the target checkout or pass `--cwd /path/to/checkout`.
 
@@ -94,6 +108,16 @@ The switch applies across branches and workflow triggers, including pull request
 All three commands support `--cwd PATH` and `--json`. Switching uses the repository Actions variable `RUNNERDUTY_LABEL` without editing workflows. Reserve that variable at the repository and organization levels. Use one machine to manage the route.
 
 Runner cleanup, restart-on-login, and queued-job recovery remain manual.
+
+## Workspace
+
+Use pnpm 10.13.1 and run `pnpm install` from the repository root.
+
+- `apps/` holds runnable applications.
+- `packages/` holds shared libraries.
+
+Run the CLI from the repository root with `pnpm runnerduty --help`. Pass
+commands and flags directly, for example `pnpm runnerduty discover --json`.
 
 ## Development checks
 
