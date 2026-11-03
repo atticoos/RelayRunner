@@ -1,0 +1,10 @@
+{
+  "name": "@runnerduty/cli",
+  "version": "0.1.0",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "bin": { "runnerduty": "./cli.mjs" },
+  "files": ["cli.mjs", "runner.mjs", "system.mjs", "workflows.mjs"],
+  "scripts": { "test": "node --test" },
+  "dependencies": { "yaml": "2.9.0" }
+}
