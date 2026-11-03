@@ -38,6 +38,6 @@ jobs:
         run: |
           package_dir="$(mktemp -d)"
           pnpm --dir apps/cli pack --pack-destination "$package_dir"
-          tarballs=("$package_dir"/myci-*.tgz)
+          tarballs=("$package_dir"/relayrunner-*.tgz)
           bash scripts/smoke-npm-package.sh "${tarballs[0]}"
           npm publish "${tarballs[0]}" --access public
