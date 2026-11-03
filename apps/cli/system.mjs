@@ -25,7 +25,7 @@ export function git(cwd, args, options) {
 }
 
 export function api(endpoint, args = []) {
-  const { GH_DEBUG, DEBUG, ...env } = process.env;
+  const { GH_DEBUG: _ghDebug, DEBUG: _debug, ...env } = process.env;
   const result = run('gh', ['api', '--hostname', 'github.com', endpoint, ...args], {
     env: { ...env, GH_PROMPT_DISABLED: '1' },
   });

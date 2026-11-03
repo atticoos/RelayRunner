@@ -85,3 +85,19 @@ and restart-on-login are pending. The setup tests use a local fixture and
 mocked GitHub and runner binaries. A live smoke test in a disposable private
 repository verified hosted, local, and restored hosted execution under the same
 check name by setting and clearing the routing variables with the GitHub CLI.
+
+## Development checks
+
+Use Node.js 22.18 or later in the 22.x release line. Write workspace code in
+TypeScript and place Vitest tests next to the code they cover, using
+`*.test.ts` or `*.test.mts`.
+
+- `pnpm lint` runs Oxlint.
+- `pnpm typecheck` checks types without emitting JavaScript.
+- `pnpm test` runs the test suite once.
+- `pnpm test:watch` reruns affected tests as files change.
+
+GitHub Actions runs all three checks on pushes and pull requests.
+
+`pnpm check` runs all three checks locally. `pnpm install` sets up the Husky
+pre-commit hook, which runs lint and type checking before each commit.

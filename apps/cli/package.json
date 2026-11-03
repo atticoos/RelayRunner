@@ -5,6 +5,6 @@
   "engines": { "node": ">=22" },
   "bin": { "runnerduty": "./cli.mjs" },
   "files": ["cli.mjs", "runner.mjs", "system.mjs", "workflows.mjs"],
-  "scripts": { "test": "node --test" },
+  "scripts": { "test": "vitest run" },
   "dependencies": { "yaml": "2.9.0" }
 }

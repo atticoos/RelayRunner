@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { arch, tmpdir, platform } from 'node:os';
 import { join } from 'node:path';
-import { test } from 'node:test';
+import { test } from 'vitest';
 import { fileURLToPath } from 'node:url';
 
 const cli = fileURLToPath(new URL('./cli.mjs', import.meta.url));
@@ -23,7 +23,7 @@ jobs:
 
 function fixture(t) {
   const dir = mkdtempSync(join(tmpdir(), 'runnerduty-test-'));
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  t.onTestFinished(() => rmSync(dir, { recursive: true, force: true }));
   const bin = join(dir, 'bin');
   const cwd = join(dir, 'repo');
   const state = join(dir, 'state');
