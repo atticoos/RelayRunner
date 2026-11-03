@@ -1,15 +1,28 @@
-import { api, git, SetupError } from './system.mjs';
-import { registeredRunner, runnerLabel, withRunnerLock } from './runner.mjs';
-import { workflows } from './workflows.mjs';
+import { api, git, SetupError } from './system.ts';
+import { registeredRunner, runnerLabel, withRunnerLock } from './runner.ts';
+import { workflows } from './workflows.ts';
+
+import type { ActionsVariable } from './system.ts';
+import type { Repository } from './workflows.ts';
+
+export type RoutingMode = 'local' | 'hosted' | 'status';
+
+interface WorkflowRunJob {
+  id: number;
+  name: string;
+  status: string;
+  labels: string[];
+  html_url: string;
+}
 
 const refKey = 'RUNNERDUTY_REF';
 const labelKey = 'RUNNERDUTY_LABEL';
 
-function pages(endpoint, query = '') {
-  return api(`${endpoint}?per_page=100${query}`, ['--paginate', '--slurp']);
+function pages<T>(endpoint: string, query = '') {
+  return api<T[]>(`${endpoint}?per_page=100${query}`, ['--paginate', '--slurp']);
 }
 
-function setVariable(endpoint, variables, name, value) {
+function setVariable(endpoint: string, variables: Map<string, string>, name: string, value: string) {
   if (variables.get(name) === value) return;
   if (variables.has(name)) {
     api(`${endpoint}/${name}`, ['-X', 'PATCH', '-f', `value=${value}`]);
@@ -18,21 +31,21 @@ function setVariable(endpoint, variables, name, value) {
   }
 }
 
-function queuedJobs(actions, label) {
+function queuedJobs(actions: string, label: string | null) {
   if (!label) return [];
   const runIds = new Set(['queued', 'in_progress'].flatMap(status =>
-    pages(`${actions}/runs`, `&event=push&status=${status}`)
+    pages<{ workflow_runs: { id: number }[] }>(`${actions}/runs`, `&event=push&status=${status}`)
       .flatMap(page => page.workflow_runs.map(run => run.id))));
   return [...runIds]
-    .flatMap(id => pages(`${actions}/runs/${id}/jobs`).flatMap(page => page.jobs))
+    .flatMap(id => pages<{ jobs: WorkflowRunJob[] }>(`${actions}/runs/${id}/jobs`).flatMap(page => page.jobs))
     .filter(job => job.status === 'queued' && job.labels.some(item => item.toLowerCase() === label.toLowerCase()))
     .map(({ id, name, html_url: url }) => ({ id, name, url }));
 }
 
-function routing(target, mode) {
+function routing(target: Repository, mode: RoutingMode) {
   const actions = `repos/${target.repo}/actions`;
   const endpoint = `${actions}/variables`;
-  const variables = new Map(pages(endpoint).flatMap(page => page.variables)
+  const variables = new Map(pages<{ variables: ActionsVariable[] }>(endpoint).flatMap(page => page.variables)
     .map(({ name, value }) => [name, value]));
   const ref = variables.get(refKey);
   const label = variables.get(labelKey);
@@ -70,11 +83,11 @@ function routing(target, mode) {
       branch: active ? ref.replace(/^refs\/heads\//, '') : null, currentBranch: branch, runner: runnerStatus };
   }
 
-  if (!online) throw new SetupError('RUNNER_OFFLINE', 'Set up this checkout and verify its local runner is online before switching.');
+  if (!online || !localLabel || !branch) throw new SetupError('RUNNER_OFFLINE', 'Set up this checkout and verify its local runner is online before switching.');
   if (!workflows(target.root).some(job => job.alreadySetUp)) {
     throw new SetupError('WORKFLOW_SETUP_REQUIRED', 'Set up at least one push job and commit and push the workflow changes.');
   }
-  const branches = pages(`repos/${target.repo}/branches`).flat();
+  const branches = pages<{ name: string }[]>(`repos/${target.repo}/branches`).flat();
   if (branches.some(item => item.name !== branch && item.name.toLowerCase() === branch.toLowerCase())) {
     throw new SetupError('AMBIGUOUS_BRANCH', `GitHub Actions compares refs without regard to case. Another branch differs from ${branch} only by case.`);
   }
@@ -89,6 +102,6 @@ function routing(target, mode) {
   return { repo: target.repo, route: 'local', branch, runner: runnerStatus };
 }
 
-export function routeJobs(target, mode) {
+export function routeJobs(target: Repository, mode: RoutingMode) {
   return mode === 'status' ? routing(target, mode) : withRunnerLock(target, () => routing(target, mode));
 }

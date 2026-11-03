@@ -4,10 +4,10 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { arch, tmpdir, platform } from 'node:os';
 import { join } from 'node:path';
-import { test } from 'vitest';
+import { test, type TestContext } from 'vitest';
 import { fileURLToPath } from 'node:url';
 
-const cli = fileURLToPath(new URL('./cli.mjs', import.meta.url));
+const cli = fileURLToPath(new URL('./cli.ts', import.meta.url));
 const workflow = '.github/workflows/ci.yml';
 const original = `name: Checks
 on: [push, pull_request]
@@ -21,7 +21,7 @@ jobs:
     runs-on: \${{ matrix.os }}
 `;
 
-function fixture(t) {
+function fixture(t: TestContext) {
   const dir = mkdtempSync(join(tmpdir(), 'runnerduty-test-'));
   t.onTestFinished(() => rmSync(dir, { recursive: true, force: true }));
   const bin = join(dir, 'bin');
@@ -30,12 +30,12 @@ function fixture(t) {
   mkdirSync(bin);
   mkdirSync(join(cwd, '.github/workflows'), { recursive: true });
   writeFileSync(join(cwd, workflow), original);
-  const git = (...args) => execFileSync('git', args, { cwd, stdio: 'ignore' });
+  const git = (...args: string[]) => execFileSync('git', args, { cwd, stdio: 'ignore' });
   git('init', '-b', 'main');
   git('remote', 'add', 'origin', 'git@github.com:owner/project.git');
   git('add', '.');
   git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.com', '-c', 'commit.gpgsign=false', 'commit', '-m', 'fixture');
-  const executable = (name, content) => writeFileSync(join(bin, name), content, { mode: 0o700 });
+  const executable = (name: string, content: string) => writeFileSync(join(bin, name), content, { mode: 0o700 });
   const checksum = createHash('sha256').update('fixture archive').digest('hex');
   executable('gh', `#!${process.execPath}
 const fs = require('node:fs');
@@ -111,7 +111,7 @@ touch online
 RUN
 chmod +x "$4/config.sh" "$4/run.sh"
 `);
-  const invoke = (args, env = {}, json = true) => {
+  const invoke = (args: string[], env: NodeJS.ProcessEnv = {}, json = true) => {
     const processResult = spawnSync(process.execPath, [cli, ...args, ...(json ? ['--json'] : [])], {
       cwd, encoding: 'utf8',
       env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, RUNNERDUTY_HOME: state,
@@ -129,7 +129,7 @@ const selection = ['--job', `${workflow}:test`];
 test('discovers and previews selected push jobs without modifying the checkout', t => {
   const { cwd, state, invoke } = fixture(t);
   const { result } = invoke(['discover']);
-  assert.deepEqual(result.jobs.map(job => job.id), [`${workflow}:test`, `${workflow}:lint`]);
+  assert.deepEqual(result.jobs.map((job: { id: string | number }) => job.id), [`${workflow}:test`, `${workflow}:lint`]);
   const preview = invoke(['preview', ...selection]);
   assert.equal(preview.status, 0);
   assert.match(preview.result.patch, /\+    runs-on: ".*github.event_name == 'push'.*'ubuntu-latest'.*" # keep this comment/);
@@ -149,7 +149,7 @@ test('registers, starts, confirms online, applies the patch, and reuses registra
 }, t => {
   const { cwd, state, invoke } = fixture(t);
   const preview = () => invoke(['preview', ...selection]).result;
-  const setup = fingerprint => invoke(['setup', ...selection, '--approve', fingerprint]);
+  const setup = (fingerprint: string) => invoke(['setup', ...selection, '--approve', fingerprint]);
   const before = preview();
   const denied = invoke(['setup', ...selection, '--approve', before.fingerprint], { DENY_REGISTER: '1' });
   assert.equal(denied.result.error.code, 'GITHUB_ACCESS');
@@ -203,7 +203,7 @@ test('switches a configured branch to local and restores hosted while the runner
   rmSync(join(runner, 'online'));
   const hosted = invoke(['switch', 'hosted']).result;
   assert.equal(hosted.route, 'hosted');
-  assert.deepEqual(hosted.queuedJobs.map(job => job.id), [1]);
+  assert.deepEqual(hosted.queuedJobs.map((job: { id: string | number }) => job.id), [1]);
   assert.equal(invoke(['switch', 'hosted']).result.route, 'hosted');
   assert.equal(invoke(['status']).result.runner.status, 'offline');
 });
