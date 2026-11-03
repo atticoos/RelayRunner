@@ -75,19 +75,17 @@ the PID in its target and remove the symlink only after that process has exited.
 Add `--json` for one JSON result on stdout. Errors have `ok: false` and an
 `error` object with `code` and `message`, and exit nonzero.
 
-## Integration gaps
+## Switch runners
 
-Setup leaves jobs on their original hosted runners when the routing variables
-are unset. Reserve `RUNNERDUTY_REF` and `RUNNERDUTY_LABEL` at the repository
-and organization levels. A future switch command needs to verify runner
-availability and set or clear those repository Actions variables. The rule
-matches push events for a branch using a full ref. GitHub expression string
-comparisons ignore case, so switching must account for branches with names
-that differ only by case. Route status, queued-job recovery, runner cleanup,
-and restart-on-login are pending. The setup tests use a local fixture and
-mocked GitHub and runner binaries. A live smoke test in a disposable private
-repository verified hosted, local, and restored hosted execution under the same
-check name by setting and clearing the routing variables with the GitHub CLI.
+After committing and pushing the setup changes, run these commands in the checkout.
+
+- `runnerduty switch local` routes opted-in push jobs on the current branch to this machine after GitHub confirms the runner is online. If another branch is already routed locally, switch to hosted before switching the new branch to local.
+- `runnerduty status` shows the repository route, the branch it applies to, and runner availability.
+- `runnerduty switch hosted` restores the original hosted runner for future jobs. Running jobs can finish, and the command lists jobs GitHub still reports as queued for the local runner.
+
+All three commands support `--cwd PATH` and `--json`. Switching changes repository Actions variables without editing workflows. Reserve `RUNNERDUTY_REF` and `RUNNERDUTY_LABEL` at the repository and organization levels. Use one machine to manage the route. GitHub compares refs case-insensitively, so avoid branch names that differ only by case.
+
+Runner cleanup, restart-on-login, and queued-job recovery remain manual.
 
 ## Development checks
 

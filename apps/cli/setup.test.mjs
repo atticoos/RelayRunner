@@ -63,7 +63,29 @@ if (endpoint.endsWith('/registration-token')) {
   }
   result = [{ runners }];
 } else if (endpoint.includes('/variables?')) {
-  result = [{ variables: [] }];
+  const file = dir + '/variables.json';
+  const values = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file)) : {};
+  result = [{ variables: Object.entries(values).map(([name, value]) => ({ name, value })) }];
+} else if (endpoint.includes('/actions/variables')) {
+  const file = dir + '/variables.json';
+  const values = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file)) : {};
+  const args = process.argv.slice(6);
+  const name = args[1] === 'POST' ? args[3].slice(5) : endpoint.split('/').at(-1);
+  if (args[1] === 'DELETE') delete values[name];
+  else values[name] = args.at(-1).slice(6);
+  fs.writeFileSync(file, JSON.stringify(values));
+  process.exit(0);
+} else if (endpoint.includes('/branches?')) {
+  result = [[{ name: 'main' }, ...(process.env.CASE_COLLISION ? [{ name: 'Main' }] : [])]];
+} else if (endpoint.includes('/runs/123/jobs?')) {
+  const label = fs.readFileSync(dir + '/identity', 'utf8');
+  result = [{ jobs: [
+    { id: 1, name: 'test', status: 'queued', labels: [label], html_url: 'https://github.com/owner/project/actions/runs/123/job/1' },
+    { id: 2, name: 'other', status: 'queued', labels: ['ubuntu-latest'] },
+    { id: 3, name: 'running', status: 'in_progress', labels: [label] },
+  ] }];
+} else if (endpoint.includes('/runs?')) {
+  result = [{ workflow_runs: endpoint.includes('status=in_progress') ? [{ id: 123 }] : [] }];
 } else {
   result = { id: 42, full_name: 'owner/project', visibility: 'private', fork: false };
 }
@@ -152,4 +174,36 @@ test('registers, starts, confirms online, applies the patch, and reuses registra
   assert.equal(retry.result.workflowChanges, 'already-applied');
   assert.deepEqual(retry.result.runner, first.result.runner);
   assert.equal(readFileSync(join(state, '42/registrations'), 'utf8'), 'registered\n');
+});
+
+test('switches a configured branch to local and restores hosted while the runner is offline', t => {
+  const { cwd, state, invoke } = fixture(t);
+  const label = 'runnerduty-12345678-1234-1234-1234-123456789abc';
+  const runner = join(state, '42/runner');
+  mkdirSync(runner, { recursive: true });
+  writeFileSync(join(state, '42/identity'), label);
+  writeFileSync(join(runner, '.runner'), label);
+  assert.equal(invoke(['status']).result.route, 'hosted');
+  assert.equal(invoke(['switch', 'local']).result.error.code, 'RUNNER_OFFLINE');
+
+  const { patch } = invoke(['preview', ...selection]).result;
+  execFileSync('git', ['apply', '-'], { cwd, input: patch });
+  writeFileSync(join(runner, 'online'), '');
+  assert.equal(invoke(['switch', 'local'], { CASE_COLLISION: '1' }).result.error.code, 'AMBIGUOUS_BRANCH');
+  assert.equal(invoke(['switch', 'local']).result.route, 'local');
+  assert.equal(invoke(['switch', 'local']).result.branch, 'main');
+
+  execFileSync('git', ['switch', '-q', '-c', 'other'], { cwd });
+  assert.equal(invoke(['switch', 'local']).result.error.code, 'ROUTE_CONFLICT');
+  const status = invoke(['status']).result;
+  assert.equal(status.branch, 'main');
+  assert.equal(status.currentBranch, 'other');
+  assert.deepEqual(status.runner, { label, status: 'online' });
+
+  rmSync(join(runner, 'online'));
+  const hosted = invoke(['switch', 'hosted']).result;
+  assert.equal(hosted.route, 'hosted');
+  assert.deepEqual(hosted.queuedJobs.map(job => job.id), [1]);
+  assert.equal(invoke(['switch', 'hosted']).result.route, 'hosted');
+  assert.equal(invoke(['status']).result.runner.status, 'offline');
 });
