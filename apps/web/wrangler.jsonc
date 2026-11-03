@@ -1,0 +1,16 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  // Static assets only: there is no `main`, so no Worker script runs.
+  "name": "relayrunner-web",
+  "compatibility_date": "2026-11-03",
+  "assets": {
+    "directory": "./dist"
+  },
+  "workers_dev": false,
+  "routes": [
+    {
+      "pattern": "relayrunner.dev",
+      "custom_domain": true
+    }
+  ]
+}
