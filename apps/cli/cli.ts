@@ -6,11 +6,11 @@ import { repository, workflows, plan } from './workflows.ts';
 import { withRunner } from './runner.ts';
 import { routeJobs } from './routing.ts';
 
-const usage = `myci discover [--cwd PATH] [--json]
-myci preview --job PATH:JOB [--job PATH:JOB ...] [--cwd PATH] [--json]
-myci setup --job PATH:JOB [--job PATH:JOB ...] --approve FINGERPRINT [--cwd PATH] [--json]
-myci switch <local|hosted> [--cwd PATH] [--json]
-myci status [--cwd PATH] [--json]`;
+const usage = `relayrunner discover [--cwd PATH] [--json]
+relayrunner preview --job PATH:JOB [--job PATH:JOB ...] [--cwd PATH] [--json]
+relayrunner setup --job PATH:JOB [--job PATH:JOB ...] --approve FINGERPRINT [--cwd PATH] [--json]
+relayrunner switch <local|hosted> [--cwd PATH] [--json]
+relayrunner status [--cwd PATH] [--json]`;
 
 async function main() {
   const { values, positionals } = parseArgs({
@@ -96,8 +96,8 @@ async function main() {
   if (preview.patch) {
     const pages = api<{ variables: ActionsVariable[] }[]>(`repos/${target.repo}/actions/variables?per_page=100`, ['--paginate', '--slurp']);
     if (pages.some(page => page.variables.some(variable =>
-      ['MYCI_REF', 'MYCI_LABEL'].includes(variable.name) && variable.value))) {
-      throw new SetupError('ROUTE_CONFIGURED', 'Clear the existing myCI routing variables before setting up more jobs.');
+      ['RELAYRUNNER_REF', 'RELAYRUNNER_LABEL'].includes(variable.name) && variable.value))) {
+      throw new SetupError('ROUTE_CONFIGURED', 'Clear the existing RelayRunner routing variables before setting up more jobs.');
     }
   }
   const runner = await withRunner(target, online => {
@@ -113,7 +113,7 @@ async function main() {
 main().catch(error => {
   const known = error instanceof SetupError || error.code?.startsWith('ERR_PARSE_ARGS');
   const code = error instanceof SetupError ? error.code : known ? 'USAGE' : 'SETUP_FAILED';
-  const message = known ? error.message : 'Setup could not complete. Check the checkout and local myCI state permissions, then retry.';
+  const message = known ? error.message : 'Setup could not complete. Check the checkout and local RelayRunner state permissions, then retry.';
   if (process.argv.includes('--json')) console.log(JSON.stringify({ ok: false, error: { code, message } }));
   else console.error(message);
   process.exitCode = 1;

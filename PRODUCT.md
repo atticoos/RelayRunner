@@ -1,13 +1,13 @@
-# myCI product definition
+# RelayRunner product definition
 
-myCI helps developers reduce GitHub Actions minute usage during active development by running selected CI jobs on their own machine. When they're done, they can switch future jobs back to GitHub-hosted runners. Developers keep their usual push workflow and see the same checks and logs in GitHub Actions.
+RelayRunner helps developers reduce GitHub Actions minute usage during active development by running selected CI jobs on their own machine. When they're done, they can switch future jobs back to GitHub-hosted runners. Developers keep their usual push workflow and see the same checks and logs in GitHub Actions.
 
 ## User experience
 
-- **Set up once.** An agent can inspect a repository, identify eligible jobs, preview the changes, and apply the setup. myCI handles runner registration and workflow configuration. The user can complete any required authorization without editing YAML or changing GitHub settings by hand.
-- **Switch to local.** A developer can ask an agent to run the repository's opted-in jobs on their machine. myCI checks that the machine's runner is online before enabling the route.
-- **Check status.** myCI reports the repository-wide route and the local runner's availability.
-- **Switch back.** A developer can ask an agent to restore GitHub-hosted execution for future jobs while any running local job finishes. myCI should make already-queued local jobs visible so users know which jobs need recovery.
+- **Set up once.** An agent can inspect a repository, identify eligible jobs, preview the changes, and apply the setup. RelayRunner handles runner registration and workflow configuration. The user can complete any required authorization without editing YAML or changing GitHub settings by hand.
+- **Switch to local.** A developer can ask an agent to run the repository's opted-in jobs on their machine. RelayRunner checks that the machine's runner is online before enabling the route.
+- **Check status.** RelayRunner reports the repository-wide route and the local runner's availability.
+- **Switch back.** A developer can ask an agent to restore GitHub-hosted execution for future jobs while any running local job finishes. RelayRunner should make already-queued local jobs visible so users know which jobs need recovery.
 
 ## Product principles
 
