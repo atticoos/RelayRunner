@@ -37,4 +37,17 @@ describe('toWebhookMessage', () => {
       installation: { repositorySelection: 'selected' },
     });
   });
+
+  test('keeps only the repo fields of a repository event, and skips one without a repo', () => {
+    const repository = { id: 3, name: 'app', full_name: 'acme/app', private: false, owner: { login: 'acme' } };
+    expect(toWebhookMessage('repository', 'd', { action: 'renamed', repository, installation: { id: 7 } }, '2026-11-04T00:00:00Z')).toEqual({
+      deliveryId: 'd',
+      action: 'renamed',
+      installationId: 7,
+      receivedAt: '2026-11-04T00:00:00Z',
+      event: 'repository',
+      repository: { id: 3, fullName: 'acme/app', private: false },
+    });
+    expect(toWebhookMessage('repository', 'd', { action: 'created', repository: { full_name: 'acme/app' } })).toBeNull();
+  });
 });

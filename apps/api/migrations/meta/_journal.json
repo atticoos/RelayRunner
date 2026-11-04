@@ -29,6 +29,13 @@
       "when": 1793810966043,
       "tag": "0003_installation_github_state_at",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1793812453258,
+      "tag": "0004_github_repository",
+      "breakpoints": true
     }
   ]
 }

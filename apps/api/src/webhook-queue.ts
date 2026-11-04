@@ -19,6 +19,7 @@ import { eq } from 'drizzle-orm';
 import { createDb, schema } from './db/index.ts';
 import type { Env } from './env.ts';
 import { upsertInstallation } from './installations.ts';
+import { recordRepositoryEvent, removeRepositories, upsertRepositories } from './repositories.ts';
 
 const BASE_RETRY_DELAY_SECONDS = 30;
 const MAX_RETRY_DELAY_SECONDS = 15 * 60;
@@ -78,16 +79,23 @@ export async function processWebhook(env: Env, message: WebhookMessage): Promise
       await recordInstallation(env, message);
       console.log(JSON.stringify({ msg: 'github webhook processed', event: message.event, action: message.action, deliveryId: message.deliveryId, installationId: message.installationId, lagMs }));
       return;
+    case 'repository':
+      if (message.installationId) {
+        await recordRepositoryEvent(createDb(env.DB), message.installationId, message.action, message.repository, new Date(message.receivedAt));
+      }
+      console.log(JSON.stringify({ msg: 'github webhook processed', event: message.event, action: message.action, deliveryId: message.deliveryId, installationId: message.installationId, repository: message.repository.fullName, lagMs }));
+      return;
   }
 }
 
-// Keeps github_installation in step with GitHub so the dashboard shows each org's real status.
+// Keeps github_installation, and the repos it can see, in step with GitHub so the dashboard shows
+// each org's real status.
 // Every action carries the installation's current state, so a repeat is harmless, and
 // upsertInstallation drops anything older than what the row holds (the queue is unordered and
 // retries). `deleted` removes the row: the workspace drops the org and the owner reconnects it. A
 // stale event landing after that can recreate it unclaimed, which is harmless: it is listed or
-// claimable only while GitHub still shows the install to the user. Never sets workspace_id:
-// linking takes a signed-in user (routes/github.ts).
+// claimable only while GitHub still shows the install to the user. Its repos go with the row
+// (ON DELETE CASCADE). Never sets workspace_id: linking takes a signed-in user (routes/github.ts).
 async function recordInstallation(env: Env, message: Extract<WebhookMessage, { event: 'installation' | 'installation_repositories' }>) {
   const db = createDb(env.DB);
   // Uses installationId, not the summary, so a message from an ingress that predates the summary
@@ -98,10 +106,18 @@ async function recordInstallation(env: Env, message: Extract<WebhookMessage, { e
   }
   const installation = message.installation;
   if (!installation) return;
+  const observedAt = new Date(message.receivedAt);
   await upsertInstallation(db, {
     id: installation.id,
     account: installation.account,
     repository_selection: installation.repositorySelection,
     suspended_at: installation.suspendedAt,
-  }, new Date(message.receivedAt));
+  }, observedAt);
+  // `created` lists every repo the installation can see; other actions carry none.
+  if (message.event === 'installation') {
+    await upsertRepositories(db, installation.id, message.repositories, observedAt);
+    return;
+  }
+  await upsertRepositories(db, installation.id, message.added, observedAt);
+  await removeRepositories(db, installation.id, message.removed, observedAt);
 }

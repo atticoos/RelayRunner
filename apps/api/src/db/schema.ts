@@ -1,6 +1,6 @@
 // Better Auth's tables in the shape its Drizzle adapter expects: the core four (user, session,
 // account, verification), then the organization plugin's, renamed to workspaces (see auth.ts).
-// Gateway tables (installations, then machines, repos, routes) follow. After changing anything
+// Gateway tables (installations and their repos, then machines and routes) follow. After changing anything
 // here, run `pnpm db:generate` to write a new migration.
 import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
@@ -119,4 +119,28 @@ export const githubInstallation = sqliteTable(
     ...timestamps,
   },
   table => [index('github_installation_workspace_idx').on(table.workspaceId)],
+);
+
+// A repository an installation can see, mirrored from GitHub so activity can name its repo and
+// tell public from private. RelayRunner doesn't manage repos and there is no opt-in: a job that
+// asks for `runs-on: relayrunner` from a connected installation is the opt-in. Rows are written by
+// webhooks (src/repositories.ts) and go away with their installation.
+export const githubRepository = sqliteTable(
+  'github_repository',
+  {
+    // GitHub's repository id, stable across renames and transfers.
+    id: integer('id').primaryKey({ autoIncrement: false }),
+    installationId: integer('installation_id').notNull().references(() => githubInstallation.id, { onDelete: 'cascade' }),
+    // owner/name, as of the latest event.
+    fullName: text('full_name').notNull(),
+    private: integer('private', { mode: 'boolean' }).notNull(),
+    // Set when the installation lost access (repo removed from the selection, deleted, or
+    // transferred away). Kept as a tombstone rather than deleted, so a retried "added" that lands
+    // after a newer "removed" can't bring the repo back. See githubStateAt.
+    removedAt: integer('removed_at', { mode: 'timestamp_ms' }),
+    // When the event behind this row's state was received. Older events never overwrite newer ones.
+    githubStateAt: integer('github_state_at', { mode: 'timestamp_ms' }).notNull(),
+    ...timestamps,
+  },
+  table => [index('github_repository_installation_idx').on(table.installationId)],
 );
