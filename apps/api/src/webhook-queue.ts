@@ -72,8 +72,8 @@ export async function processWebhook(env: Env, message: WebhookMessage): Promise
       // Only jobs that ask for RelayRunner (`runs-on: relayrunner`) are ours. Everything else the
       // App sees is some other runner's job, so drop it quietly.
       if (!usesRelayRunner(message.job.labels)) return;
-      // TODO(#48): on `queued`, hand the job to that repo's Router, which wakes a PickRunner. See
-      // the spike in PR #21 for the flow. For now this only proves the label reaches us.
+      // On `queued`, wake a PickRunner for the job, which answers it with the Router's route. Other
+      // actions are only logged. Nothing is stored yet (#48).
       console.log(JSON.stringify({
         msg: 'relayrunner job received',
         action: message.action,
@@ -89,6 +89,13 @@ export async function processWebhook(env: Env, message: WebhookMessage): Promise
         runnerName: message.job.runnerName,
         lagMs,
       }));
+      if (message.action === 'queued' && message.installationId) {
+        await env.PICK_RUNNER.getByName(String(message.job.id)).start({
+          jobId: message.job.id,
+          installationId: message.installationId,
+          repo: message.repository.fullName,
+        });
+      }
       return;
     case 'installation':
     case 'installation_repositories':
