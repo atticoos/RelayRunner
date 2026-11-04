@@ -5,7 +5,7 @@ The gateway backend: a Hono app on a Cloudflare Worker. It serves everything und
 | Route | What it does |
 | --- | --- |
 | `GET /api/health` | Liveness check. Touches neither auth nor D1. |
-| `POST /api/webhooks/github` | GitHub App webhooks, verified with `GITHUB_WEBHOOK_SECRET`. Stubbed: answers `202`. |
+| `POST /api/webhooks/github` | GitHub App webhooks, verified with `GITHUB_WEBHOOK_SECRET`. Logs each delivery (event, action, delivery id, repo) and answers `ping` with `200`, everything else `202`. No processing yet. |
 | `/api/auth/*` | [Better Auth](https://www.better-auth.com), with the GitHub App as its GitHub provider. |
 | `GET /api/me` | The signed-in user, or `401`. |
 

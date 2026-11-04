@@ -32,4 +32,16 @@ describe('api', () => {
     const response = await webhook(body, { 'x-github-event': 'workflow_job', 'x-hub-signature-256': await sign(body) });
     expect(response.status).toBe(202);
   });
+
+  test('webhook answers ping with ok', async () => {
+    const body = JSON.stringify({ zen: 'Keep it logically awesome.', hook_id: 1 });
+    const response = await webhook(body, { 'x-github-event': 'ping', 'x-hub-signature-256': await sign(body) });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ok: true });
+  });
+
+  test('webhook fails loudly when the secret is not configured', async () => {
+    const response = await app.request('/api/webhooks/github', { method: 'POST', body: '{}', headers: { 'x-github-event': 'ping' } }, {} as Env);
+    expect(response.status).toBe(500);
+  });
 });
