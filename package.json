@@ -27,5 +27,8 @@
     "deploy:web": "pnpm --filter @relayrunner/web run deploy",
     "deploy:landing": "pnpm --filter ./apps/landing run deploy"
   },
-  "type": "module"
+  "type": "module",
+  "skills": [
+    "cloudflare/security-audit-skill@security-audit"
+  ]
 }
