@@ -11,11 +11,11 @@
     "deploy": "pnpm build:site && wrangler deploy"
   },
   "devDependencies": {
-    "vite": "^7.3.7",
-    "wrangler": "^4.157.0"
+    "vite": "catalog:",
+    "wrangler": "catalog:"
   },
   "dependencies": {
-    "@fontsource-variable/hanken-grotesk": "^5.3.0",
-    "@fontsource-variable/jetbrains-mono": "^5.3.0"
+    "@fontsource-variable/hanken-grotesk": "catalog:",
+    "@fontsource-variable/jetbrains-mono": "catalog:"
   }
 }
