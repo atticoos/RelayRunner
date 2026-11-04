@@ -19,10 +19,6 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "prepack": "pnpm run build && cp ../../skills/relayrunner/SKILL.md dist/SKILL.md",
-    "test": "vitest run"
-  },
-  "dependencies": {
-    "yaml": "2.9.0"
+    "prepack": "pnpm run build"
   }
 }
