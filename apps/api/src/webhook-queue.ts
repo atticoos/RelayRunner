@@ -19,6 +19,7 @@ import { eq } from "drizzle-orm";
 import { createDb, schema } from "./db/index.ts";
 import type { Env } from "./env.ts";
 import { upsertInstallation } from "./installations.ts";
+import { recordWorkflowJob } from "./jobs.ts";
 import { recordRepositoryEvent, removeRepositories, upsertRepositories } from "./repositories.ts";
 
 // The `runs-on` label that routes a job through RelayRunner.
@@ -83,12 +84,14 @@ export function retryDelaySeconds(attempts: number) {
 export async function processWebhook(env: Env, message: WebhookMessage): Promise<void> {
   const lagMs = Date.now() - Date.parse(message.receivedAt);
   switch (message.event) {
-    case "workflow_job":
-      // Only jobs that ask for RelayRunner (`runs-on: relayrunner`) are ours. Everything else the
-      // App sees is some other runner's job, so drop it quietly.
-      if (!usesRelayRunner(message.job.labels)) return;
-      // On `queued`, wake a PickRunner for the job, which answers it with the Router's route. Other
-      // actions are only logged. Nothing is stored yet (#48).
+    case "workflow_job": {
+      // A job that asks for RelayRunner (`runs-on: relayrunner`) is a pick: it routes its run. The
+      // run's other jobs are stored for the Activity page (they ran where the pick sent them), and
+      // every other job the App sees is some other runner's, so recordWorkflowJob drops it.
+      const isPick = usesRelayRunner(message.job.labels);
+      await recordWorkflowJob(createDb(env.DB), message, isPick);
+      if (!isPick) return;
+      // On `queued`, wake a PickRunner for the job, which answers it with the Router's route.
       console.log(
         JSON.stringify({
           msg: "relayrunner job received",
@@ -114,6 +117,7 @@ export async function processWebhook(env: Env, message: WebhookMessage): Promise
         });
       }
       return;
+    }
     case "installation":
     case "installation_repositories":
       await recordInstallation(env, message);

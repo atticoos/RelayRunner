@@ -13,7 +13,7 @@ export const Route = createFileRoute("/login")({
   }),
   beforeLoad: async ({ search }) => {
     if (authDisabled || (await getSession())) {
-      throw redirect({ to: search.redirect ?? "/repos" });
+      throw redirect({ to: search.redirect ?? "/activity" });
     }
   },
   component: LoginPage,
@@ -27,7 +27,7 @@ function LoginPage() {
     setError(null);
     const { error } = await signIn.social({
       provider: "github",
-      callbackURL: next ?? "/repos",
+      callbackURL: next ?? "/activity",
     });
     if (error) setError(error.message ?? "Sign-in failed");
   }

@@ -3,6 +3,7 @@ import type { Auth, Session } from "./auth.ts";
 import type { Db, schema } from "./db/index.ts";
 import type { Env } from "./env.ts";
 import { attachSession } from "./middleware/session.ts";
+import { activityRoutes } from "./routes/activity.ts";
 import { authRoutes } from "./routes/auth.ts";
 import { githubRoutes } from "./routes/github.ts";
 import { healthRoutes } from "./routes/health.ts";
@@ -33,6 +34,7 @@ app.use("*", attachSession);
 app.route("/auth", authRoutes);
 app.route("/me", meRoutes);
 app.route("/workspaces", workspaceRoutes);
+app.route("/activity", activityRoutes);
 app.route("/github", githubRoutes);
 
 app.notFound((c) => c.json({ error: "not_found" }, 404));

@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthedRouteImport } from './routes/_authed'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthedWorkspaceRouteImport } from './routes/_authed/_workspace'
+import { Route as AuthedWorkspaceActivityRouteImport } from './routes/_authed/_workspace/activity'
 import { Route as AuthedWorkspaceReposRouteImport } from './routes/_authed/_workspace/repos'
 import { Route as AuthedWorkspaceRunnersRouteImport } from './routes/_authed/_workspace/runners'
 import { Route as AuthedWorkspaceWorkspaceRouteImport } from './routes/_authed/_workspace/workspace'
@@ -35,6 +36,11 @@ const LoginRoute = LoginRouteImport.update({
 const AuthedWorkspaceRoute = AuthedWorkspaceRouteImport.update({
   id: '/_workspace',
   getParentRoute: () => AuthedRoute,
+} as any)
+const AuthedWorkspaceActivityRoute = AuthedWorkspaceActivityRouteImport.update({
+  id: '/activity',
+  path: '/activity',
+  getParentRoute: () => AuthedWorkspaceRoute,
 } as any)
 const AuthedWorkspaceReposRoute = AuthedWorkspaceReposRouteImport.update({
   id: '/repos',
@@ -61,6 +67,7 @@ const AuthedWorkspacesNewRoute = AuthedWorkspacesNewRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/activity': typeof AuthedWorkspaceActivityRoute
   '/repos': typeof AuthedWorkspaceReposRoute
   '/runners': typeof AuthedWorkspaceRunnersRoute
   '/workspace': typeof AuthedWorkspaceWorkspaceRoute
@@ -69,6 +76,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/activity': typeof AuthedWorkspaceActivityRoute
   '/repos': typeof AuthedWorkspaceReposRoute
   '/runners': typeof AuthedWorkspaceRunnersRoute
   '/workspace': typeof AuthedWorkspaceWorkspaceRoute
@@ -80,6 +88,7 @@ export interface FileRoutesById {
   '/_authed': typeof AuthedRouteWithChildren
   '/login': typeof LoginRoute
   '/_authed/_workspace': typeof AuthedWorkspaceRouteWithChildren
+  '/_authed/_workspace/activity': typeof AuthedWorkspaceActivityRoute
   '/_authed/_workspace/repos': typeof AuthedWorkspaceReposRoute
   '/_authed/_workspace/runners': typeof AuthedWorkspaceRunnersRoute
   '/_authed/_workspace/workspace': typeof AuthedWorkspaceWorkspaceRoute
@@ -88,15 +97,29 @@ export interface FileRoutesById {
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    '/' | '/login' | '/repos' | '/runners' | '/workspace' | '/workspaces/new'
+    | '/'
+    | '/login'
+    | '/activity'
+    | '/repos'
+    | '/runners'
+    | '/workspace'
+    | '/workspaces/new'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/repos' | '/runners' | '/workspace' | '/workspaces/new'
+  to:
+    | '/'
+    | '/login'
+    | '/activity'
+    | '/repos'
+    | '/runners'
+    | '/workspace'
+    | '/workspaces/new'
   id:
     | '__root__'
     | '/'
     | '/_authed'
     | '/login'
     | '/_authed/_workspace'
+    | '/_authed/_workspace/activity'
     | '/_authed/_workspace/repos'
     | '/_authed/_workspace/runners'
     | '/_authed/_workspace/workspace'
@@ -139,6 +162,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedWorkspaceRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/_workspace/activity': {
+      id: '/_authed/_workspace/activity'
+      path: '/activity'
+      fullPath: '/activity'
+      preLoaderRoute: typeof AuthedWorkspaceActivityRouteImport
+      parentRoute: typeof AuthedWorkspaceRoute
+    }
     '/_authed/_workspace/repos': {
       id: '/_authed/_workspace/repos'
       path: '/repos'
@@ -171,12 +201,14 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthedWorkspaceRouteChildren {
+  AuthedWorkspaceActivityRoute: typeof AuthedWorkspaceActivityRoute
   AuthedWorkspaceReposRoute: typeof AuthedWorkspaceReposRoute
   AuthedWorkspaceRunnersRoute: typeof AuthedWorkspaceRunnersRoute
   AuthedWorkspaceWorkspaceRoute: typeof AuthedWorkspaceWorkspaceRoute
 }
 
 const AuthedWorkspaceRouteChildren: AuthedWorkspaceRouteChildren = {
+  AuthedWorkspaceActivityRoute: AuthedWorkspaceActivityRoute,
   AuthedWorkspaceReposRoute: AuthedWorkspaceReposRoute,
   AuthedWorkspaceRunnersRoute: AuthedWorkspaceRunnersRoute,
   AuthedWorkspaceWorkspaceRoute: AuthedWorkspaceWorkspaceRoute,

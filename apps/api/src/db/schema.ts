@@ -172,3 +172,47 @@ export const githubRepository = sqliteTable(
   },
   (table) => [index("github_repository_installation_idx").on(table.installationId)],
 );
+
+// A GitHub Actions job in a run that RelayRunner routed, for the dashboard's Activity page. A run
+// is ours once its `runs-on: relayrunner` pick job arrives (kind 'pick'). Every other job in that
+// run is stored too (kind 'job'): those are the real work, and GitHub has already resolved their
+// `runs-on` to the pick's answer, so `labels` is the runner RelayRunner selected. Jobs from runs
+// with no pick are never stored. Rows are written by workflow_job webhooks (src/jobs.ts) and go
+// away with their installation.
+export const workflowJob = sqliteTable(
+  "workflow_job",
+  {
+    // GitHub's job id. A re-run gets new job ids under the same run id.
+    id: integer("id").primaryKey({ autoIncrement: false }),
+    installationId: integer("installation_id")
+      .notNull()
+      .references(() => githubInstallation.id, { onDelete: "cascade" }),
+    repositoryId: integer("repository_id").notNull(),
+    // owner/name when the job was last seen.
+    repositoryFullName: text("repository_full_name").notNull(),
+    runId: integer("run_id").notNull(),
+    runAttempt: integer("run_attempt").notNull(),
+    // 'pick' (asked for the relayrunner label) or 'job' (another job in a pick's run).
+    kind: text("kind", { enum: ["pick", "job"] }).notNull(),
+    workflowName: text("workflow_name"),
+    name: text("name").notNull(),
+    // The job's runs-on labels, as a JSON array. For a 'job' row this is the selected runner.
+    labels: text("labels", { mode: "json" }).$type<string[]>().notNull(),
+    headBranch: text("head_branch"),
+    headSha: text("head_sha").notNull(),
+    // 'queued', 'in_progress' or 'completed' (GitHub also sends 'waiting'). Only moves forward:
+    // the queue is unordered, so a late `queued` never rewinds a finished job.
+    status: text("status").notNull(),
+    conclusion: text("conclusion"),
+    // The runner that took the job, once one has.
+    runnerName: text("runner_name"),
+    githubCreatedAt: integer("github_created_at", { mode: "timestamp_ms" }).notNull(),
+    startedAt: integer("started_at", { mode: "timestamp_ms" }),
+    completedAt: integer("completed_at", { mode: "timestamp_ms" }),
+    ...timestamps,
+  },
+  (table) => [
+    index("workflow_job_installation_idx").on(table.installationId, table.id),
+    index("workflow_job_run_idx").on(table.runId, table.kind),
+  ],
+);

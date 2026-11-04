@@ -1,11 +1,15 @@
 import { describe, expect, test, vi } from "vitest";
 import { WEBHOOK_DLQ, WEBHOOK_QUEUE, type WebhookMessage } from "@relayrunner/github-webhooks";
 import type { Env } from "./env.ts";
+import { recordWorkflowJob } from "./jobs.ts";
 import * as consumer from "./webhook-queue.ts";
+
+// Storage is covered against a real D1 in jobs.test.ts.
+vi.mock("./jobs.ts", () => ({ recordWorkflowJob: vi.fn(async () => true) }));
 
 const start = vi.fn();
 const getByName = vi.fn(() => ({ start }));
-const env = { PICK_RUNNER: { getByName } } as unknown as Env;
+const env = { PICK_RUNNER: { getByName }, DB: {} } as unknown as Env;
 
 function message(body: WebhookMessage, attempts = 1) {
   return { body, attempts, ack: vi.fn(), retry: vi.fn() };
@@ -100,10 +104,12 @@ describe("webhook queue consumer", () => {
     log.mockRestore();
   });
 
-  test("ignores workflow jobs for other runners", async () => {
+  test("hands other runners' jobs to storage without waking a pick runner", async () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
     start.mockClear();
+    vi.mocked(recordWorkflowJob).mockClear();
     await consumer.processWebhook(env, workflowJob(["ubuntu-latest"]));
+    expect(recordWorkflowJob).toHaveBeenCalledWith(expect.anything(), expect.anything(), false);
     expect(log).not.toHaveBeenCalled();
     expect(start).not.toHaveBeenCalled();
     log.mockRestore();
