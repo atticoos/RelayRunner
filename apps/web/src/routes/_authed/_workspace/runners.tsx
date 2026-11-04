@@ -100,7 +100,8 @@ function MachineCard({ machine }: { machine: Machine }) {
   }
 
   const platform = [machine.os && osLabel[machine.os], machine.arch].filter(Boolean).join(" · ");
-  const { status } = machine;
+  // Previews talk to the production API, which may not send status yet: read that as offline.
+  const status = machine.status ?? { online: false, state: null, connectedAt: null };
   const live = machineBadge[status.online ? (status.state ?? "idle") : "offline"];
   const seen = status.online
     ? status.connectedAt && `Connected ${timeAgo(status.connectedAt)}`

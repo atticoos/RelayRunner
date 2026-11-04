@@ -10,7 +10,7 @@ export type Machine = {
   revokedAt: string | null;
   createdAt: string;
   /** Live, from the machine's connection. Online once it has said hello. */
-  status: {
+  status?: {
     online: boolean;
     state: "idle" | "busy" | null;
     /** Epoch ms of the current connection. */
