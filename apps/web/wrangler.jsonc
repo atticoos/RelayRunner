@@ -11,8 +11,9 @@
     "binding": "ASSETS",
     // Unknown paths fall back to index.html so client-side routes deep-link.
     "not_found_handling": "single-page-application",
-    // /api/* must reach the Worker, not the SPA fallback.
-    "run_worker_first": ["/api/*"],
+    // /api/* must reach the Worker, not the SPA fallback. So must the Access-gated dev views,
+    // or assets would serve their HTML without the check.
+    "run_worker_first": ["/api/*", "/dev", "/dev/*"],
   },
   // Same-origin API: the dashboard forwards /api/* to apps/api over this binding,
   // so auth cookies stay first-party on workers.dev and on the custom domain.
@@ -22,6 +23,14 @@
     { "binding": "WEBHOOKS", "service": "relayrunner-webhooks" },
   ],
   "workers_dev": true,
+  // Per-version and per-alias preview URLs (<alias>-relayrunner-app.relayrun.workers.dev). Put
+  // Cloudflare Access in front of them: docs/cloudflare-access.md.
+  "preview_urls": true,
+  "vars": {
+    // Zero Trust team domain whose Access JWTs the dev-only views accept (packages/access).
+    // ACCESS_AUD stays unset here: production workers.dev has no Access app, so /dev/* is 404.
+    "ACCESS_TEAM_DOMAIN": "relayrunner.cloudflareaccess.com",
+  },
   // Workers Logs, traces and Issues (errors grouped per Worker). Wrangler deploys overwrite
   // dashboard settings, so these must stay on here. Source maps make Issues' stacks point at
   // the TypeScript source.
@@ -42,6 +51,12 @@
       { "binding": "WEBHOOKS", "service": "relayrunner-webhooks" },
     ],
     "observability": { "enabled": true },
+    // Vars aren't inherited either. ACCESS_AUD is the Application Audience tag of the Access app
+    // on this Worker's preview URLs; while it's empty, /dev/* answers 404 on previews too.
+    "vars": {
+      "ACCESS_TEAM_DOMAIN": "relayrunner.cloudflareaccess.com",
+      "ACCESS_AUD": "",
+    },
   },
   // Production routing (enable once DNS lives in the new account):
   // "routes": [{ "pattern": "app.relayrunner.dev", "custom_domain": true }]

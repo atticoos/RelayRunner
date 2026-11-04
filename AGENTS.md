@@ -17,3 +17,7 @@ Use [Conventional Commits](https://www.conventionalcommits.org/) for every commi
 ## Formatting and checks
 
 Format with oxfmt (`pnpm format`) and lint with Oxlint (`pnpm lint`). Run `pnpm check` before you push; CI runs the same command. The pre-commit hook formats and lints staged files, so don't skip it with `--no-verify`.
+
+## Preview URLs and dev-only views
+
+Dashboard preview URLs and `/dev/*` views sit behind Cloudflare Access. To reach them, send the `CF-Access-Client-Id` and `CF-Access-Client-Secret` headers from `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET`. `GET /dev/access` confirms the token works. See [docs/cloudflare-access.md](docs/cloudflare-access.md).
