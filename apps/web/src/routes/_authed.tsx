@@ -37,7 +37,7 @@ function AuthedLayout() {
   }
 
   return (
-    <div className="grid min-h-screen grid-cols-1 sm:grid-cols-[220px_1fr]">
+    <div className="grid min-h-screen grid-cols-1 grid-rows-[auto_1fr] sm:grid-cols-[220px_1fr] sm:grid-rows-1">
       <aside className="flex flex-col gap-3 border-b border-sidebar-border bg-sidebar px-4 py-5 sm:gap-6 sm:border-r sm:border-b-0">
         <Brand className="px-2.5" />
         <nav className="flex flex-row flex-wrap gap-0.5 sm:flex-col">
