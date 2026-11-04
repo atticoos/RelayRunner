@@ -42,7 +42,7 @@ Add components with `pnpm dlx shadcn@latest add <name>` from `apps/web`
 ## Deploy
 
 `wrangler.jsonc` pins the RelayRunner Cloudflare account (`account_id`); run
-`pnpm --dir apps/web deploy`.
+`pnpm --dir apps/web run deploy`.
 Deploy `apps/api` first: the `API` service binding needs `relayrunner-api` to
 exist. In production `app.relayrunner.dev` is this Worker's custom domain, and
 `/api/*` reaches the API Worker through the binding, so the API needs no route.
