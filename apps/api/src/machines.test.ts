@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import { app } from "./app.ts";
 import { createDb } from "./db/index.ts";
 import type { Env } from "./env.ts";
@@ -8,9 +8,27 @@ import * as testing from "./testing.ts";
 let proxy: Awaited<ReturnType<typeof testing.startD1>>["proxy"];
 let env: Env;
 
+// MachineLink is a Durable Object, which the platform proxy can't run here; its own logic is
+// tested in durable-objects/machine-session.test.ts. Each machine id gets a stub.
+const links = new Map<string, ReturnType<typeof fakeLink>>();
+function fakeLink() {
+  return {
+    status: vi.fn(async () => ({ online: false, state: null, connectedAt: null })),
+    revoke: vi.fn(async () => {}),
+    fetch: vi.fn(async (_request: Request) => new Response("upgraded")),
+  };
+}
+function link(machineId: string) {
+  if (!links.has(machineId)) links.set(machineId, fakeLink());
+  return links.get(machineId)!;
+}
+
 beforeAll(async () => {
   ({ proxy, env } = await testing.startD1());
+  env.MACHINE_LINK = { getByName: link } as unknown as Env["MACHINE_LINK"];
 }, 60_000);
+
+beforeEach(() => links.clear());
 
 afterAll(async () => {
   await proxy?.dispose();
@@ -253,7 +271,13 @@ describe("machines in the dashboard", () => {
     expect(response.status).toBe(200);
     const { machines } = (await response.json()) as { machines: Record<string, unknown>[] };
     expect(machines).toEqual([
-      expect.objectContaining({ id: machine.id, name: "build-box", os: "macos", arch: "arm64" }),
+      expect.objectContaining({
+        id: machine.id,
+        name: "build-box",
+        os: "macos",
+        arch: "arm64",
+        status: { online: false, state: null, connectedAt: null },
+      }),
     ]);
     expect(machines[0]).not.toHaveProperty("tokenHash");
   });
@@ -267,6 +291,8 @@ describe("machines in the dashboard", () => {
     );
     expect(response.status).toBe(200);
     expect(await verifyMachineToken(createDb(env.DB), token)).toBeNull();
+    // Its live socket is closed too.
+    expect(link(machine.id).revoke).toHaveBeenCalledOnce();
     const { machines } = (await (await call("/machines", cookie)).json()) as {
       machines: unknown[];
     };
@@ -283,5 +309,55 @@ describe("machines in the dashboard", () => {
     );
     expect(response.status).toBe(404);
     expect(await verifyMachineToken(createDb(env.DB), token)).not.toBeNull();
+    expect(link(machine.id).revoke).not.toHaveBeenCalled();
+  });
+
+  test("the list carries each machine's live status", async () => {
+    const { cookie, machine } = await enroll("list-live");
+    link(machine.id).status.mockResolvedValue({
+      online: true,
+      state: "busy",
+      connectedAt: 1,
+    } as never);
+    const { machines } = (await (await call("/machines", cookie)).json()) as {
+      machines: { status: unknown }[];
+    };
+    expect(machines[0]?.status).toEqual({ online: true, state: "busy", connectedAt: 1 });
+  });
+});
+
+describe("the machine WebSocket", () => {
+  const connect = (headers: Record<string, string>) =>
+    app.request("/api/machines/connect", { headers }, env);
+
+  test("needs a WebSocket upgrade", async () => {
+    const { token } = await enroll("ws-upgrade");
+    expect((await connect({ authorization: `Bearer ${token}` })).status).toBe(426);
+  });
+
+  test("rejects a missing, unknown or revoked token before upgrading", async () => {
+    const { token, machine, cookie } = await enroll("ws-auth");
+    const upgrade = { upgrade: "websocket" };
+    expect((await connect(upgrade)).status).toBe(401);
+    expect((await connect({ ...upgrade, authorization: "Bearer rrm_nope" })).status).toBe(401);
+    // A user session isn't a machine token.
+    expect((await connect({ ...upgrade, cookie })).status).toBe(401);
+
+    await app.request(
+      `/api/machines/${machine.id}`,
+      { method: "DELETE", headers: { cookie, origin: env.BETTER_AUTH_URL } },
+      env,
+    );
+    expect((await connect({ ...upgrade, authorization: `Bearer ${token}` })).status).toBe(401);
+    expect(link(machine.id).fetch).not.toHaveBeenCalled();
+  });
+
+  test("hands the socket to the machine's MachineLink, without the token", async () => {
+    const { token, machine } = await enroll("ws-ok");
+    const response = await connect({ upgrade: "websocket", authorization: `Bearer ${token}` });
+    expect(await response.text()).toBe("upgraded");
+    const forwarded = link(machine.id).fetch.mock.calls[0]![0];
+    expect(forwarded.headers.get("x-relayrunner-machine-id")).toBe(machine.id);
+    expect(forwarded.headers.get("authorization")).toBeNull();
   });
 });

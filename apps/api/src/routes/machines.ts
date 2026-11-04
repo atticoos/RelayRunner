@@ -7,7 +7,14 @@ import type { AppEnv } from "../app.ts";
 import { MACHINE_CLIENT_ID } from "../auth.ts";
 import { createDb, schema } from "../db/index.ts";
 import { isWorkspaceMember } from "../installations.ts";
-import { generateMachineToken, normalizeUserCode, presentMachine, sha256Hex } from "../machines.ts";
+import { MACHINE_ID_HEADER } from "../durable-objects/machine-session.ts";
+import {
+  generateMachineToken,
+  normalizeUserCode,
+  presentMachine,
+  sha256Hex,
+  verifyMachineToken,
+} from "../machines.ts";
 import { requireUser } from "../middleware/session.ts";
 import { requireWorkspace } from "../middleware/workspace.ts";
 
@@ -24,6 +31,9 @@ import { requireWorkspace } from "../middleware/workspace.ts";
 //    session is revoked. From then on the machine authenticates as itself.
 //
 // A code approved but never claimed leaves an unclaimed row that nothing lists or accepts.
+//
+// Once enrolled, the CLI stays connected over GET /connect below, a WebSocket to the machine's
+// MachineLink Durable Object speaking @relayrunner/machine-protocol.
 
 const MANAGER_ROLES = new Set(["owner", "admin"]);
 
@@ -122,6 +132,22 @@ export const machineRoutes = new Hono<AppEnv>()
       .limit(1);
     return c.json({ machine: presentMachine(machine), workspace, token });
   })
+  // The machine's WebSocket: `Upgrade: websocket` with `Authorization: Bearer rrm_…`. A missing,
+  // unknown or revoked token gets a 401 before the upgrade. After that the machine sends `hello`,
+  // then `status` as a heartbeat (src/durable-objects/machine-session.ts has the timings and
+  // close codes).
+  .get("/connect", async (c) => {
+    if (c.req.header("upgrade")?.toLowerCase() !== "websocket")
+      return c.json({ error: "upgrade_required" }, 426);
+    const token = c.req.header("authorization")?.match(/^Bearer\s+(\S+)$/i)?.[1];
+    const machine = await verifyMachineToken(createDb(c.env.DB), token);
+    if (!machine) return c.json({ error: "unauthorized" }, 401);
+
+    const headers = new Headers(c.req.raw.headers);
+    headers.delete("authorization");
+    headers.set(MACHINE_ID_HEADER, machine.id);
+    return c.env.MACHINE_LINK.getByName(machine.id).fetch(new Request(c.req.raw, { headers }));
+  })
   .get("/", requireUser, requireWorkspace, async (c) => {
     const machines = await c.var.db
       .select()
@@ -134,7 +160,13 @@ export const machineRoutes = new Hono<AppEnv>()
         ),
       )
       .orderBy(asc(schema.machine.name));
-    return c.json({ machines: machines.map(presentMachine) });
+    // Live status from each machine's MachineLink. Fine for a handful of machines per workspace.
+    const statuses = await Promise.all(
+      machines.map((machine) => c.env.MACHINE_LINK.getByName(machine.id).status()),
+    );
+    return c.json({
+      machines: machines.map((machine, i) => ({ ...presentMachine(machine), status: statuses[i] })),
+    });
   })
   .delete("/:id", requireUser, requireWorkspace, async (c) => {
     if (!MANAGER_ROLES.has(c.var.role)) return c.json({ error: "forbidden" }, 403);
@@ -151,7 +183,8 @@ export const machineRoutes = new Hono<AppEnv>()
       )
       .returning();
     if (!machine) return c.json({ error: "not_found" }, 404);
-    // TODO(#66): tell the machine's MachineLink to close its socket.
+    // The token can't open a new socket any more; close the one that's open.
+    await c.env.MACHINE_LINK.getByName(machine.id).revoke();
     return c.json({ machine: presentMachine(machine) });
   });
 
