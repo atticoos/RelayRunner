@@ -10,7 +10,16 @@
   // Its own URL (https://relayrunner-webhooks.relayrun.workers.dev/api/webhooks/github) works too,
   // so the GitHub App can point straight here and skip the dashboard Worker.
   "workers_dev": true,
-  "observability": { "enabled": true },
+  // Workers Logs, traces and Issues (errors grouped per Worker). Wrangler deploys overwrite
+  // dashboard settings, so these must stay on here. Source maps make Issues' stacks point at
+  // the TypeScript source.
+  "observability": {
+    "enabled": true,
+    "logs": { "enabled": true, "invocation_logs": true },
+    "traces": { "enabled": true },
+    "issues": { "enabled": true }
+  },
+  "upload_source_maps": true,
   // Create once per account before the first deploy (apps/api consumes both):
   //   wrangler queues create relayrunner-github-webhooks
   //   wrangler queues create relayrunner-github-webhooks-dlq
