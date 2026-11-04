@@ -22,6 +22,12 @@
       "migrations_dir": "migrations"
     }
   ],
+  // From the account's Secrets Store, not `wrangler secret put`. Read with `await env.X.get()`.
+  // Locally, `wrangler dev` reads a local store: seed it once with
+  //   wrangler secrets-store secret create eac3493b9fef4234a832f5f3fdcc8a41 --name GITHUB_WEBHOOK_SECRET --scopes workers
+  "secrets_store_secrets": [
+    { "binding": "GITHUB_WEBHOOK_SECRET", "store_id": "eac3493b9fef4234a832f5f3fdcc8a41", "secret_name": "GITHUB_WEBHOOK_SECRET" }
+  ],
   "durable_objects": {
     "bindings": [
       { "name": "PICK_RUNNER", "class_name": "PickRunner" },

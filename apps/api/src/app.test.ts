@@ -3,7 +3,7 @@ import { app } from './app.ts';
 import type { Env } from './env.ts';
 
 const secret = 'test-secret';
-const env = { GITHUB_WEBHOOK_SECRET: secret } as Env;
+const env = { GITHUB_WEBHOOK_SECRET: { get: async () => secret } } as unknown as Env;
 
 async function sign(body: string) {
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);

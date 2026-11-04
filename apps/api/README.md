@@ -5,7 +5,7 @@ The gateway backend: a Hono app on a Cloudflare Worker. It serves everything und
 | Route | What it does |
 | --- | --- |
 | `GET /api/health` | Liveness check. Touches neither auth nor D1. |
-| `POST /api/webhooks/github` | GitHub App webhooks, verified with `GITHUB_WEBHOOK_SECRET`. Logs each delivery (event, action, delivery id, repo) and answers `ping` with `200`, everything else `202`. No processing yet. |
+| `POST /api/webhooks/github` | GitHub App webhooks, verified with `GITHUB_WEBHOOK_SECRET` from the account's Secrets Store. Logs each delivery (event, action, delivery id, repo) and answers `ping` with `200`, everything else `202`. No processing yet. |
 | `/api/auth/*` | [Better Auth](https://www.better-auth.com), with the GitHub App as its GitHub provider. |
 | `GET /api/me` | The signed-in user, or `401`. |
 | `/api/auth/organization/*` | Workspaces: Better Auth's organization plugin (create, list, set active). The creator is the owner. |
@@ -32,7 +32,8 @@ pnpm dev                          # http://localhost:8787/api/health
 
 ```sh
 pnpm db:migrate:remote
-wrangler secret put BETTER_AUTH_SECRET   # and GITHUB_APP_CLIENT_ID, GITHUB_APP_CLIENT_SECRET, GITHUB_WEBHOOK_SECRET
+wrangler secret put BETTER_AUTH_SECRET   # and GITHUB_APP_CLIENT_ID, GITHUB_APP_CLIENT_SECRET
+# GITHUB_WEBHOOK_SECRET lives in the Secrets Store (default_secrets_store), bound in wrangler.jsonc
 pnpm run deploy
 ```
 

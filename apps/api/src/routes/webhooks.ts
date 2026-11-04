@@ -6,13 +6,14 @@ export const webhookRoutes = new Hono<AppEnv>().post('/github', async c => {
   const event = c.req.header('x-github-event');
   const delivery = c.req.header('x-github-delivery');
 
-  if (!c.env.GITHUB_WEBHOOK_SECRET) {
+  const secret = await readSecret(c.env.GITHUB_WEBHOOK_SECRET);
+  if (!secret) {
     console.error(JSON.stringify({ msg: 'github webhook secret not configured', event, delivery }));
     return c.json({ error: 'webhook_secret_not_configured' }, 500);
   }
 
   const body = await c.req.text();
-  if (!await verifyGitHubSignature(c.env.GITHUB_WEBHOOK_SECRET, body, c.req.header('x-hub-signature-256') ?? null)) {
+  if (!await verifyGitHubSignature(secret, body, c.req.header('x-hub-signature-256') ?? null)) {
     console.warn(JSON.stringify({ msg: 'github webhook signature rejected', event, delivery }));
     return c.json({ error: 'invalid_signature' }, 401);
   }
@@ -36,6 +37,16 @@ export const webhookRoutes = new Hono<AppEnv>().post('/github', async c => {
       return c.body(null, 202);
   }
 });
+
+// The binding is missing when wrangler.jsonc doesn't declare it, and get() throws when the store has
+// no secret by that name. Both mean "not configured".
+async function readSecret(binding: SecretsStoreSecret | undefined) {
+  try {
+    return binding ? await binding.get() : null;
+  } catch {
+    return null;
+  }
+}
 
 function summarize(event: string | undefined, delivery: string | undefined, body: string) {
   let payload: Record<string, any> = {};

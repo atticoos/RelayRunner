@@ -8,11 +8,12 @@ export interface Env {
   PICK_RUNNER: DurableObjectNamespace<PickRunner>;
   ROUTER: DurableObjectNamespace<Router>;
   MACHINE_LINK: DurableObjectNamespace<MachineLink>;
+  // Secrets Store (default_secrets_store), shared across the account's Workers.
+  GITHUB_WEBHOOK_SECRET: SecretsStoreSecret;
 
   BETTER_AUTH_URL: string;
   BETTER_AUTH_SECRET: string;
   // The RelayRunner GitHub App's OAuth credentials, used as Better Auth's GitHub provider.
   GITHUB_APP_CLIENT_ID: string;
   GITHUB_APP_CLIENT_SECRET: string;
-  GITHUB_WEBHOOK_SECRET: string;
 }

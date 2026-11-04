@@ -4,4 +4,4 @@ BETTER_AUTH_URL=http://localhost:8787
 BETTER_AUTH_SECRET=generate-with-openssl-rand-base64-32
 GITHUB_APP_CLIENT_ID=
 GITHUB_APP_CLIENT_SECRET=
-GITHUB_WEBHOOK_SECRET=
+# GITHUB_WEBHOOK_SECRET comes from the local Secrets Store; see wrangler.jsonc.
