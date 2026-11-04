@@ -20,6 +20,7 @@ import { createDb, schema } from "./db/index.ts";
 import type { Env } from "./env.ts";
 import { upsertInstallation } from "./installations.ts";
 import { recordRepositoryEvent, removeRepositories, upsertRepositories } from "./repositories.ts";
+import { routeIdFromLabels } from "./routing.ts";
 
 // The `runs-on` label that routes a job through RelayRunner.
 export const RELAYRUNNER_LABEL = "relayrunner";
@@ -83,7 +84,10 @@ export function retryDelaySeconds(attempts: number) {
 export async function processWebhook(env: Env, message: WebhookMessage): Promise<void> {
   const lagMs = Date.now() - Date.parse(message.receivedAt);
   switch (message.event) {
-    case "workflow_job":
+    case "workflow_job": {
+      // A job on a route's `rr-<id>` label: the run's pick chose a machine for it.
+      const routeId = routeIdFromLabels(message.job.labels);
+      if (routeId) return dispatchRoute(env, message, routeId, lagMs);
       // Only jobs that ask for RelayRunner (`runs-on: relayrunner`) are ours. Everything else the
       // App sees is some other runner's job, so drop it quietly.
       if (!usesRelayRunner(message.job.labels)) return;
@@ -114,6 +118,7 @@ export async function processWebhook(env: Env, message: WebhookMessage): Promise
         });
       }
       return;
+    }
     case "installation":
     case "installation_repositories":
       await recordInstallation(env, message);
@@ -151,6 +156,56 @@ export async function processWebhook(env: Env, message: WebhookMessage): Promise
       );
       return;
   }
+}
+
+// Hands a queued route job to the route's machine. The Router only gives the route to a job from
+// the same repo and run as the pick that made it, so another repo can't borrow a machine by
+// copying a label; anything else gets nothing and stays queued. Other actions are only logged.
+async function dispatchRoute(
+  env: Env,
+  message: Extract<WebhookMessage, { event: "workflow_job" }>,
+  routeId: string,
+  lagMs: number,
+) {
+  const log = {
+    msg: "relayrunner route job",
+    action: message.action,
+    deliveryId: message.deliveryId,
+    installationId: message.installationId,
+    repository: message.repository.fullName,
+    jobId: message.job.id,
+    runId: message.job.runId,
+    job: message.job.name,
+    routeId,
+    runnerName: message.job.runnerName,
+    conclusion: message.job.conclusion,
+    lagMs,
+  };
+  if (message.action !== "queued" || !message.installationId) {
+    console.log(JSON.stringify(log));
+    return;
+  }
+  const [installation] = await createDb(env.DB)
+    .select({ workspaceId: schema.githubInstallation.workspaceId })
+    .from(schema.githubInstallation)
+    .where(eq(schema.githubInstallation.id, message.installationId))
+    .limit(1);
+  const workspaceId = installation?.workspaceId;
+  const route = workspaceId
+    ? await env.ROUTER.getByName(workspaceId).claim(routeId, {
+        jobId: message.job.id,
+        repositoryId: message.repository.id,
+        runId: message.job.runId,
+      })
+    : null;
+  if (!workspaceId || !route) {
+    console.warn(JSON.stringify({ ...log, result: "no_route" }));
+    return;
+  }
+  const result = await env.MACHINE_LINK.getByName(route.machineId).run({ route, workspaceId });
+  (result === "offline" ? console.warn : console.log)(
+    JSON.stringify({ ...log, result, machineId: route.machineId }),
+  );
 }
 
 // Keeps github_installation, and the repos it can see, in step with GitHub so the dashboard shows

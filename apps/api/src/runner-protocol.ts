@@ -33,6 +33,8 @@ interface JobMessage {
   jobDisplayName: string;
   billingOwnerId?: string;
   plan: { planId: string };
+  // The job's expression contexts (github, needs, ...), as PipelineContextData JSON.
+  contextData?: Record<string, unknown>;
   resources: {
     endpoints: {
       name: string;
