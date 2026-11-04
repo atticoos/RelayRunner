@@ -1,0 +1,31 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "relayrunner-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-03",
+  "compatibility_flags": ["nodejs_compat"],
+  // No account_id: RelayRunner is moving to its own Cloudflare account. Set CLOUDFLARE_ACCOUNT_ID
+  // in the shell or CI, or add "account_id" here once the account exists.
+  "workers_dev": true,
+  "observability": { "enabled": true },
+  "vars": {
+    "BETTER_AUTH_URL": "http://localhost:8787"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "relayrunner",
+      // Placeholder. Run `wrangler d1 create relayrunner` in the target account and paste the id.
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      { "name": "PICK_RUNNER", "class_name": "PickRunner" },
+      { "name": "ROUTER", "class_name": "Router" },
+      { "name": "MACHINE_LINK", "class_name": "MachineLink" }
+    ]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["PickRunner", "Router", "MachineLink"] }]
+}
