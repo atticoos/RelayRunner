@@ -1,4 +1,4 @@
-import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { Link, createFileRoute, useRouter } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { Brand } from "@/components/brand";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ export const Route = createFileRoute("/_authed/workspaces/new")({
 });
 
 function NewWorkspacePage() {
+  const { session } = Route.useRouteContext();
   const router = useRouter();
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -26,7 +27,7 @@ function NewWorkspacePage() {
       await createWorkspace(trimmed);
       // Re-run route guards so the new active workspace is loaded.
       await router.invalidate();
-      await router.navigate({ to: "/workspace" });
+      await router.navigate({ to: "/settings/github" });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not create the workspace");
       setPending(false);
@@ -73,6 +74,11 @@ function NewWorkspacePage() {
             </form>
           </CardContent>
         </Card>
+        {session?.session.activeOrganizationId && (
+          <Link to="/runners" className="text-sm text-muted-foreground hover:text-foreground">
+            Back to dashboard
+          </Link>
+        )}
       </div>
     </main>
   );

@@ -148,7 +148,7 @@ describe("connecting a GitHub org", () => {
     visibleTo.set(githubToken, [github]);
 
     expect(await setup(cookie, github.id, await installState(cookie))).toBe(
-      "/workspace?github=connected",
+      "/settings/github?github=connected",
     );
 
     expect(await row(github.id)).toMatchObject({ workspace_id: workspace.id });
@@ -184,7 +184,7 @@ describe("connecting a GitHub org", () => {
     const github = installation();
 
     expect(await setup(cookie, github.id, await installState(cookie))).toBe(
-      "/workspace?github=not_found",
+      "/settings/github?github=not_found",
     );
 
     expect(await row(github.id)).toBeNull();
@@ -202,9 +202,9 @@ describe("connecting a GitHub org", () => {
     await setup(first.cookie, github.id, await installState(first.cookie));
 
     expect(await setup(second.cookie, github.id, await installState(second.cookie))).toBe(
-      "/workspace?github=taken",
+      "/settings/github?github=taken",
     );
-    expect(await setup(second.cookie, github.id)).toBe("/workspace?github=taken");
+    expect(await setup(second.cookie, github.id)).toBe("/settings/github?github=taken");
 
     const claimed = await claim(second.cookie, github.id);
     expect(claimed.status).toBe(409);
@@ -219,7 +219,7 @@ describe("connecting a GitHub org", () => {
     const github = installation();
     visibleTo.set(githubToken, [github]);
 
-    expect(await setup(cookie, github.id)).toBe("/workspace?github=unclaimed");
+    expect(await setup(cookie, github.id)).toBe("/settings/github?github=unclaimed");
     expect(await row(github.id)).toMatchObject({ workspace_id: null });
     expect(await unclaimed(cookie)).toEqual([github.id]);
 
@@ -250,7 +250,7 @@ describe("connecting a GitHub org", () => {
 
     visibleTo.set(githubToken, [{ ...github, repository_selection: "selected" }]);
 
-    expect(await setup(cookie, github.id)).toBe("/workspace?github=updated");
+    expect(await setup(cookie, github.id)).toBe("/settings/github?github=updated");
     expect(await row(github.id)).toMatchObject({ repository_selection: "selected" });
   });
 
@@ -261,7 +261,7 @@ describe("connecting a GitHub org", () => {
     const state = await installState(cookie);
     const tampered = `${state.slice(0, -1)}${state.endsWith("A") ? "B" : "A"}`;
 
-    expect(await setup(cookie, github.id, tampered)).toBe("/workspace?github=expired");
+    expect(await setup(cookie, github.id, tampered)).toBe("/settings/github?github=expired");
 
     expect(await row(github.id)).toMatchObject({ workspace_id: null });
     expect(await unclaimed(cookie)).toEqual([github.id]);
@@ -274,7 +274,7 @@ describe("connecting a GitHub org", () => {
     visibleTo.set(second.githubToken, [github]);
 
     expect(await setup(second.cookie, github.id, await installState(first.cookie))).toBe(
-      "/workspace?github=expired",
+      "/settings/github?github=expired",
     );
 
     expect(await row(github.id)).toMatchObject({ workspace_id: null });
@@ -285,7 +285,7 @@ describe("connecting a GitHub org", () => {
     const github = installation();
     revoked.add(githubToken);
 
-    expect(await setup(cookie, github.id)).toBe("/workspace?github=reauth");
+    expect(await setup(cookie, github.id)).toBe("/settings/github?github=reauth");
 
     for (const response of [
       await call("/github/installations/unclaimed", cookie),
@@ -300,14 +300,14 @@ describe("connecting a GitHub org", () => {
     const { cookie } = await owner();
 
     const requested = await call("/github/setup?setup_action=request", cookie);
-    expect(requested.headers.get("location")).toBe("/workspace?github=requested");
+    expect(requested.headers.get("location")).toBe("/settings/github?github=requested");
 
     const invalid = await call("/github/setup?installation_id=nope", cookie);
-    expect(invalid.headers.get("location")).toBe("/workspace?github=invalid");
+    expect(invalid.headers.get("location")).toBe("/settings/github?github=invalid");
 
     const signedOut = await app.request("/api/github/setup?installation_id=1", {}, env);
     expect(signedOut.headers.get("location")).toBe(
-      `/login?redirect=${encodeURIComponent("/workspace?github=unclaimed")}`,
+      `/login?redirect=${encodeURIComponent("/settings/github?github=unclaimed")}`,
     );
   });
 });
