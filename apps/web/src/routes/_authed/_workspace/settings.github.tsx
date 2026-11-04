@@ -15,6 +15,7 @@ import {
 import { ApiError } from "@/lib/api";
 import { authDisabled, signIn } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
+import { githubOutcomes as outcomes, isGitHubOutcome, type GitHubOutcome } from "@/lib/github";
 import {
   claimInstallation,
   getUnclaimedInstallations,
@@ -22,52 +23,6 @@ import {
   type Installation,
   type UnclaimedInstallations,
 } from "@/lib/workspace";
-
-// What GET /api/github/setup reports back in ?github=, in plain language.
-const outcomes = {
-  connected: { tone: "go", message: "GitHub org connected." },
-  updated: { tone: "go", message: "Your changes on GitHub are saved." },
-  unclaimed: {
-    tone: "run",
-    message:
-      "The GitHub App is installed but isn't in a workspace yet. Add it under Unclaimed installations.",
-  },
-  requested: {
-    tone: "run",
-    message:
-      "Install request sent to the org's owners. Once one approves it, add the org under Unclaimed installations.",
-  },
-  taken: {
-    tone: "run",
-    message:
-      "That GitHub org is already connected to another workspace. An org can only belong to one workspace.",
-  },
-  not_found: {
-    tone: "run",
-    message:
-      "Your GitHub account can't see that installation, so nothing was connected. Ask an org owner to connect it.",
-  },
-  expired: {
-    tone: "run",
-    message:
-      "That connect link expired, so nothing was connected. If the GitHub App is installed, add it under Unclaimed installations.",
-  },
-  reauth: {
-    tone: "run",
-    message:
-      "Your GitHub sign-in has expired, so nothing was connected. Sign in again, then add the org under Unclaimed installations.",
-  },
-  invalid: {
-    tone: "run",
-    message: "GitHub didn't say which installation to connect. Try connecting again.",
-  },
-} as const;
-
-type GitHubOutcome = keyof typeof outcomes;
-
-function isGitHubOutcome(value: unknown): value is GitHubOutcome {
-  return typeof value === "string" && Object.hasOwn(outcomes, value);
-}
 
 export const Route = createFileRoute("/_authed/_workspace/settings/github")({
   validateSearch: (search: Record<string, unknown>): { github?: GitHubOutcome } => ({

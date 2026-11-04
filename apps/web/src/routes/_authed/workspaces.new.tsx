@@ -4,14 +4,21 @@ import { Brand } from "@/components/brand";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { dashboardPath } from "@/lib/github";
 import { createWorkspace, slugify } from "@/lib/workspace";
 
+// ?redirect= is where to go once the workspace exists. `relayrunner connect` onboarding uses it
+// to come back to /device; otherwise the next stop is connecting a GitHub org.
 export const Route = createFileRoute("/_authed/workspaces/new")({
+  validateSearch: (search: Record<string, unknown>): { redirect?: string } => ({
+    redirect: dashboardPath(search.redirect),
+  }),
   component: NewWorkspacePage,
 });
 
 function NewWorkspacePage() {
   const { session } = Route.useRouteContext();
+  const { redirect } = Route.useSearch();
   const router = useRouter();
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -27,7 +34,8 @@ function NewWorkspacePage() {
       await createWorkspace(trimmed);
       // Re-run route guards so the new active workspace is loaded.
       await router.invalidate();
-      await router.navigate({ to: "/settings/github" });
+      if (redirect) await router.navigate({ href: redirect });
+      else await router.navigate({ to: "/settings/github" });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not create the workspace");
       setPending(false);

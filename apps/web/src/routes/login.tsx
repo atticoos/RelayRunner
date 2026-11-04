@@ -39,7 +39,11 @@ function LoginPage() {
         <Card className="w-full">
           <CardHeader>
             <CardTitle>Sign in</CardTitle>
-            <CardDescription>Route your GitHub Actions to the right runner.</CardDescription>
+            <CardDescription>
+              {next?.startsWith("/device")
+                ? "Sign in to connect this machine. New to RelayRunner? Signing in with GitHub creates your account."
+                : "Route your GitHub Actions to the right runner."}
+            </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
             <Button size="lg" className="w-full font-bold" onClick={signInWithGitHub}>
