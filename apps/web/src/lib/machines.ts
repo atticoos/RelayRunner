@@ -9,10 +9,33 @@ export type Machine = {
   lastSeenAt: string | null;
   revokedAt: string | null;
   createdAt: string;
+  /** Live, from the machine's connection. Online once it has said hello. */
+  status?: {
+    online: boolean;
+    state: "idle" | "busy" | null;
+    /** Epoch ms of the current connection. */
+    connectedAt: number | null;
+  };
 };
 
 export function listMachines() {
   return api<{ machines: Machine[] }>("/machines");
+}
+
+/** "just now", "5 minutes ago", "3 days ago". */
+export function timeAgo(date: string | number, now = Date.now()) {
+  const seconds = Math.round((new Date(date).getTime() - now) / 1000);
+  if (seconds > -45) return "just now";
+  const format = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+  const units: [Intl.RelativeTimeFormatUnit, number][] = [
+    ["day", 86_400],
+    ["hour", 3_600],
+    ["minute", 60],
+  ];
+  for (const [unit, size] of units) {
+    if (Math.abs(seconds) >= size) return format.format(Math.round(seconds / size), unit);
+  }
+  return format.format(-1, "minute");
 }
 
 /** Revokes the machine's token. Its CLI has to run `relayrunner connect` again. */

@@ -1,11 +1,11 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { authDisabled } from "@/lib/auth-client";
-import { listMachines, revokeMachine, type Machine } from "@/lib/machines";
+import { listMachines, revokeMachine, timeAgo, type Machine } from "@/lib/machines";
 
 // Placeholder rows until the gateway serves hosted runners.
 const hosted = [
@@ -18,6 +18,15 @@ const badge = {
   idle: { variant: "idle", label: "Idle" },
 } as const;
 
+// How often the page refetches machines, so a machine connecting or going quiet shows up.
+const REFRESH_MS = 15_000;
+
+const machineBadge = {
+  idle: { variant: "go", label: "Online · Idle" },
+  busy: { variant: "run", label: "Online · Busy" },
+  offline: { variant: "idle", label: "Offline" },
+} as const;
+
 const osLabel = { linux: "Linux", macos: "macOS", windows: "Windows" } as const;
 
 export const Route = createFileRoute("/_authed/_workspace/runners")({
@@ -27,6 +36,14 @@ export const Route = createFileRoute("/_authed/_workspace/runners")({
 
 function RunnersPage() {
   const { machines } = Route.useLoaderData();
+  const router = useRouter();
+  useEffect(() => {
+    if (authDisabled) return;
+    const timer = setInterval(() => {
+      if (document.visibilityState === "visible") void router.invalidate();
+    }, REFRESH_MS);
+    return () => clearInterval(timer);
+  }, [router]);
   return (
     <section>
       <PageHeader title="Runners">
@@ -83,6 +100,14 @@ function MachineCard({ machine }: { machine: Machine }) {
   }
 
   const platform = [machine.os && osLabel[machine.os], machine.arch].filter(Boolean).join(" · ");
+  // Previews talk to the production API, which may not send status yet: read that as offline.
+  const status = machine.status ?? { online: false, state: null, connectedAt: null };
+  const live = machineBadge[status.online ? (status.state ?? "idle") : "offline"];
+  const seen = status.online
+    ? status.connectedAt && `Connected ${timeAgo(status.connectedAt)}`
+    : machine.lastSeenAt
+      ? `Last seen ${timeAgo(machine.lastSeenAt)}`
+      : "Never connected";
 
   return (
     <Card className="py-4">
@@ -91,10 +116,12 @@ function MachineCard({ machine }: { machine: Machine }) {
           <CardTitle className="font-mono text-sm font-medium">{machine.name}</CardTitle>
           <CardDescription>
             Your machine{platform && ` · ${platform}`}
+            {seen && <span className="block">{seen}</span>}
             {error && <span className="block text-destructive">{error}</span>}
           </CardDescription>
         </div>
         <CardAction className="flex items-center gap-2">
+          <Badge variant={live.variant}>{live.label}</Badge>
           {confirming ? (
             <>
               <Button
