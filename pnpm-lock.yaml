@@ -30,6 +30,9 @@ catalogs:
     wrangler:
       specifier: ^4.157.0
       version: 4.157.0
+    zod:
+      specifier: ^4.6.7
+      version: 4.6.7
 
 importers:
 
@@ -200,6 +203,12 @@ importers:
         version: 4.157.0(@cloudflare/workers-types@5.20261104.1)(@types/node@22.20.5)
 
   packages/github-webhooks: {}
+
+  packages/machine-protocol:
+    dependencies:
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.7
 
 packages:
 
