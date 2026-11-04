@@ -16,6 +16,8 @@ import {
   type MachineMessage,
   type RunMessage,
 } from "@relayrunner/machine-protocol";
+import { request as httpRequest } from "node:http";
+import { request as httpsRequest } from "node:https";
 import type { JobUpdate } from "./job.ts";
 import { userAgent } from "./paths.ts";
 
@@ -58,7 +60,8 @@ export interface ConnectOptions {
   // Reconnect delay before jitter: min(maxBackoffMs, minBackoffMs * 2^attempt).
   minBackoffMs?: number;
   maxBackoffMs?: number;
-  fetcher?: typeof fetch;
+  // Status of a bare upgrade request to the connect URL. Tests can replace it.
+  probe?: (server: string, token: string) => Promise<number>;
 }
 
 // Node's WebSocket is undici's, which takes headers on its init object (the browser one can't
@@ -85,7 +88,6 @@ export async function connect(options: ConnectOptions): Promise<ConnectionEnd> {
   const minBackoffMs = options.minBackoffMs ?? 1_000;
   const maxBackoffMs = options.maxBackoffMs ?? 30_000;
   const emit = options.onEvent ?? (() => {});
-  const fetcher = options.fetcher ?? fetch;
   const signal = options.signal;
 
   let state: MachineState = "idle";
@@ -180,19 +182,13 @@ export async function connect(options: ConnectOptions): Promise<ConnectionEnd> {
       });
     });
 
-  // A failed upgrade only surfaces as a bare error, so ask the same URL over plain HTTP whether the
-  // token is still good: a valid token gets 426 (no upgrade header), a bad one 401.
-  const tokenRejected = async () => {
-    try {
-      const response = await fetcher(new URL("/api/machines/connect", options.server), {
-        headers: { authorization: `Bearer ${options.token}`, "user-agent": userAgent },
-      });
-      await response.body?.cancel();
-      return response.status === 401;
-    } catch {
-      return false;
-    }
-  };
+  // A failed upgrade only surfaces as a bare error, so ask again with a raw upgrade request to
+  // read the status: the gateway checks the token before upgrading and answers 401 if it's bad.
+  const tokenRejected = () =>
+    (options.probe ?? upgradeStatus)(options.server, options.token).then(
+      (status) => status === 401,
+      () => false,
+    );
 
   let attempt = 0;
   while (!signal?.aborted) {
@@ -213,6 +209,36 @@ export async function connect(options: ConnectOptions): Promise<ConnectionEnd> {
     await delay(retryInMs, signal);
   }
   return { reason: "stopped" };
+}
+
+// Sends the upgrade headers without a WebSocket key, so a gateway that accepts the token answers
+// with an error or an upgrade we drop at once, and one that refuses it answers 401. fetch can't do
+// this: Upgrade is a forbidden header there.
+export function upgradeStatus(server: string, token: string, timeoutMs = 10_000) {
+  const url = new URL("/api/machines/connect", server);
+  const request = url.protocol === "http:" ? httpRequest : httpsRequest;
+  return new Promise<number>((resolve, reject) => {
+    const req = request(url, {
+      headers: {
+        connection: "Upgrade",
+        upgrade: "websocket",
+        authorization: `Bearer ${token}`,
+        "user-agent": userAgent,
+      },
+      timeout: timeoutMs,
+    });
+    req.on("response", (response) => {
+      response.resume();
+      resolve(response.statusCode ?? 0);
+    });
+    req.on("upgrade", (_response, socket) => {
+      socket.destroy();
+      resolve(101);
+    });
+    req.on("timeout", () => req.destroy(new Error("timed out")));
+    req.on("error", reject);
+    req.end();
+  });
 }
 
 function delay(ms: number, signal?: AbortSignal) {
