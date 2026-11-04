@@ -19,6 +19,7 @@ import { eq } from "drizzle-orm";
 import { createDb, schema } from "./db/index.ts";
 import type { Env } from "./env.ts";
 import { upsertInstallation } from "./installations.ts";
+import { recordWorkflowJob, setJobMachine } from "./jobs.ts";
 import { recordRepositoryEvent, removeRepositories, upsertRepositories } from "./repositories.ts";
 import { routeIdFromLabels } from "./routing.ts";
 
@@ -85,14 +86,17 @@ export async function processWebhook(env: Env, message: WebhookMessage): Promise
   const lagMs = Date.now() - Date.parse(message.receivedAt);
   switch (message.event) {
     case "workflow_job": {
+      // A job that asks for RelayRunner (`runs-on: relayrunner`) is a pick: it routes its run. The
+      // run's other jobs are stored for the Activity page (they ran where the pick sent them), and
+      // every other job the App sees is some other runner's, so recordWorkflowJob drops it.
+      const isPick = usesRelayRunner(message.job.labels);
+      await recordWorkflowJob(createDb(env.DB), message, isPick);
       // A job on a route's `rr-<id>` label: the run's pick chose a machine for it.
       const routeId = routeIdFromLabels(message.job.labels);
       if (routeId) return dispatchRoute(env, message, routeId, lagMs);
-      // Only jobs that ask for RelayRunner (`runs-on: relayrunner`) are ours. Everything else the
-      // App sees is some other runner's job, so drop it quietly.
-      if (!usesRelayRunner(message.job.labels)) return;
+      if (!isPick) return;
       // On `queued`, wake a PickRunner for the job, which answers it with the Router's route. Other
-      // actions are only logged. Nothing is stored yet (#48).
+      // actions are only logged.
       console.log(
         JSON.stringify({
           msg: "relayrunner job received",
@@ -161,6 +165,7 @@ export async function processWebhook(env: Env, message: WebhookMessage): Promise
 // Hands a queued route job to the route's machine. The Router only gives the route to a job from
 // the same repo and run as the pick that made it, so another repo can't borrow a machine by
 // copying a label; anything else gets nothing and stays queued. Other actions are only logged.
+// Either way, the job's Activity row learns which machine the route chose.
 async function dispatchRoute(
   env: Env,
   message: Extract<WebhookMessage, { event: "workflow_job" }>,
@@ -181,27 +186,36 @@ async function dispatchRoute(
     conclusion: message.job.conclusion,
     lagMs,
   };
-  if (message.action !== "queued" || !message.installationId) {
+  if (!message.installationId) {
     console.log(JSON.stringify(log));
     return;
   }
-  const [installation] = await createDb(env.DB)
+  const db = createDb(env.DB);
+  const [installation] = await db
     .select({ workspaceId: schema.githubInstallation.workspaceId })
     .from(schema.githubInstallation)
     .where(eq(schema.githubInstallation.id, message.installationId))
     .limit(1);
   const workspaceId = installation?.workspaceId;
-  const route = workspaceId
-    ? await env.ROUTER.getByName(workspaceId).claim(routeId, {
-        jobId: message.job.id,
-        repositoryId: message.repository.id,
-        runId: message.job.runId,
-      })
-    : null;
+  const job = {
+    jobId: message.job.id,
+    repositoryId: message.repository.id,
+    runId: message.job.runId,
+  };
+  if (message.action !== "queued") {
+    const machineId = workspaceId
+      ? await env.ROUTER.getByName(workspaceId).machineFor(routeId, job)
+      : null;
+    if (machineId) await setJobMachine(db, message.job.id, machineId);
+    console.log(JSON.stringify(log));
+    return;
+  }
+  const route = workspaceId ? await env.ROUTER.getByName(workspaceId).claim(routeId, job) : null;
   if (!workspaceId || !route) {
     console.warn(JSON.stringify({ ...log, result: "no_route" }));
     return;
   }
+  await setJobMachine(db, message.job.id, route.machineId);
   const result = await env.MACHINE_LINK.getByName(route.machineId).run({ route, workspaceId });
   (result === "offline" ? console.warn : console.log)(
     JSON.stringify({ ...log, result, machineId: route.machineId }),

@@ -1,12 +1,19 @@
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import { WEBHOOK_DLQ, WEBHOOK_QUEUE, type WebhookMessage } from "@relayrunner/github-webhooks";
 import type { Env } from "./env.ts";
+import { recordWorkflowJob, setJobMachine } from "./jobs.ts";
 import { startD1 } from "./testing.ts";
 import * as consumer from "./webhook-queue.ts";
 
+// Storage is covered against a real D1 in jobs.test.ts.
+vi.mock("./jobs.ts", () => ({
+  recordWorkflowJob: vi.fn(async () => true),
+  setJobMachine: vi.fn(async () => {}),
+}));
+
 const start = vi.fn();
 const getByName = vi.fn(() => ({ start }));
-const env = { PICK_RUNNER: { getByName } } as unknown as Env;
+const env = { PICK_RUNNER: { getByName }, DB: {} } as unknown as Env;
 
 function message(body: WebhookMessage, attempts = 1) {
   return { body, attempts, ack: vi.fn(), retry: vi.fn() };
@@ -101,10 +108,12 @@ describe("webhook queue consumer", () => {
     log.mockRestore();
   });
 
-  test("ignores workflow jobs for other runners", async () => {
+  test("hands other runners' jobs to storage without waking a pick runner", async () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
     start.mockClear();
+    vi.mocked(recordWorkflowJob).mockClear();
     await consumer.processWebhook(env, workflowJob(["ubuntu-latest"]));
+    expect(recordWorkflowJob).toHaveBeenCalledWith(expect.anything(), expect.anything(), false);
     expect(log).not.toHaveBeenCalled();
     expect(start).not.toHaveBeenCalled();
     log.mockRestore();
@@ -129,11 +138,12 @@ describe("webhook queue consumer", () => {
     let stop: () => Promise<void>;
     let db: D1Database;
     const claim = vi.fn();
+    const machineFor = vi.fn(async () => null);
     const run = vi.fn(async () => "sent");
     const routeEnv = () =>
       ({
         DB: db,
-        ROUTER: { getByName: vi.fn(() => ({ claim })) },
+        ROUTER: { getByName: vi.fn(() => ({ claim, machineFor })) },
         MACHINE_LINK: { getByName: vi.fn(() => ({ run })) },
       }) as unknown as Env;
 
@@ -165,6 +175,7 @@ describe("webhook queue consumer", () => {
       expect(claim).toHaveBeenCalledWith("0123456789ab", { jobId: 42, repositoryId: 1, runId: 9 });
       expect(env.MACHINE_LINK.getByName).toHaveBeenCalledWith("m1");
       expect(run).toHaveBeenCalledWith({ route, workspaceId: "w1" });
+      expect(setJobMachine).toHaveBeenCalledWith(expect.anything(), 42, "m1");
       expect(JSON.parse(log.mock.calls.at(-1)![0])).toMatchObject({ result: "sent" });
       log.mockRestore();
     });
@@ -180,6 +191,11 @@ describe("webhook queue consumer", () => {
       claim.mockClear();
       await consumer.processWebhook(env, workflowJob(["rr-0123456789ab"], "in_progress"));
       expect(claim).not.toHaveBeenCalled();
+      expect(machineFor).toHaveBeenCalledWith("0123456789ab", {
+        jobId: 42,
+        repositoryId: 1,
+        runId: 9,
+      });
       expect(run).not.toHaveBeenCalled();
       warn.mockRestore();
       log.mockRestore();
