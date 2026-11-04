@@ -11,10 +11,12 @@
     "db:migrate:remote": "wrangler d1 execute relayrunner --remote --file scripts/rename-legacy-migrations.sql && wrangler d1 migrations apply relayrunner --remote"
   },
   "dependencies": {
+    "@relayrunner/github-webhooks": "workspace:*",
+    "@relayrunner/machine-protocol": "workspace:*",
     "better-auth": "catalog:",
     "drizzle-orm": "^0.45.4",
     "hono": "^4.13.16",
-    "@relayrunner/github-webhooks": "workspace:*"
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "catalog:",
