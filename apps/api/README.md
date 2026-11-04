@@ -22,7 +22,7 @@ The gateway backend: a Hono app on a Cloudflare Worker. It serves everything und
 
 Change `src/db/schema.ts`, then run `pnpm db:generate`. Drizzle names the file with a UTC timestamp prefix (`20261104160202_workspaces.sql`), so two branches that each add a migration don't both claim `0002`. Don't use `wrangler d1 migrations create`, which numbers files and skips the Drizzle snapshot. `src/migrations.test.ts` fails on any file that isn't timestamp-prefixed or isn't in `migrations/meta/_journal.json`.
 
-Merging to `main` applies new migrations to the production database: the `Apply D1 migrations` workflow runs `pnpm db:migrate:remote` with the `CLOUDFLARE_API_TOKEN` secret. Migrations must be safe to run against the Worker that's already deployed, since the workflow can land before the new Worker does.
+Merging to `main` applies new migrations to the production database: the `Apply D1 migrations` workflow runs `pnpm db:migrate:remote` with the `CLOUDFLARE_API_TOKEN` secret. It is the only thing that migrates production: the Workers Builds deploy (`pnpm run deploy:api`) does not. Migrations must be safe to run against the Worker that's already deployed, since the workflow can land before the new Worker does.
 
 The first two migrations were renamed from `0000_init.sql` and `0001_workspaces.sql`. Wrangler tracks applied migrations by filename, so `db:migrate:local` and `db:migrate:remote` first run `scripts/rename-legacy-migrations.sql`, which renames those rows in `d1_migrations` and does nothing on a fresh database or once they're renamed. It can go once every database (including your local `.wrangler` state) has been migrated with it.
 
