@@ -30,8 +30,8 @@ To add a dev-only view, put its page under `/dev/` and its data under `/api/dev/
 All of this is already set up in the RelayRunner Zero Trust organization (team domain `relayrunner.cloudflareaccess.com`). Look in Zero Trust > Access to find each item.
 
 - **Application** `relayrunner-app previews`: self-hosted, with the domain `*-relayrunner-app.relayrun.workers.dev` and 24-hour sessions. Its AUD tag is in `previews.vars.ACCESS_AUD` in `apps/web/wrangler.jsonc`.
-- **Login methods**: Cloudflare login, limited to members of the RelayRunner account, and One-time PIN.
-- **Policy** `RelayRunner team` (Allow): the team's email addresses. To give someone access, add them here.
+- **Login methods**: GitHub (the `RelayRunner Cloudflare` OAuth app in the relayrunner org), Cloudflare login (limited to members of the RelayRunner account), and One-time PIN.
+- **Policy** `RelayRunner team` (Allow): members of the `relayrunner` GitHub org, plus the team's email addresses as a fallback. Adding someone to the GitHub org gives them access.
 - **Policy** `RelayRunner agents` (Service Auth): the `relayrunner-agents` service token. The token expires after one year.
 
 To rebuild the setup, create the application with the same domain and attach both policies, then copy the new AUD into `wrangler.jsonc`. Deploy `api`, `webhooks` and `web` so that the `preview_urls` settings apply.
