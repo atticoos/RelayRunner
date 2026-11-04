@@ -15,4 +15,6 @@ export interface Env {
   GITHUB_APP_CLIENT_ID: string;
   GITHUB_APP_CLIENT_SECRET: string;
   GITHUB_WEBHOOK_SECRET: string;
+  // debug | info | warn | error. Defaults to info.
+  LOG_LEVEL?: string;
 }

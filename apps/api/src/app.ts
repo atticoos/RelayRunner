@@ -1,6 +1,8 @@
 import { Hono } from 'hono';
 import type { Auth, Session } from './auth.ts';
 import type { Env } from './env.ts';
+import { logger } from './logger.ts';
+import { requestLogger } from './middleware/request-logger.ts';
 import { attachSession } from './middleware/session.ts';
 import { authRoutes } from './routes/auth.ts';
 import { healthRoutes } from './routes/health.ts';
@@ -19,6 +21,9 @@ export interface AppEnv {
 // Everything lives under /api so the dashboard can call it same-origin.
 export const app = new Hono<AppEnv>().basePath('/api');
 
+// Every request gets a requestId on its log lines and one `http.request` line.
+app.use('*', requestLogger);
+
 // Public routes. These never touch auth or D1.
 app.route('/health', healthRoutes);
 app.route('/webhooks', webhookRoutes);
@@ -29,3 +34,8 @@ app.route('/auth', authRoutes);
 app.route('/me', meRoutes);
 
 app.notFound(c => c.json({ error: 'not_found' }, 404));
+
+app.onError((error, c) => {
+  logger('http').error('http.unhandled_error', { error });
+  return c.json({ error: 'internal_error' }, 500);
+});

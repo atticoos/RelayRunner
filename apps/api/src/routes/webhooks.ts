@@ -1,27 +1,30 @@
 import { Hono } from 'hono';
 import type { AppEnv } from '../app.ts';
 import { verifyGitHubSignature } from '../github-webhook.ts';
+import { logger } from '../logger.ts';
+
+const baseLog = logger('webhooks.github');
 
 export const webhookRoutes = new Hono<AppEnv>().post('/github', async c => {
-  const event = c.req.header('x-github-event');
-  const delivery = c.req.header('x-github-delivery');
+  const githubEvent = c.req.header('x-github-event');
+  const log = baseLog.with({ githubEvent, deliveryId: c.req.header('x-github-delivery') });
 
   if (!c.env.GITHUB_WEBHOOK_SECRET) {
-    console.error(JSON.stringify({ msg: 'github webhook secret not configured', event, delivery }));
+    log.error('webhook.secret_missing');
     return c.json({ error: 'webhook_secret_not_configured' }, 500);
   }
 
   const body = await c.req.text();
   if (!await verifyGitHubSignature(c.env.GITHUB_WEBHOOK_SECRET, body, c.req.header('x-hub-signature-256') ?? null)) {
-    console.warn(JSON.stringify({ msg: 'github webhook signature rejected', event, delivery }));
+    log.warn('webhook.signature_rejected');
     return c.json({ error: 'invalid_signature' }, 401);
   }
 
   // Log every verified delivery so Workers Logs / `wrangler tail` shows what GitHub sends.
   // Nothing is processed yet.
-  console.log(JSON.stringify({ msg: 'github webhook received', ...summarize(event, delivery, body) }));
+  log.info('webhook.received', summarize(body));
 
-  switch (event) {
+  switch (githubEvent) {
     case 'ping':
       return c.json({ ok: true });
     case 'workflow_job':
@@ -37,7 +40,7 @@ export const webhookRoutes = new Hono<AppEnv>().post('/github', async c => {
   }
 });
 
-function summarize(event: string | undefined, delivery: string | undefined, body: string) {
+function summarize(body: string) {
   let payload: Record<string, any> = {};
   try {
     payload = JSON.parse(body);
@@ -45,11 +48,9 @@ function summarize(event: string | undefined, delivery: string | undefined, body
     // Keep the log line even if the body isn't JSON.
   }
   return {
-    event,
-    delivery,
     action: payload.action,
-    installation: payload.installation?.id,
-    repository: payload.repository?.full_name,
+    installationId: payload.installation?.id,
+    repo: payload.repository?.full_name,
     sender: payload.sender?.login,
   };
 }
