@@ -12,14 +12,14 @@
     // Unknown paths fall back to index.html so client-side routes deep-link.
     "not_found_handling": "single-page-application",
     // /api/* must reach the Worker, not the SPA fallback.
-    "run_worker_first": ["/api/*"]
+    "run_worker_first": ["/api/*"],
   },
   // Same-origin API: the dashboard forwards /api/* to apps/api over this binding,
   // so auth cookies stay first-party on workers.dev and on the custom domain.
   // /api/webhooks/* goes to the webhook ingress Worker instead, so API deploys never touch it.
   "services": [
     { "binding": "API", "service": "relayrunner-api" },
-    { "binding": "WEBHOOKS", "service": "relayrunner-webhooks" }
+    { "binding": "WEBHOOKS", "service": "relayrunner-webhooks" },
   ],
   "workers_dev": true,
   "observability": { "enabled": true },
@@ -30,10 +30,10 @@
   "previews": {
     "services": [
       { "binding": "API", "service": "relayrunner-api" },
-      { "binding": "WEBHOOKS", "service": "relayrunner-webhooks" }
+      { "binding": "WEBHOOKS", "service": "relayrunner-webhooks" },
     ],
-    "observability": { "enabled": true }
-  }
+    "observability": { "enabled": true },
+  },
   // Production routing (enable once DNS lives in the new account):
   // "routes": [{ "pattern": "app.relayrunner.dev", "custom_domain": true }]
 }

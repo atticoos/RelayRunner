@@ -15,12 +15,16 @@
   //   wrangler queues create relayrunner-github-webhooks
   //   wrangler queues create relayrunner-github-webhooks-dlq
   "queues": {
-    "producers": [{ "binding": "WEBHOOK_QUEUE", "queue": "relayrunner-github-webhooks" }]
+    "producers": [{ "binding": "WEBHOOK_QUEUE", "queue": "relayrunner-github-webhooks" }],
   },
   // From the account's Secrets Store (default_secrets_store), not `wrangler secret put`.
   // Locally, `wrangler dev` reads a local store: seed it once with
   //   wrangler secrets-store secret create eac3493b9fef4234a832f5f3fdcc8a41 --name GITHUB_WEBHOOK_SECRET --scopes workers
   "secrets_store_secrets": [
-    { "binding": "GITHUB_WEBHOOK_SECRET", "store_id": "eac3493b9fef4234a832f5f3fdcc8a41", "secret_name": "GITHUB_WEBHOOK_SECRET" }
-  ]
+    {
+      "binding": "GITHUB_WEBHOOK_SECRET",
+      "store_id": "eac3493b9fef4234a832f5f3fdcc8a41",
+      "secret_name": "GITHUB_WEBHOOK_SECRET",
+    },
+  ],
 }

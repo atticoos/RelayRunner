@@ -2,97 +2,123 @@
 // account, verification), then the organization plugin's, renamed to workspaces (see auth.ts).
 // Gateway tables (installations and their repos, then machines and routes) follow. After changing anything
 // here, run `pnpm db:generate` to write a new migration.
-import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 const timestamps = {
-  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().$defaultFn(() => new Date()),
-  updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
     .notNull()
     .$defaultFn(() => new Date())
     .$onUpdate(() => new Date()),
 };
 
-export const user = sqliteTable('user', {
-  id: text('id').primaryKey(),
-  name: text('name').notNull(),
-  email: text('email').notNull().unique(),
-  emailVerified: integer('email_verified', { mode: 'boolean' }).notNull().default(false),
-  image: text('image'),
+export const user = sqliteTable("user", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  email: text("email").notNull().unique(),
+  emailVerified: integer("email_verified", { mode: "boolean" }).notNull().default(false),
+  image: text("image"),
   ...timestamps,
 });
 
-export const session = sqliteTable('session', {
-  id: text('id').primaryKey(),
-  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
-  token: text('token').notNull().unique(),
-  expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
-  ipAddress: text('ip_address'),
-  userAgent: text('user_agent'),
+export const session = sqliteTable("session", {
+  id: text("id").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  token: text("token").notNull().unique(),
+  expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
   // The workspace the dashboard is looking at. Set by the organization plugin.
-  activeWorkspaceId: text('active_workspace_id'),
+  activeWorkspaceId: text("active_workspace_id"),
   ...timestamps,
 });
 
-export const account = sqliteTable('account', {
-  id: text('id').primaryKey(),
-  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
-  accountId: text('account_id').notNull(),
-  providerId: text('provider_id').notNull(),
-  accessToken: text('access_token'),
-  refreshToken: text('refresh_token'),
-  idToken: text('id_token'),
-  accessTokenExpiresAt: integer('access_token_expires_at', { mode: 'timestamp_ms' }),
-  refreshTokenExpiresAt: integer('refresh_token_expires_at', { mode: 'timestamp_ms' }),
-  scope: text('scope'),
-  password: text('password'),
+export const account = sqliteTable("account", {
+  id: text("id").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  accountId: text("account_id").notNull(),
+  providerId: text("provider_id").notNull(),
+  accessToken: text("access_token"),
+  refreshToken: text("refresh_token"),
+  idToken: text("id_token"),
+  accessTokenExpiresAt: integer("access_token_expires_at", { mode: "timestamp_ms" }),
+  refreshTokenExpiresAt: integer("refresh_token_expires_at", { mode: "timestamp_ms" }),
+  scope: text("scope"),
+  password: text("password"),
   ...timestamps,
 });
 
-export const verification = sqliteTable('verification', {
-  id: text('id').primaryKey(),
-  identifier: text('identifier').notNull(),
-  value: text('value').notNull(),
-  expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
+export const verification = sqliteTable("verification", {
+  id: text("id").primaryKey(),
+  identifier: text("identifier").notNull(),
+  value: text("value").notNull(),
+  expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
   ...timestamps,
 });
 
 // A workspace is Better Auth's organization. It is created by a user (who becomes its owner), not
 // mirrored from GitHub: it connects many GitHub App installations and owns the machine fleet.
-export const workspace = sqliteTable('workspace', {
-  id: text('id').primaryKey(),
-  name: text('name').notNull(),
-  slug: text('slug').notNull().unique(),
-  logo: text('logo'),
-  metadata: text('metadata'),
-  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().$defaultFn(() => new Date()),
+export const workspace = sqliteTable("workspace", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(),
+  logo: text("logo"),
+  metadata: text("metadata"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
 });
 
 // Membership is shaped for teams even though the MVP allows one member, the owner.
 export const workspaceMember = sqliteTable(
-  'workspace_member',
+  "workspace_member",
   {
-    id: text('id').primaryKey(),
-    workspaceId: text('workspace_id').notNull().references(() => workspace.id, { onDelete: 'cascade' }),
-    userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
-    role: text('role').notNull().default('member'),
-    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().$defaultFn(() => new Date()),
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspace.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    role: text("role").notNull().default("member"),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
   },
-  table => [uniqueIndex('workspace_member_workspace_user_unique').on(table.workspaceId, table.userId), index('workspace_member_user_idx').on(table.userId)],
+  (table) => [
+    uniqueIndex("workspace_member_workspace_user_unique").on(table.workspaceId, table.userId),
+    index("workspace_member_user_idx").on(table.userId),
+  ],
 );
 
 export const workspaceInvitation = sqliteTable(
-  'workspace_invitation',
+  "workspace_invitation",
   {
-    id: text('id').primaryKey(),
-    workspaceId: text('workspace_id').notNull().references(() => workspace.id, { onDelete: 'cascade' }),
-    email: text('email').notNull(),
-    role: text('role'),
-    status: text('status').notNull().default('pending'),
-    expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
-    inviterId: text('inviter_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
-    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().$defaultFn(() => new Date()),
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspace.id, { onDelete: "cascade" }),
+    email: text("email").notNull(),
+    role: text("role"),
+    status: text("status").notNull().default("pending"),
+    expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+    inviterId: text("inviter_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
   },
-  table => [index('workspace_invitation_workspace_idx').on(table.workspaceId), index('workspace_invitation_email_idx').on(table.email)],
+  (table) => [
+    index("workspace_invitation_workspace_idx").on(table.workspaceId),
+    index("workspace_invitation_email_idx").on(table.email),
+  ],
 );
 
 // A GitHub App installation (an org or a personal account). The installation id is the primary
@@ -101,24 +127,24 @@ export const workspaceInvitation = sqliteTable(
 // without going through a workspace's install link, or before the installer signed in). Rows are
 // written by the Setup URL callback and by installation webhooks (src/installations.ts).
 export const githubInstallation = sqliteTable(
-  'github_installation',
+  "github_installation",
   {
-    id: integer('id').primaryKey({ autoIncrement: false }),
-    workspaceId: text('workspace_id').references(() => workspace.id, { onDelete: 'set null' }),
-    accountId: integer('account_id').notNull(),
-    accountLogin: text('account_login').notNull(),
+    id: integer("id").primaryKey({ autoIncrement: false }),
+    workspaceId: text("workspace_id").references(() => workspace.id, { onDelete: "set null" }),
+    accountId: integer("account_id").notNull(),
+    accountLogin: text("account_login").notNull(),
     // 'Organization' or 'User', as GitHub reports it.
-    accountType: text('account_type').notNull(),
+    accountType: text("account_type").notNull(),
     // 'all' or 'selected': whether the App sees every repo in the account or a chosen list.
-    repositorySelection: text('repository_selection').notNull().default('all'),
-    suspendedAt: integer('suspended_at', { mode: 'timestamp_ms' }),
+    repositorySelection: text("repository_selection").notNull().default("all"),
+    suspendedAt: integer("suspended_at", { mode: "timestamp_ms" }),
     // When GitHub's view in this row was observed (a webhook's receivedAt, or a GET
     // /user/installations read). The queue is unordered and retries, so an older observation
     // never overwrites a newer one.
-    githubStateAt: integer('github_state_at', { mode: 'timestamp_ms' }),
+    githubStateAt: integer("github_state_at", { mode: "timestamp_ms" }),
     ...timestamps,
   },
-  table => [index('github_installation_workspace_idx').on(table.workspaceId)],
+  (table) => [index("github_installation_workspace_idx").on(table.workspaceId)],
 );
 
 // A repository an installation can see, mirrored from GitHub so activity can name its repo and
@@ -126,21 +152,23 @@ export const githubInstallation = sqliteTable(
 // asks for `runs-on: relayrunner` from a connected installation is the opt-in. Rows are written by
 // webhooks (src/repositories.ts) and go away with their installation.
 export const githubRepository = sqliteTable(
-  'github_repository',
+  "github_repository",
   {
     // GitHub's repository id, stable across renames and transfers.
-    id: integer('id').primaryKey({ autoIncrement: false }),
-    installationId: integer('installation_id').notNull().references(() => githubInstallation.id, { onDelete: 'cascade' }),
+    id: integer("id").primaryKey({ autoIncrement: false }),
+    installationId: integer("installation_id")
+      .notNull()
+      .references(() => githubInstallation.id, { onDelete: "cascade" }),
     // owner/name, as of the latest event.
-    fullName: text('full_name').notNull(),
-    private: integer('private', { mode: 'boolean' }).notNull(),
+    fullName: text("full_name").notNull(),
+    private: integer("private", { mode: "boolean" }).notNull(),
     // Set when the installation lost access (repo removed from the selection, deleted, or
     // transferred away). Kept as a tombstone rather than deleted, so a retried "added" that lands
     // after a newer "removed" can't bring the repo back. See githubStateAt.
-    removedAt: integer('removed_at', { mode: 'timestamp_ms' }),
+    removedAt: integer("removed_at", { mode: "timestamp_ms" }),
     // When the event behind this row's state was received. Older events never overwrite newer ones.
-    githubStateAt: integer('github_state_at', { mode: 'timestamp_ms' }).notNull(),
+    githubStateAt: integer("github_state_at", { mode: "timestamp_ms" }).notNull(),
     ...timestamps,
   },
-  table => [index('github_repository_installation_idx').on(table.installationId)],
+  (table) => [index("github_repository_installation_idx").on(table.installationId)],
 );

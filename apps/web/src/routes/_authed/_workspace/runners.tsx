@@ -20,7 +20,8 @@ export const Route = createFileRoute("/_authed/_workspace/runners")({
   component: () => (
     <section>
       <PageHeader title="Runners">
-        Your machines (online or offline) plus GitHub-hosted and Blacksmith runners. Live status will stream over a WebSocket.
+        Your machines (online or offline) plus GitHub-hosted and Blacksmith runners. Live status
+        will stream over a WebSocket.
       </PageHeader>
       <div className="grid max-w-3xl gap-3">
         {sample.map((runner) => (

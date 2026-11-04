@@ -1,6 +1,6 @@
 packages:
-  - 'apps/*'
-  - 'packages/*'
+  - "apps/*"
+  - "packages/*"
 # pnpm 11 fails installs when a dependency's build script is neither allowed
 # nor denied. esbuild and workerd need theirs to fetch platform binaries.
 allowBuilds:
