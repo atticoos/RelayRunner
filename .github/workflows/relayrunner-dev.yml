@@ -1,0 +1,44 @@
+name: RelayRunner dev
+
+on:
+  workflow_dispatch:
+
+jobs:
+  pick:
+    runs-on: relayrunner
+    outputs:
+      runner: ${{ steps.route.outputs.runner }}
+    steps:
+      # Only runs if an ordinary runner picks this job up. The gateway reports
+      # the output directly and skips steps.
+      - id: route
+        run: echo "runner=ubuntu-latest" >> "$GITHUB_OUTPUT"
+
+  test:
+    needs: pick
+    if: ${{ !cancelled() }}
+    runs-on: ${{ needs.pick.outputs.runner || 'ubuntu-latest' }}
+    steps:
+      - name: Report route
+        env:
+          CHOSEN_RUNNER: ${{ needs.pick.outputs.runner }}
+          PICK_RESULT: ${{ needs.pick.result }}
+        run: |
+          route="${CHOSEN_RUNNER:-ubuntu-latest}"
+          source="gateway"
+          if [ -z "$CHOSEN_RUNNER" ]; then source="fallback (pick result: $PICK_RESULT)"; fi
+
+          echo "Routed to: $route ($source)"
+          echo "Runner name: $RUNNER_NAME"
+          uname -a
+
+          {
+            echo "## RelayRunner route"
+            echo ""
+            echo "| | |"
+            echo "| --- | --- |"
+            echo "| Chosen runner | \`$route\` |"
+            echo "| Source | $source |"
+            echo "| Runner name | \`$RUNNER_NAME\` |"
+            echo "| OS / arch | $RUNNER_OS / $RUNNER_ARCH |"
+          } >> "$GITHUB_STEP_SUMMARY"
