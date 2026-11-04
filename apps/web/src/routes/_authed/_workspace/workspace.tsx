@@ -101,9 +101,13 @@ function WorkspacePage() {
               Orgs and accounts where the RelayRunner GitHub App is installed for this workspace.
             </CardDescription>
             <CardAction>
-              <Button asChild size="sm">
-                {/* A full page load: this leaves the dashboard for GitHub's install page. */}
-                <a href="/api/github/install">Connect GitHub org</a>
+              <Button asChild size="sm" variant={installations.length ? "outline" : "default"}>
+                {/* A full page load: this leaves the dashboard for GitHub's install page. GitHub
+                    lists only accounts that can take a new install; with none left it opens the
+                    existing installation's settings instead. */}
+                <a href="/api/github/install">
+                  {installations.length ? "Connect another org" : "Connect GitHub org"}
+                </a>
               </Button>
             </CardAction>
           </CardHeader>
