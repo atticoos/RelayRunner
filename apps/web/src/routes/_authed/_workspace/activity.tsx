@@ -13,7 +13,7 @@ import {
   Plus,
   Unplug,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import {
@@ -104,10 +104,7 @@ function ActivityPage() {
 
   return (
     <section>
-      <PageHeader title="Activity">
-        Everything that happened in this workspace, newest first: the jobs RelayRunner routed and
-        where each one ran, and machines coming and going. Updates every few seconds.
-      </PageHeader>
+      <PageHeader title="Activity">Routed jobs and machine events, newest first.</PageHeader>
       <div className="grid max-w-4xl gap-2">
         <div role="group" aria-label="Show" className="flex gap-1.5">
           {FILTERS.map(({ value, label }) => (
@@ -194,32 +191,61 @@ const EVENT_ICONS = {
   "job.routed": Laptop,
 } as const;
 
+const ICON = "size-3.5 shrink-0";
+
+// Every Activity row: an icon, one line of text that ends in "…" when it doesn't fit (hover shows
+// all of it), and the time pinned on the right.
+function Row({
+  icon,
+  at,
+  now,
+  children,
+}: {
+  icon: ReactNode;
+  at: string;
+  now: number;
+  children: ReactNode;
+}) {
+  return (
+    <li className="flex min-w-0 items-center gap-2 px-4 py-1.5 text-sm">
+      {icon}
+      <p
+        className="min-w-0 flex-1 truncate"
+        ref={(el) => {
+          if (el) el.title = el.textContent ?? "";
+        }}
+      >
+        {children}
+      </p>
+      <span
+        className="shrink-0 text-xs text-muted-foreground tabular-nums"
+        title={new Date(at).toLocaleString()}
+      >
+        {timeAgo(at, now)}
+      </span>
+    </li>
+  );
+}
+
 // A one-line row for anything that isn't a job: "Atticus's MacBook connected · 2m ago".
 function EventRow({ item, now }: { item: ActivityItem; now: number }) {
   const Icon = EVENT_ICONS[item.type];
   const online = item.type === "machine.connected";
   return (
-    <li className="flex min-w-0 items-start gap-2 px-4 py-1.5 text-sm">
-      <Icon
-        aria-hidden
-        className={
-          online
-            ? "mt-0.5 size-3.5 shrink-0 text-go"
-            : "mt-0.5 size-3.5 shrink-0 text-muted-foreground"
-        }
-      />
-      <p className="min-w-0">
-        <span className="font-medium">{item.machine?.name ?? "A machine"}</span>{" "}
-        <span className="text-muted-foreground">{sentence(item)}</span>
-        {item.actor && <span className="text-muted-foreground"> by {item.actor.name}</span>}{" "}
-        <span
-          className="whitespace-nowrap text-xs text-muted-foreground"
-          title={new Date(item.occurredAt).toLocaleString()}
-        >
-          · {timeAgo(item.occurredAt, now)}
-        </span>
-      </p>
-    </li>
+    <Row
+      icon={
+        <Icon
+          aria-hidden
+          className={online ? `${ICON} text-go` : `${ICON} text-muted-foreground`}
+        />
+      }
+      at={item.occurredAt}
+      now={now}
+    >
+      <span className="font-medium">{item.machine?.name ?? "A machine"}</span>{" "}
+      <span className="text-muted-foreground">{sentence(item)}</span>
+      {item.actor && <span className="text-muted-foreground"> by {item.actor.name}</span>}
+    </Row>
   );
 }
 
@@ -234,7 +260,7 @@ function jobVerb(job: ActivityJob) {
 }
 
 function JobIcon({ job }: { job: ActivityJob }) {
-  const base = "mt-0.5 size-3.5 shrink-0";
+  const base = ICON;
   if (job.status === "in_progress")
     return <LoaderCircle aria-label="Running" className={`${base} animate-spin text-run`} />;
   if (job.status !== "completed")
@@ -246,8 +272,8 @@ function JobIcon({ job }: { job: ActivityJob }) {
   return <CircleMinus aria-label="Finished" className={`${base} text-muted-foreground`} />;
 }
 
-// A one-line row in the same shape as EventRow: "test in RelayRunner dev passed on Atticus's
-// MacBook · relayrunner-ci-tests · main · 1m 30s · 2m ago". The job name opens the job on
+// A row in the same shape as EventRow: "test in RelayRunner dev passed on Atticus's MacBook ·
+// relayrunner-ci-tests · main · 1m 30s", then the time. The job name opens the job on
 // GitHub, the workflow name opens its run.
 function JobRow({ job, now }: { job: ActivityJob; now: number }) {
   const took = duration(job, now);
@@ -256,57 +282,54 @@ function JobRow({ job, now }: { job: ActivityJob; now: number }) {
   const runnerName =
     runner.type === "machine" ? (runner.name ?? "a local machine") : runner.label || "unknown";
   return (
-    <li className="flex min-w-0 items-start gap-2 px-4 py-1.5 text-sm">
-      <JobIcon job={job} />
-      <p className="min-w-0">
-        <a
-          href={job.url}
-          target="_blank"
-          rel="noreferrer"
-          className="font-medium hover:underline"
-          title="Open the job on GitHub"
-        >
-          {job.name}
-        </a>{" "}
-        <span className="text-muted-foreground">in</span>{" "}
-        <a
-          href={job.runUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="hover:underline"
-          title="Open the run on GitHub"
-        >
-          {job.workflow ?? "a workflow"}
-        </a>{" "}
-        <span className="text-muted-foreground">{jobVerb(job)}</span>{" "}
-        <span
-          className="inline-flex items-baseline gap-1 font-medium"
-          title={job.runnerName ? `Ran on ${job.runnerName}` : "Not picked up yet"}
-        >
-          <RunnerIcon aria-hidden className="size-3 shrink-0 self-center text-muted-foreground" />
-          <span className={runner.type === "github" ? "font-mono text-xs" : undefined}>
-            {runnerName}
-          </span>
-        </span>{" "}
-        <span className="text-xs text-muted-foreground">
-          ·{" "}
-          {job.private && (
-            <Lock aria-label="Private repo" className="mb-0.5 inline size-3 align-middle" />
-          )}{" "}
-          <span className="font-mono">{job.repository}</span>
-          {job.branch && (
-            <>
-              {" "}
-              · <span className="font-mono">{job.branch}</span>
-            </>
-          )}
-          {took && <span className="tabular-nums"> · {took}</span>}{" "}
-          <span className="whitespace-nowrap" title={new Date(job.createdAt).toLocaleString()}>
-            · {timeAgo(job.createdAt, now)}
-          </span>
+    <Row icon={<JobIcon job={job} />} at={job.createdAt} now={now}>
+      <a
+        href={job.url}
+        target="_blank"
+        rel="noreferrer"
+        className="font-medium hover:underline"
+        title="Open the job on GitHub"
+      >
+        {job.name}
+      </a>{" "}
+      <span className="text-muted-foreground">in</span>{" "}
+      <a
+        href={job.runUrl}
+        target="_blank"
+        rel="noreferrer"
+        className="hover:underline"
+        title="Open the run on GitHub"
+      >
+        {job.workflow ?? "a workflow"}
+      </a>{" "}
+      <span className="text-muted-foreground">{jobVerb(job)}</span>{" "}
+      <span
+        className="font-medium"
+        title={job.runnerName ? `Ran on ${job.runnerName}` : "Not picked up yet"}
+      >
+        <RunnerIcon
+          aria-hidden
+          className="mr-1 inline size-3 align-[-0.1em] text-muted-foreground"
+        />
+        <span className={runner.type === "github" ? "font-mono text-xs" : undefined}>
+          {runnerName}
         </span>
-      </p>
-    </li>
+      </span>
+      <span className="text-xs text-muted-foreground">
+        {" · "}
+        {job.private && (
+          <Lock aria-label="Private repo" className="mr-1 inline size-3 align-[-0.1em]" />
+        )}
+        <span className="font-mono">{job.repository}</span>
+        {job.branch && (
+          <>
+            {" · "}
+            <span className="font-mono">{job.branch}</span>
+          </>
+        )}
+        {took && <span className="tabular-nums">{` · ${took}`}</span>}
+      </span>
+    </Row>
   );
 }
 
@@ -335,7 +358,7 @@ function samplePage(filter: ActivityFilter | undefined): ActivityPage {
     runUrl: `${runs}/${id * 10}`,
     ...rest,
   });
-  const mac = { id: "m1", name: "Atticus's MacBook" };
+  const mac = { id: "m1", name: "Atticuss-MacBook-Pro.local" };
   const items: ActivityItem[] = [
     {
       id: 7,
