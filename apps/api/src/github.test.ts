@@ -1,8 +1,10 @@
+import { toWebhookMessage } from '@relayrunner/github-webhooks';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test, vi } from 'vitest';
 import { app } from './app.ts';
 import type { Env } from './env.ts';
 import { type GitHubInstallation, verifyInstallState } from './github.ts';
 import * as testing from './testing.ts';
+import { processWebhook } from './webhook-queue.ts';
 
 let proxy: Awaited<ReturnType<typeof testing.startD1>>['proxy'];
 let env: Env;
@@ -91,16 +93,12 @@ async function unclaimed(cookie: string) {
 
 const claim = (cookie: string, installationId: number) => call(`/github/installations/${installationId}/claim`, cookie, {});
 
-async function sign(body: string) {
-  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(env.GITHUB_WEBHOOK_SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-  const digest = new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(body)));
-  return `sha256=${[...digest].map(byte => byte.toString(16).padStart(2, '0')).join('')}`;
-}
-
+// A GitHub delivery as it reaches the API: through the ingress Worker's message shape and the
+// queue consumer.
 async function webhook(event: string, payload: unknown) {
-  const body = JSON.stringify(payload);
-  const response = await app.request('/api/webhooks/github', { method: 'POST', body, headers: { 'x-github-event': event, 'x-hub-signature-256': await sign(body) } }, env);
-  expect(response.status).toBe(202);
+  const message = toWebhookMessage(event, crypto.randomUUID(), payload);
+  expect(message).not.toBeNull();
+  await processWebhook(env, message!);
 }
 
 const row = (id: number) => env.DB.prepare('select workspace_id, account_login, repository_selection, suspended_at from github_installation where id = ?').bind(id).first();
@@ -273,7 +271,7 @@ describe('connecting a GitHub org', () => {
   });
 });
 
-describe('installation webhooks', () => {
+describe('installation webhooks (queue consumer)', () => {
   test('created records the installation, unclaimed', async () => {
     const github = installation();
     await webhook('installation', { action: 'created', installation: github });

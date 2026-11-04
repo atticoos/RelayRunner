@@ -21,8 +21,20 @@ describe('toWebhookMessage', () => {
       installationId: 7,
       receivedAt: '2026-11-04T00:00:00Z',
       event: 'installation_repositories',
+      installation: { id: 7, account: null, repositorySelection: 'all', suspendedAt: null },
       added: [{ id: 1, fullName: 'acme/app', private: true }],
       removed: [],
+    });
+  });
+
+  test('summarizes the installation so the consumer can track its status', () => {
+    const installation = { id: 7, account: { id: 10, login: 'acme', type: 'Organization', avatar_url: 'x' }, repository_selection: 'all', suspended_at: '2026-11-04T12:00:00Z', permissions: {} };
+    expect(toWebhookMessage('installation', 'd', { action: 'suspend', installation })).toMatchObject({
+      installation: { id: 7, account: { id: 10, login: 'acme', type: 'Organization' }, repositorySelection: 'all', suspendedAt: '2026-11-04T12:00:00Z' },
+    });
+    // installation_repositories carries the new selection at the top level.
+    expect(toWebhookMessage('installation_repositories', 'd', { action: 'removed', repository_selection: 'selected', installation })).toMatchObject({
+      installation: { repositorySelection: 'selected' },
     });
   });
 });

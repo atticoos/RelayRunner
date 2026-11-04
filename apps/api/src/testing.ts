@@ -16,7 +16,6 @@ export async function startD1() {
     BETTER_AUTH_SECRET: 'test-secret-test-secret-test-secret',
     GITHUB_APP_CLIENT_ID: 'id',
     GITHUB_APP_CLIENT_SECRET: 'secret',
-    GITHUB_WEBHOOK_SECRET: 'webhook-secret',
     GITHUB_APP_SLUG: 'relayrunner-test',
   };
   const dir = new URL('../migrations/', import.meta.url);
