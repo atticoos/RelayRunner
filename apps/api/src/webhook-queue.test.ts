@@ -3,7 +3,9 @@ import { WEBHOOK_DLQ, WEBHOOK_QUEUE, type WebhookMessage } from "@relayrunner/gi
 import type { Env } from "./env.ts";
 import * as consumer from "./webhook-queue.ts";
 
-const env = {} as Env;
+const start = vi.fn();
+const getByName = vi.fn(() => ({ start }));
+const env = { PICK_RUNNER: { getByName } } as unknown as Env;
 
 function message(body: WebhookMessage, attempts = 1) {
   return { body, attempts, ack: vi.fn(), retry: vi.fn() };
@@ -28,11 +30,11 @@ const malformed = {
   deliveryId: "d-2",
 } as unknown as WebhookMessage; // no repository/job
 
-function workflowJob(labels: string[]): WebhookMessage {
+function workflowJob(labels: string[], action = "queued"): WebhookMessage {
   return {
     event: "workflow_job",
     deliveryId: "d-3",
-    action: "queued",
+    action,
     installationId: 7,
     receivedAt: new Date().toISOString(),
     repository: { id: 1, fullName: "relayrunner/relayrunner" },
@@ -100,8 +102,25 @@ describe("webhook queue consumer", () => {
 
   test("ignores workflow jobs for other runners", async () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    start.mockClear();
     await consumer.processWebhook(env, workflowJob(["ubuntu-latest"]));
     expect(log).not.toHaveBeenCalled();
+    expect(start).not.toHaveBeenCalled();
+    log.mockRestore();
+  });
+
+  test("wakes a pick runner, keyed by job id, only when a relayrunner job is queued", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    start.mockClear();
+    await consumer.processWebhook(env, workflowJob(["relayrunner"]));
+    expect(getByName).toHaveBeenLastCalledWith("42");
+    expect(start).toHaveBeenCalledWith({
+      jobId: 42,
+      installationId: 7,
+      repo: "relayrunner/relayrunner",
+    });
+    await consumer.processWebhook(env, workflowJob(["relayrunner"], "in_progress"));
+    expect(start).toHaveBeenCalledOnce();
     log.mockRestore();
   });
 
