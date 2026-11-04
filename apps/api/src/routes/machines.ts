@@ -143,13 +143,14 @@ export const machineRoutes = new Hono<AppEnv>()
   // The machine's WebSocket: `Upgrade: websocket` with `Authorization: Bearer rrm_…`. A missing,
   // unknown or revoked token gets a 401 before the upgrade. After that the machine sends `hello`,
   // then `status` as a heartbeat (src/durable-objects/machine-session.ts has the timings and
-  // close codes).
+  // close codes). The token is checked first because a failed upgrade hides its status from the
+  // CLI, so it asks with a plain GET: 401 means sign in again, 426 means the token is fine.
   .get("/connect", async (c) => {
-    if (c.req.header("upgrade")?.toLowerCase() !== "websocket")
-      return c.json({ error: "upgrade_required" }, 426);
     const token = c.req.header("authorization")?.match(/^Bearer\s+(\S+)$/i)?.[1];
     const machine = await verifyMachineToken(createDb(c.env.DB), token);
     if (!machine) return c.json({ error: "unauthorized" }, 401);
+    if (c.req.header("upgrade")?.toLowerCase() !== "websocket")
+      return c.json({ error: "upgrade_required" }, 426);
 
     const headers = new Headers(c.req.raw.headers);
     headers.delete("authorization");

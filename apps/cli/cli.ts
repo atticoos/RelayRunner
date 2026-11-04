@@ -34,6 +34,7 @@ const connectCommand = defineCommand({
     },
   },
   async run({ args }) {
+    clack.intro("RelayRunner");
     try {
       await connectMachine(args);
     } catch (error) {
@@ -50,8 +51,6 @@ async function connectMachine(args: { server?: string; name?: string }) {
   const requested = args.server || process.env.RELAYRUNNER_URL;
   const target = runnerPlatform();
   const platform = { os: target.os === "osx" ? "macos" : "linux", arch: target.arch } as const;
-
-  clack.intro("RelayRunner");
 
   let credentials = readCredentials();
   const server = normalizeServer(requested || credentials?.server || DEFAULT_SERVER);
@@ -78,19 +77,25 @@ async function connectMachine(args: { server?: string; name?: string }) {
   // First Ctrl-C goes offline and lets a running job's runner exit and clean up (the terminal
   // sends it SIGINT too). A second one exits on the spot.
   const stop = new AbortController();
-  process.on("SIGINT", () => {
+  const onInterrupt = () => {
     if (stop.signal.aborted) process.exit(130);
     stop.abort();
-  });
+  };
+  process.on("SIGINT", onInterrupt);
 
+  let online = false;
   const end = await connect({
     server: credentials.server,
     token: credentials.token,
     hello: { machineId: credentials.machine.id, ...platform, runnerVersion: runner.version },
     runJob: (run, report) => runJob(run, { runner, report }),
-    onEvent: show,
+    onEvent: (event) => {
+      if (event.type === "connected") online = true;
+      show(event);
+    },
     signal: stop.signal,
   });
+  process.off("SIGINT", onInterrupt);
 
   switch (end.reason) {
     case "stopped":
@@ -98,6 +103,14 @@ async function connectMachine(args: { server?: string; name?: string }) {
       break;
     case "revoked":
       deleteCredentials();
+      // The saved token was already dead when this run started, so someone is here to sign in.
+      // A machine revoked while online may be unattended, so that one stops and says so.
+      if (!online) {
+        clack.log.warn(
+          "This machine was removed from the workspace or its token is no longer valid. Signing in again.",
+        );
+        return connectMachine({ ...args, server: credentials.server });
+      }
       clack.log.error(
         "This machine was removed from the workspace or its token is no longer valid.",
       );

@@ -21,8 +21,9 @@ running stops with it.
 
 - `--server <url>` or `RELAYRUNNER_URL` points it at another gateway. Changing it signs in again.
 - `--name <name>` changes the suggested machine name (default: the hostname).
-- If the machine is removed in the dashboard, `connect` deletes the saved token
-  and asks you to run it again to sign in.
+- If the machine is removed in the dashboard, `connect` deletes the saved token.
+  A running `connect` exits and asks you to run it again; a new one signs in
+  straight away.
 
 Jobs run in `actions/runner`, which is downloaded into
 `~/.relayrunner/runner/<version>` on first connect and checked against its
