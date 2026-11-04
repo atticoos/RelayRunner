@@ -8,6 +8,13 @@
       "when": 1793770116843,
       "tag": "0000_init",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1793808122855,
+      "tag": "0001_workspaces",
+      "breakpoints": true
     }
   ]
 }

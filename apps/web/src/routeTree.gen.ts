@@ -12,8 +12,11 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthedRouteImport } from './routes/_authed'
 import { Route as LoginRouteImport } from './routes/login'
-import { Route as AuthedReposRouteImport } from './routes/_authed/repos'
-import { Route as AuthedRunnersRouteImport } from './routes/_authed/runners'
+import { Route as AuthedWorkspaceRouteImport } from './routes/_authed/_workspace'
+import { Route as AuthedWorkspaceReposRouteImport } from './routes/_authed/_workspace/repos'
+import { Route as AuthedWorkspaceRunnersRouteImport } from './routes/_authed/_workspace/runners'
+import { Route as AuthedWorkspaceWorkspaceRouteImport } from './routes/_authed/_workspace/workspace'
+import { Route as AuthedWorkspacesNewRouteImport } from './routes/_authed/workspaces.new'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -29,49 +32,75 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthedReposRoute = AuthedReposRouteImport.update({
-  id: '/repos',
-  path: '/repos',
+const AuthedWorkspaceRoute = AuthedWorkspaceRouteImport.update({
+  id: '/_workspace',
   getParentRoute: () => AuthedRoute,
 } as any)
-const AuthedRunnersRoute = AuthedRunnersRouteImport.update({
+const AuthedWorkspaceReposRoute = AuthedWorkspaceReposRouteImport.update({
+  id: '/repos',
+  path: '/repos',
+  getParentRoute: () => AuthedWorkspaceRoute,
+} as any)
+const AuthedWorkspaceRunnersRoute = AuthedWorkspaceRunnersRouteImport.update({
   id: '/runners',
   path: '/runners',
+  getParentRoute: () => AuthedWorkspaceRoute,
+} as any)
+const AuthedWorkspaceWorkspaceRoute =
+  AuthedWorkspaceWorkspaceRouteImport.update({
+    id: '/workspace',
+    path: '/workspace',
+    getParentRoute: () => AuthedWorkspaceRoute,
+  } as any)
+const AuthedWorkspacesNewRoute = AuthedWorkspacesNewRouteImport.update({
+  id: '/workspaces/new',
+  path: '/workspaces/new',
   getParentRoute: () => AuthedRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
-  '/repos': typeof AuthedReposRoute
-  '/runners': typeof AuthedRunnersRoute
+  '/repos': typeof AuthedWorkspaceReposRoute
+  '/runners': typeof AuthedWorkspaceRunnersRoute
+  '/workspace': typeof AuthedWorkspaceWorkspaceRoute
+  '/workspaces/new': typeof AuthedWorkspacesNewRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
-  '/repos': typeof AuthedReposRoute
-  '/runners': typeof AuthedRunnersRoute
+  '/repos': typeof AuthedWorkspaceReposRoute
+  '/runners': typeof AuthedWorkspaceRunnersRoute
+  '/workspace': typeof AuthedWorkspaceWorkspaceRoute
+  '/workspaces/new': typeof AuthedWorkspacesNewRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_authed': typeof AuthedRouteWithChildren
   '/login': typeof LoginRoute
-  '/_authed/repos': typeof AuthedReposRoute
-  '/_authed/runners': typeof AuthedRunnersRoute
+  '/_authed/_workspace': typeof AuthedWorkspaceRouteWithChildren
+  '/_authed/_workspace/repos': typeof AuthedWorkspaceReposRoute
+  '/_authed/_workspace/runners': typeof AuthedWorkspaceRunnersRoute
+  '/_authed/_workspace/workspace': typeof AuthedWorkspaceWorkspaceRoute
+  '/_authed/workspaces/new': typeof AuthedWorkspacesNewRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/repos' | '/runners'
+  fullPaths:
+    '/' | '/login' | '/repos' | '/runners' | '/workspace' | '/workspaces/new'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/repos' | '/runners'
+  to: '/' | '/login' | '/repos' | '/runners' | '/workspace' | '/workspaces/new'
   id:
     | '__root__'
     | '/'
     | '/_authed'
     | '/login'
-    | '/_authed/repos'
-    | '/_authed/runners'
+    | '/_authed/_workspace'
+    | '/_authed/_workspace/repos'
+    | '/_authed/_workspace/runners'
+    | '/_authed/_workspace/workspace'
+    | '/_authed/workspaces/new'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -103,31 +132,68 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_authed/repos': {
-      id: '/_authed/repos'
-      path: '/repos'
-      fullPath: '/repos'
-      preLoaderRoute: typeof AuthedReposRouteImport
+    '/_authed/_workspace': {
+      id: '/_authed/_workspace'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AuthedWorkspaceRouteImport
       parentRoute: typeof AuthedRoute
     }
-    '/_authed/runners': {
-      id: '/_authed/runners'
+    '/_authed/_workspace/repos': {
+      id: '/_authed/_workspace/repos'
+      path: '/repos'
+      fullPath: '/repos'
+      preLoaderRoute: typeof AuthedWorkspaceReposRouteImport
+      parentRoute: typeof AuthedWorkspaceRoute
+    }
+    '/_authed/_workspace/runners': {
+      id: '/_authed/_workspace/runners'
       path: '/runners'
       fullPath: '/runners'
-      preLoaderRoute: typeof AuthedRunnersRouteImport
+      preLoaderRoute: typeof AuthedWorkspaceRunnersRouteImport
+      parentRoute: typeof AuthedWorkspaceRoute
+    }
+    '/_authed/_workspace/workspace': {
+      id: '/_authed/_workspace/workspace'
+      path: '/workspace'
+      fullPath: '/workspace'
+      preLoaderRoute: typeof AuthedWorkspaceWorkspaceRouteImport
+      parentRoute: typeof AuthedWorkspaceRoute
+    }
+    '/_authed/workspaces/new': {
+      id: '/_authed/workspaces/new'
+      path: '/workspaces/new'
+      fullPath: '/workspaces/new'
+      preLoaderRoute: typeof AuthedWorkspacesNewRouteImport
       parentRoute: typeof AuthedRoute
     }
   }
 }
 
+interface AuthedWorkspaceRouteChildren {
+  AuthedWorkspaceReposRoute: typeof AuthedWorkspaceReposRoute
+  AuthedWorkspaceRunnersRoute: typeof AuthedWorkspaceRunnersRoute
+  AuthedWorkspaceWorkspaceRoute: typeof AuthedWorkspaceWorkspaceRoute
+}
+
+const AuthedWorkspaceRouteChildren: AuthedWorkspaceRouteChildren = {
+  AuthedWorkspaceReposRoute: AuthedWorkspaceReposRoute,
+  AuthedWorkspaceRunnersRoute: AuthedWorkspaceRunnersRoute,
+  AuthedWorkspaceWorkspaceRoute: AuthedWorkspaceWorkspaceRoute,
+}
+
+const AuthedWorkspaceRouteWithChildren = AuthedWorkspaceRoute._addFileChildren(
+  AuthedWorkspaceRouteChildren,
+)
+
 interface AuthedRouteChildren {
-  AuthedReposRoute: typeof AuthedReposRoute
-  AuthedRunnersRoute: typeof AuthedRunnersRoute
+  AuthedWorkspaceRoute: typeof AuthedWorkspaceRouteWithChildren
+  AuthedWorkspacesNewRoute: typeof AuthedWorkspacesNewRoute
 }
 
 const AuthedRouteChildren: AuthedRouteChildren = {
-  AuthedReposRoute: AuthedReposRoute,
-  AuthedRunnersRoute: AuthedRunnersRoute,
+  AuthedWorkspaceRoute: AuthedWorkspaceRouteWithChildren,
+  AuthedWorkspacesNewRoute: AuthedWorkspacesNewRoute,
 }
 
 const AuthedRouteWithChildren =
