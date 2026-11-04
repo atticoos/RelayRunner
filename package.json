@@ -19,7 +19,7 @@
     "check": "pnpm lint && pnpm typecheck && pnpm test",
     "test:watch": "vitest watch",
     "deploy:webhooks": "pnpm --filter @relayrunner/webhooks run deploy",
-    "deploy:api": "pnpm --filter @relayrunner/api run db:migrate:remote && pnpm --filter @relayrunner/api run deploy",
+    "deploy:api": "pnpm --filter @relayrunner/api run deploy",
     "deploy:web": "pnpm --filter @relayrunner/web run deploy",
     "deploy:landing": "pnpm --filter ./apps/landing run deploy"
   },

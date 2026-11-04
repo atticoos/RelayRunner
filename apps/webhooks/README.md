@@ -44,7 +44,7 @@ wrangler queues create relayrunner-github-webhooks-dlq
 
 ```sh
 pnpm run deploy:webhooks
-pnpm run deploy:api    # applies D1 migrations, attaches the queue consumers
+pnpm run deploy:api    # attaches the queue consumers
 pnpm run deploy:web    # forwards /api/webhooks/* here
 ```
 
