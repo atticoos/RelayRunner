@@ -98,7 +98,8 @@ export const workspaceInvitation = sqliteTable(
 // A GitHub App installation (an org or a personal account). The installation id is the primary
 // key and each row has one workspace_id, so an installation belongs to at most one workspace while
 // a workspace can connect many. workspace_id is null while an installation is unclaimed (installed
-// without going through a workspace's install link). Filled in by the "connect a GitHub org" work.
+// without going through a workspace's install link, or before the installer signed in). Rows are
+// written by the Setup URL callback and by installation webhooks (src/installations.ts).
 export const githubInstallation = sqliteTable(
   'github_installation',
   {
@@ -108,6 +109,8 @@ export const githubInstallation = sqliteTable(
     accountLogin: text('account_login').notNull(),
     // 'Organization' or 'User', as GitHub reports it.
     accountType: text('account_type').notNull(),
+    // 'all' or 'selected': whether the App sees every repo in the account or a chosen list.
+    repositorySelection: text('repository_selection').notNull().default('all'),
     suspendedAt: integer('suspended_at', { mode: 'timestamp_ms' }),
     ...timestamps,
   },
