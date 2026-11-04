@@ -16,7 +16,7 @@ const badge = {
   idle: { variant: "idle", label: "Idle" },
 } as const;
 
-export const Route = createFileRoute("/_authed/runners")({
+export const Route = createFileRoute("/_authed/_workspace/runners")({
   component: () => (
     <section>
       <PageHeader title="Runners">

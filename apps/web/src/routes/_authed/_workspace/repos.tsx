@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { PageHeader } from "@/components/page-header";
 
-export const Route = createFileRoute("/_authed/repos")({
+export const Route = createFileRoute("/_authed/_workspace/repos")({
   component: () => (
     <section>
       <PageHeader title="Repos">

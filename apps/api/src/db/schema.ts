@@ -1,7 +1,8 @@
-// Better Auth's core tables (user, session, account, verification) in the shape its Drizzle
-// adapter expects. Add gateway tables (machines, repos, routes) below them as they land, then run
-// `pnpm db:generate` to write a new migration.
-import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+// Better Auth's tables in the shape its Drizzle adapter expects: the core four (user, session,
+// account, verification), then the organization plugin's, renamed to workspaces (see auth.ts).
+// Gateway tables (installations, then machines, repos, routes) follow. After changing anything
+// here, run `pnpm db:generate` to write a new migration.
+import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 const timestamps = {
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().$defaultFn(() => new Date()),
@@ -27,6 +28,8 @@ export const session = sqliteTable('session', {
   expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
   ipAddress: text('ip_address'),
   userAgent: text('user_agent'),
+  // The workspace the dashboard is looking at. Set by the organization plugin.
+  activeWorkspaceId: text('active_workspace_id'),
   ...timestamps,
 });
 
@@ -52,3 +55,61 @@ export const verification = sqliteTable('verification', {
   expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
   ...timestamps,
 });
+
+// A workspace is Better Auth's organization. It is created by a user (who becomes its owner), not
+// mirrored from GitHub: it connects many GitHub App installations and owns the machine fleet.
+export const workspace = sqliteTable('workspace', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  slug: text('slug').notNull().unique(),
+  logo: text('logo'),
+  metadata: text('metadata'),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().$defaultFn(() => new Date()),
+});
+
+// Membership is shaped for teams even though the MVP allows one member, the owner.
+export const workspaceMember = sqliteTable(
+  'workspace_member',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id').notNull().references(() => workspace.id, { onDelete: 'cascade' }),
+    userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+    role: text('role').notNull().default('member'),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().$defaultFn(() => new Date()),
+  },
+  table => [uniqueIndex('workspace_member_workspace_user_unique').on(table.workspaceId, table.userId), index('workspace_member_user_idx').on(table.userId)],
+);
+
+export const workspaceInvitation = sqliteTable(
+  'workspace_invitation',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id').notNull().references(() => workspace.id, { onDelete: 'cascade' }),
+    email: text('email').notNull(),
+    role: text('role'),
+    status: text('status').notNull().default('pending'),
+    expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
+    inviterId: text('inviter_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().$defaultFn(() => new Date()),
+  },
+  table => [index('workspace_invitation_workspace_idx').on(table.workspaceId), index('workspace_invitation_email_idx').on(table.email)],
+);
+
+// A GitHub App installation (an org or a personal account). The installation id is the primary
+// key and each row has one workspace_id, so an installation belongs to at most one workspace while
+// a workspace can connect many. workspace_id is null while an installation is unclaimed (installed
+// without going through a workspace's install link). Filled in by the "connect a GitHub org" work.
+export const githubInstallation = sqliteTable(
+  'github_installation',
+  {
+    id: integer('id').primaryKey({ autoIncrement: false }),
+    workspaceId: text('workspace_id').references(() => workspace.id, { onDelete: 'set null' }),
+    accountId: integer('account_id').notNull(),
+    accountLogin: text('account_login').notNull(),
+    // 'Organization' or 'User', as GitHub reports it.
+    accountType: text('account_type').notNull(),
+    suspendedAt: integer('suspended_at', { mode: 'timestamp_ms' }),
+    ...timestamps,
+  },
+  table => [index('github_installation_workspace_idx').on(table.workspaceId)],
+);
