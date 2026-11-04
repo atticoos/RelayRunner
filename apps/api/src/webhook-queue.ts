@@ -98,5 +98,5 @@ async function recordInstallation(env: Env, message: Extract<WebhookMessage, { e
     account: installation.account,
     repository_selection: installation.repositorySelection,
     suspended_at: installation.suspendedAt,
-  });
+  }, new Date(message.receivedAt));
 }

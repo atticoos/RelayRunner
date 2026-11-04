@@ -95,8 +95,8 @@ const claim = (cookie: string, installationId: number) => call(`/github/installa
 
 // A GitHub delivery as it reaches the API: through the ingress Worker's message shape and the
 // queue consumer.
-async function webhook(event: string, payload: unknown) {
-  const message = toWebhookMessage(event, crypto.randomUUID(), payload);
+async function webhook(event: string, payload: unknown, receivedAt?: string) {
+  const message = toWebhookMessage(event, crypto.randomUUID(), payload, receivedAt);
   expect(message).not.toBeNull();
   await processWebhook(env, message!);
 }
@@ -290,6 +290,17 @@ describe('installation webhooks (queue consumer)', () => {
 
     await webhook('installation', { action: 'unsuspend', installation: github });
     expect(await row(github.id)).toMatchObject({ workspace_id: workspace.id, suspended_at: null });
+  });
+
+  test('an older delivery arriving late does not undo a newer one', async () => {
+    const github = installation();
+    const later = new Date(Date.now() + 60_000).toISOString();
+    const earlier = new Date(Date.now() + 30_000).toISOString();
+    await webhook('installation', { action: 'created', installation: github }, earlier);
+    // unsuspend was received after suspend, but the queue retried suspend and delivered it last.
+    await webhook('installation', { action: 'unsuspend', installation: github }, later);
+    await webhook('installation', { action: 'suspend', installation: { ...github, suspended_at: '2026-11-04T12:00:00Z' } }, earlier);
+    expect(await row(github.id)).toMatchObject({ suspended_at: null });
   });
 
   test('deleted removes the installation from the workspace', async () => {

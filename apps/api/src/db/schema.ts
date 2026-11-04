@@ -112,6 +112,10 @@ export const githubInstallation = sqliteTable(
     // 'all' or 'selected': whether the App sees every repo in the account or a chosen list.
     repositorySelection: text('repository_selection').notNull().default('all'),
     suspendedAt: integer('suspended_at', { mode: 'timestamp_ms' }),
+    // When GitHub's view in this row was observed (a webhook's receivedAt, or a GET
+    // /user/installations read). The queue is unordered and retries, so an older observation
+    // never overwrites a newer one.
+    githubStateAt: integer('github_state_at', { mode: 'timestamp_ms' }),
     ...timestamps,
   },
   table => [index('github_installation_workspace_idx').on(table.workspaceId)],

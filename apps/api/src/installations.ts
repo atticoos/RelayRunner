@@ -1,12 +1,13 @@
-import { and, eq, isNull, or } from 'drizzle-orm';
+import { and, eq, isNull, lte, or } from 'drizzle-orm';
 import type { Auth } from './auth.ts';
 import { type Db, schema } from './db/index.ts';
 import type { GitHubInstallation } from './github.ts';
 
 // Records what GitHub says about an installation: the account it's on, which repos it sees, and
 // whether it's suspended. Never touches workspace_id, so a webhook arriving before or after the
-// Setup URL callback can't undo a link.
-export async function upsertInstallation(db: Db, installation: GitHubInstallation) {
+// Setup URL callback can't undo a link. `observedAt` orders updates: a retried `suspend` that
+// lands after a newer `unsuspend` is dropped.
+export async function upsertInstallation(db: Db, installation: GitHubInstallation, observedAt = new Date()) {
   if (!installation.account) return;
   const fields = {
     accountId: installation.account.id,
@@ -14,11 +15,16 @@ export async function upsertInstallation(db: Db, installation: GitHubInstallatio
     accountType: installation.account.type,
     repositorySelection: installation.repository_selection ?? 'all',
     suspendedAt: installation.suspended_at ? new Date(installation.suspended_at) : null,
+    githubStateAt: observedAt,
   };
   await db
     .insert(schema.githubInstallation)
     .values({ id: installation.id, ...fields })
-    .onConflictDoUpdate({ target: schema.githubInstallation.id, set: { ...fields, updatedAt: new Date() } });
+    .onConflictDoUpdate({
+      target: schema.githubInstallation.id,
+      set: { ...fields, updatedAt: new Date() },
+      setWhere: or(isNull(schema.githubInstallation.githubStateAt), lte(schema.githubInstallation.githubStateAt, observedAt)),
+    });
 }
 
 export type LinkResult = 'linked' | 'taken';
