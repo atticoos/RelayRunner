@@ -1,5 +1,6 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { AddRunner } from "@/components/add-runner";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -46,9 +47,8 @@ function RunnersPage() {
   }, [router]);
   return (
     <section>
-      <PageHeader title="Runners">
-        Your machines plus GitHub-hosted and Blacksmith runners. Connect a machine by running{" "}
-        <code className="font-mono">npx relayrunner connect</code> on it.
+      <PageHeader title="Runners" action={<AddRunner />}>
+        Your machines plus GitHub-hosted and Blacksmith runners.
       </PageHeader>
       <div className="grid max-w-3xl gap-3">
         {machines.length === 0 && (
