@@ -49,6 +49,15 @@ wrangler secret put BETTER_AUTH_SECRET   # and GITHUB_APP_CLIENT_ID, GITHUB_APP_
 pnpm run deploy:api                      # from the repo root; deploys only, no migrations
 ```
 
+`GITHUB_APP_PRIVATE_KEY` comes from the account's Secrets Store, not `wrangler secret put`, and a deploy fails until it exists there. Store it once as PKCS#8 PEM (GitHub downloads PKCS#1, which WebCrypto can't import):
+
+```sh
+# The prompt only takes one line, so pass the PEM as --value. Command substitution keeps it out of
+# shell history.
+wrangler secrets-store secret create eac3493b9fef4234a832f5f3fdcc8a41 --remote --scopes workers \
+  --name GITHUB_APP_PRIVATE_KEY --value "$(openssl pkcs8 -topk8 -nocrypt -in relayrunner.*.private-key.pem)"
+```
+
 The browser never talks to this Worker directly: the dashboard Worker (`apps/web`) forwards `/api/*` here over a service binding, so `BETTER_AUTH_URL` (in `wrangler.jsonc` vars) is the dashboard's origin: `https://relayrunner-app.relayrun.workers.dev` until `app.relayrunner.dev` moves to this account. `.dev.vars` overrides it for local dev. Deploy this Worker before `apps/web`, since the binding needs it to exist. The GitHub App's callback URL is `<BETTER_AUTH_URL>/api/auth/callback/github` Its webhook URL points at the webhooks Worker (`apps/webhooks`), not this one.
 
 ### Sign-in on dashboard previews
