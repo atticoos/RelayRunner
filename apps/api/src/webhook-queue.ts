@@ -82,17 +82,22 @@ export async function processWebhook(env: Env, message: WebhookMessage): Promise
 }
 
 // Keeps github_installation in step with GitHub so the dashboard shows each org's real status.
-// Every action carries the installation's current state, so applying it is idempotent and order
-// doesn't matter much; `deleted` removes the row (the workspace drops the org and the owner
-// reconnects it). Never sets workspace_id: linking takes a signed-in user (routes/github.ts).
+// Every action carries the installation's current state, so a repeat is harmless, and
+// upsertInstallation drops anything older than what the row holds (the queue is unordered and
+// retries). `deleted` removes the row: the workspace drops the org and the owner reconnects it. A
+// stale event landing after that can recreate it unclaimed, which is harmless: it is listed or
+// claimable only while GitHub still shows the install to the user. Never sets workspace_id:
+// linking takes a signed-in user (routes/github.ts).
 async function recordInstallation(env: Env, message: Extract<WebhookMessage, { event: 'installation' | 'installation_repositories' }>) {
-  const installation = message.installation;
-  if (!installation) return;
   const db = createDb(env.DB);
+  // Uses installationId, not the summary, so a message from an ingress that predates the summary
+  // still removes the org.
   if (message.event === 'installation' && message.action === 'deleted') {
-    await db.delete(schema.githubInstallation).where(eq(schema.githubInstallation.id, installation.id));
+    if (message.installationId) await db.delete(schema.githubInstallation).where(eq(schema.githubInstallation.id, message.installationId));
     return;
   }
+  const installation = message.installation;
+  if (!installation) return;
   await upsertInstallation(db, {
     id: installation.id,
     account: installation.account,

@@ -158,6 +158,7 @@ describe('connecting a GitHub org', () => {
 
     expect(await row(github.id)).toBeNull();
     expect(await listed(cookie)).toEqual([]);
+    expect(await unclaimed(cookie)).toEqual([]);
     expect((await claim(cookie, github.id)).status).toBe(404);
   });
 
@@ -313,6 +314,33 @@ describe('installation webhooks (queue consumer)', () => {
 
     expect(await row(github.id)).toBeNull();
     expect(await listed(cookie)).toEqual([]);
+  });
+
+  test('deleted from an ingress without the installation summary still removes the org', async () => {
+    const { githubToken, cookie } = await owner();
+    const github = installation();
+    visibleTo.set(githubToken, [github]);
+    await setup(cookie, github.id, await installState(cookie));
+
+    const message = toWebhookMessage('installation', crypto.randomUUID(), { action: 'deleted', installation: github });
+    await processWebhook(env, { ...message!, installation: null } as NonNullable<typeof message>);
+
+    expect(await row(github.id)).toBeNull();
+  });
+
+  test('a stale event after deleted stays out of the workspace and cannot be claimed', async () => {
+    const { githubToken, cookie } = await owner();
+    const github = installation();
+    visibleTo.set(githubToken, [github]);
+    await setup(cookie, github.id, await installState(cookie));
+    await webhook('installation', { action: 'deleted', installation: github });
+    visibleTo.set(githubToken, []); // GitHub no longer lists it
+
+    await webhook('installation', { action: 'suspend', installation: github }, new Date(Date.now() - 60_000).toISOString());
+
+    expect(await listed(cookie)).toEqual([]);
+    expect(await unclaimed(cookie)).toEqual([]);
+    expect((await claim(cookie, github.id)).status).toBe(404);
   });
 
   test('installation_repositories updates the repository selection', async () => {
