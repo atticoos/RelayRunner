@@ -1,0 +1,228 @@
+// Keeps this machine connected to the gateway's MachineLink (#66) for as long as `connect` runs:
+//
+// - GET /api/machines/connect as a WebSocket, with the machine token as a bearer token.
+// - `hello` first, then `status` on every change and every 30 seconds as the heartbeat.
+// - `run` starts one job through runJob() and reports its `job` progress. Capacity is one: a
+//   second `run` while busy is answered with a failed `job` straight away.
+// - Close 4001 (revoked) and 4002 (replaced by another connection) end it, and so does 1008
+//   (the gateway rejected something we sent, so retrying would repeat it). Anything else, such
+//   as a network drop, a deploy or 4000 (missed heartbeats), reconnects with backoff.
+
+import {
+  encodeMessage,
+  parseGatewayMessage,
+  PROTOCOL_VERSION,
+  type HelloMessage,
+  type MachineMessage,
+  type RunMessage,
+} from "@relayrunner/machine-protocol";
+import type { JobUpdate } from "./job.ts";
+import { userAgent } from "./paths.ts";
+
+export const CLOSE_REVOKED = 4001;
+export const CLOSE_REPLACED = 4002;
+const CLOSE_POLICY = 1008;
+
+export type MachineState = "idle" | "busy";
+
+// Why connect() returned.
+export type ConnectionEnd =
+  // Ctrl-C, or whoever owns the signal.
+  | { reason: "stopped" }
+  // The token was revoked or isn't valid any more: sign in again.
+  | { reason: "revoked" }
+  // Another `relayrunner connect` with the same token took over.
+  | { reason: "replaced" }
+  // The gateway rejected a message, usually because this CLI speaks an older protocol.
+  | { reason: "rejected"; message: string };
+
+// What happened, for the terminal.
+export type ConnectionEvent =
+  | { type: "connecting"; attempt: number }
+  | { type: "connected" }
+  | { type: "disconnected"; code: number; reason: string; retryInMs: number }
+  | { type: "gateway-error"; code: string; message: string }
+  | { type: "run"; routeId: string }
+  | { type: "run-refused"; routeId: string }
+  | { type: "job"; update: JobUpdate };
+
+export interface ConnectOptions {
+  server: string;
+  token: string;
+  hello: Omit<HelloMessage, "v" | "type">;
+  // Run one job and report its progress. Must not reject.
+  runJob: (run: RunMessage, report: (update: JobUpdate) => void) => Promise<unknown>;
+  onEvent?: (event: ConnectionEvent) => void;
+  signal?: AbortSignal;
+  heartbeatMs?: number;
+  // Reconnect delay before jitter: min(maxBackoffMs, minBackoffMs * 2^attempt).
+  minBackoffMs?: number;
+  maxBackoffMs?: number;
+  fetcher?: typeof fetch;
+}
+
+// Node's WebSocket is undici's, which takes headers on its init object (the browser one can't
+// send an Authorization header at all). @types/node only declares the protocols form.
+const NodeWebSocket = WebSocket as unknown as new (
+  url: string,
+  init: { headers: Record<string, string> },
+) => WebSocket;
+
+export function connectUrl(server: string) {
+  const url = new URL("/api/machines/connect", server);
+  url.protocol = url.protocol === "http:" ? "ws:" : "wss:";
+  return url.toString();
+}
+
+export function backoff(attempt: number, min: number, max: number, random = Math.random) {
+  const base = Math.min(max, min * 2 ** Math.max(0, attempt - 1));
+  // ±25% so a gateway deploy doesn't get every machine back in the same instant.
+  return Math.round(base * (0.75 + random() * 0.5));
+}
+
+export async function connect(options: ConnectOptions): Promise<ConnectionEnd> {
+  const heartbeatMs = options.heartbeatMs ?? 30_000;
+  const minBackoffMs = options.minBackoffMs ?? 1_000;
+  const maxBackoffMs = options.maxBackoffMs ?? 30_000;
+  const emit = options.onEvent ?? (() => {});
+  const fetcher = options.fetcher ?? fetch;
+  const signal = options.signal;
+
+  let state: MachineState = "idle";
+  let socket: WebSocket | null = null;
+  // Job updates sent while the socket was down. The gateway hears them after the next hello.
+  const pending: MachineMessage[] = [];
+  // The last `error` the gateway sent; it comes just before a 1008 close.
+  let gatewayError = "";
+
+  const send = (message: MachineMessage) => {
+    if (socket?.readyState === WebSocket.OPEN) socket.send(encodeMessage(message));
+    else if (message.type === "job") pending.push(message);
+  };
+  const sendStatus = () => send({ v: PROTOCOL_VERSION, type: "status", state });
+
+  const startJob = (run: RunMessage) => {
+    if (state === "busy") {
+      emit({ type: "run-refused", routeId: run.routeId });
+      const update: JobUpdate = {
+        routeId: run.routeId,
+        state: "failed",
+        message: "The machine is already running a job.",
+      };
+      send({ v: PROTOCOL_VERSION, type: "job", ...update });
+      return;
+    }
+    emit({ type: "run", routeId: run.routeId });
+    state = "busy";
+    sendStatus();
+    void options
+      .runJob(run, (update) => {
+        emit({ type: "job", update });
+        send({ v: PROTOCOL_VERSION, type: "job", ...update });
+      })
+      .finally(() => {
+        state = "idle";
+        sendStatus();
+      });
+  };
+
+  // One socket's lifetime. Resolves with the close code and reason, and whether it ever opened.
+  const session = () =>
+    new Promise<{ opened: boolean; code: number; reason: string }>((resolve) => {
+      let opened = false;
+      let heartbeat: ReturnType<typeof setInterval> | undefined;
+      const ws = new NodeWebSocket(connectUrl(options.server), {
+        headers: { authorization: `Bearer ${options.token}`, "user-agent": userAgent },
+      });
+      socket = ws;
+
+      let settled = false;
+      const finish = (code: number, reason: string) => {
+        if (settled) return;
+        settled = true;
+        clearInterval(heartbeat);
+        signal?.removeEventListener("abort", onAbort);
+        if (socket === ws) socket = null;
+        resolve({ opened, code, reason });
+      };
+      const onAbort = () => {
+        ws.close(1000, "machine going offline");
+        finish(1000, "machine going offline");
+      };
+      signal?.addEventListener("abort", onAbort, { once: true });
+
+      ws.addEventListener("open", () => {
+        opened = true;
+        emit({ type: "connected" });
+        ws.send(encodeMessage({ v: PROTOCOL_VERSION, type: "hello", ...options.hello }));
+        sendStatus();
+        for (const message of pending.splice(0)) send(message);
+        heartbeat = setInterval(sendStatus, heartbeatMs);
+      });
+      ws.addEventListener("message", (event) => {
+        if (typeof event.data !== "string") return;
+        const parsed = parseGatewayMessage(event.data);
+        if (!parsed.ok) {
+          emit({ type: "gateway-error", code: parsed.reason, message: parsed.error });
+          return;
+        }
+        const message = parsed.message;
+        if (message.type === "run") startJob(message);
+        else {
+          gatewayError = message.message;
+          emit({ type: "gateway-error", code: message.code, message: message.message });
+        }
+      });
+      ws.addEventListener("close", (event) => finish(event.code, event.reason));
+      // Node 22 fires only `error`, no `close`, when the upgrade fails, so end the attempt here.
+      ws.addEventListener("error", () => {
+        if (!opened) finish(1006, "");
+      });
+    });
+
+  // A failed upgrade only surfaces as a bare error, so ask the same URL over plain HTTP whether the
+  // token is still good: a valid token gets 426 (no upgrade header), a bad one 401.
+  const tokenRejected = async () => {
+    try {
+      const response = await fetcher(new URL("/api/machines/connect", options.server), {
+        headers: { authorization: `Bearer ${options.token}`, "user-agent": userAgent },
+      });
+      await response.body?.cancel();
+      return response.status === 401;
+    } catch {
+      return false;
+    }
+  };
+
+  let attempt = 0;
+  while (!signal?.aborted) {
+    attempt++;
+    emit({ type: "connecting", attempt });
+    const { opened, code, reason } = await session();
+    if (signal?.aborted) break;
+    if (opened) attempt = 1;
+
+    if (code === CLOSE_REVOKED) return { reason: "revoked" };
+    if (code === CLOSE_REPLACED) return { reason: "replaced" };
+    if (code === CLOSE_POLICY)
+      return { reason: "rejected", message: gatewayError || reason || "protocol error" };
+    if (!opened && (await tokenRejected())) return { reason: "revoked" };
+
+    const retryInMs = backoff(attempt, minBackoffMs, maxBackoffMs);
+    emit({ type: "disconnected", code, reason, retryInMs });
+    await delay(retryInMs, signal);
+  }
+  return { reason: "stopped" };
+}
+
+function delay(ms: number, signal?: AbortSignal) {
+  return new Promise<void>((resolve) => {
+    const timer = setTimeout(done, ms);
+    signal?.addEventListener("abort", done, { once: true });
+    function done() {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", done);
+      resolve();
+    }
+  });
+}

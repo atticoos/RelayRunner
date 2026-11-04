@@ -18,14 +18,18 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsdown",
     "prepack": "pnpm run build"
   },
   "dependencies": {
+    "@clack/prompts": "^1.8.1",
     "citty": "^0.2.2",
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@relayrunner/machine-protocol": "workspace:*"
+    "@relayrunner/machine-protocol": "workspace:*",
+    "@types/ws": "^8.18.2",
+    "tsdown": "^0.23.5",
+    "ws": "^8.22.1"
   }
 }
