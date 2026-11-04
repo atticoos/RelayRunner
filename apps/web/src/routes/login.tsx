@@ -1,6 +1,9 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useState } from "react";
-import { authDisabled, getSession, signIn } from "../lib/auth-client";
+import { Brand } from "@/components/brand";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { authDisabled, getSession, signIn } from "@/lib/auth-client";
 
 type LoginSearch = { redirect?: string };
 
@@ -30,13 +33,22 @@ function LoginPage() {
   }
 
   return (
-    <main className="center">
-      <h1>RelayRunner</h1>
-      <p className="mute">Route your GitHub Actions to the right runner.</p>
-      <button type="button" className="primary" onClick={signInWithGitHub}>
-        Sign in with GitHub
-      </button>
-      {error && <p className="error">{error}</p>}
+    <main className="grid min-h-screen place-items-center p-4">
+      <div className="flex w-full max-w-sm flex-col items-center gap-6">
+        <Brand />
+        <Card className="w-full">
+          <CardHeader>
+            <CardTitle>Sign in</CardTitle>
+            <CardDescription>Route your GitHub Actions to the right runner.</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            <Button size="lg" className="w-full font-bold" onClick={signInWithGitHub}>
+              Sign in with GitHub
+            </Button>
+            {error && <p className="text-sm text-destructive">{error}</p>}
+          </CardContent>
+        </Card>
+      </div>
     </main>
   );
 }

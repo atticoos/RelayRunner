@@ -1,6 +1,8 @@
 import { cloudflare } from "@cloudflare/vite-plugin";
+import tailwindcss from "@tailwindcss/vite";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import react from "@vitejs/plugin-react";
+import { fileURLToPath } from "node:url";
 import { defineConfig, loadEnv } from "vite";
 
 export default defineConfig(({ mode }) => {
@@ -14,8 +16,12 @@ export default defineConfig(({ mode }) => {
       // Must run before the React plugin.
       tanstackRouter({ target: "react", autoCodeSplitting: true }),
       react(),
+      tailwindcss(),
       cloudflare(),
     ],
+    resolve: {
+      alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
+    },
     server: {
       port: 5179,
       proxy: {
