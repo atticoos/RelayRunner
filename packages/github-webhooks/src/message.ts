@@ -26,6 +26,15 @@ export interface InstallationRepo {
   private: boolean;
 }
 
+// The installation as GitHub describes it on installation events, so the consumer can keep each
+// connected org's status current (account, suspension, which repos the App sees).
+export interface InstallationSummary {
+  id: number;
+  account: { id: number; login: string; type: string } | null;
+  repositorySelection: 'all' | 'selected';
+  suspendedAt: string | null;
+}
+
 interface Base {
   // X-GitHub-Delivery. Unique per delivery; a manual redelivery reuses it.
   deliveryId: string;
@@ -37,8 +46,8 @@ interface Base {
 
 export type WebhookMessage =
   | (Base & { event: 'workflow_job'; repository: { id: number; fullName: string }; job: WorkflowJob })
-  | (Base & { event: 'installation'; repositories: InstallationRepo[] })
-  | (Base & { event: 'installation_repositories'; added: InstallationRepo[]; removed: InstallationRepo[] });
+  | (Base & { event: 'installation'; installation: InstallationSummary | null; repositories: InstallationRepo[] })
+  | (Base & { event: 'installation_repositories'; installation: InstallationSummary | null; added: InstallationRepo[]; removed: InstallationRepo[] });
 
 // Delivery → queue message, or null when RelayRunner doesn't act on this event (or the payload is
 // missing what it needs). Never throws.
@@ -82,12 +91,33 @@ export function toWebhookMessage(
       };
     }
     case 'installation':
-      return { ...base, event, repositories: repos(payload.repositories) };
+      return { ...base, event, installation: installationSummary(payload.installation), repositories: repos(payload.repositories) };
     case 'installation_repositories':
-      return { ...base, event, added: repos(payload.repositories_added), removed: repos(payload.repositories_removed) };
+      return {
+        ...base,
+        event,
+        // The new selection comes at the top level of this event.
+        installation: installationSummary(payload.installation, payload.repository_selection),
+        added: repos(payload.repositories_added),
+        removed: repos(payload.repositories_removed),
+      };
     default:
       return null;
   }
+}
+
+function installationSummary(value: unknown, selection?: unknown): InstallationSummary | null {
+  if (!isRecord(value) || typeof value.id !== 'number') return null;
+  const account = isRecord(value.account) && typeof value.account.login === 'string'
+    ? { id: Number(value.account.id), login: value.account.login, type: String(value.account.type ?? 'User') }
+    : null;
+  const picked = selection ?? value.repository_selection;
+  return {
+    id: value.id,
+    account,
+    repositorySelection: picked === 'selected' ? 'selected' : 'all',
+    suspendedAt: stringOrNull(value.suspended_at),
+  };
 }
 
 function repos(value: unknown): InstallationRepo[] {

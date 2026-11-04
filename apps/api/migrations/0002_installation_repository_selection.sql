@@ -1,0 +1,1 @@
+ALTER TABLE `github_installation` ADD `repository_selection` text DEFAULT 'all' NOT NULL;

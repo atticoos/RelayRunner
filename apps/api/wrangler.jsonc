@@ -15,7 +15,9 @@
     "BETTER_AUTH_URL": "https://relayrunner-app.relayrun.workers.dev",
     // Dashboard previews (<alias>-relayrunner-app.relayrun.workers.dev) that may sign in through
     // the oAuthProxy plugin. Only this account's Workers live under relayrun.workers.dev.
-    "PREVIEW_ORIGINS": "https://*-relayrunner-app.relayrun.workers.dev"
+    "PREVIEW_ORIGINS": "https://*-relayrunner-app.relayrun.workers.dev",
+    // The GitHub App's slug, as in https://github.com/apps/<slug>.
+    "GITHUB_APP_SLUG": "relayrunner"
   },
   "d1_databases": [
     {

@@ -15,7 +15,10 @@
  * keyed on the job's state, not on arrival order.
  */
 import { WEBHOOK_DLQ, type WebhookMessage } from '@relayrunner/github-webhooks';
+import { eq } from 'drizzle-orm';
+import { createDb, schema } from './db/index.ts';
 import type { Env } from './env.ts';
+import { upsertInstallation } from './installations.ts';
 
 const BASE_RETRY_DELAY_SECONDS = 30;
 const MAX_RETRY_DELAY_SECONDS = 15 * 60;
@@ -53,7 +56,7 @@ export function retryDelaySeconds(attempts: number) {
 }
 
 /** Do the work for one delivery. Throw to retry. */
-export async function processWebhook(_env: Env, message: WebhookMessage): Promise<void> {
+export async function processWebhook(env: Env, message: WebhookMessage): Promise<void> {
   const lagMs = Date.now() - Date.parse(message.receivedAt);
   switch (message.event) {
     case 'workflow_job':
@@ -72,8 +75,33 @@ export async function processWebhook(_env: Env, message: WebhookMessage): Promis
       return;
     case 'installation':
     case 'installation_repositories':
-      // TODO: record which repos the GitHub App can see.
+      await recordInstallation(env, message);
       console.log(JSON.stringify({ msg: 'github webhook processed', event: message.event, action: message.action, deliveryId: message.deliveryId, installationId: message.installationId, lagMs }));
       return;
   }
+}
+
+// Keeps github_installation in step with GitHub so the dashboard shows each org's real status.
+// Every action carries the installation's current state, so a repeat is harmless, and
+// upsertInstallation drops anything older than what the row holds (the queue is unordered and
+// retries). `deleted` removes the row: the workspace drops the org and the owner reconnects it. A
+// stale event landing after that can recreate it unclaimed, which is harmless: it is listed or
+// claimable only while GitHub still shows the install to the user. Never sets workspace_id:
+// linking takes a signed-in user (routes/github.ts).
+async function recordInstallation(env: Env, message: Extract<WebhookMessage, { event: 'installation' | 'installation_repositories' }>) {
+  const db = createDb(env.DB);
+  // Uses installationId, not the summary, so a message from an ingress that predates the summary
+  // still removes the org.
+  if (message.event === 'installation' && message.action === 'deleted') {
+    if (message.installationId) await db.delete(schema.githubInstallation).where(eq(schema.githubInstallation.id, message.installationId));
+    return;
+  }
+  const installation = message.installation;
+  if (!installation) return;
+  await upsertInstallation(db, {
+    id: installation.id,
+    account: installation.account,
+    repository_selection: installation.repositorySelection,
+    suspended_at: installation.suspendedAt,
+  }, new Date(message.receivedAt));
 }
