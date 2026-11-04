@@ -25,6 +25,7 @@
     "**/node_modules",
     "**/dist",
     "**/coverage",
+    "apps/api",
     "apps/web"
   ]
 }

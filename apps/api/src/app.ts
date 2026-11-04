@@ -1,0 +1,31 @@
+import { Hono } from 'hono';
+import type { Auth, Session } from './auth.ts';
+import type { Env } from './env.ts';
+import { attachSession } from './middleware/session.ts';
+import { authRoutes } from './routes/auth.ts';
+import { healthRoutes } from './routes/health.ts';
+import { meRoutes } from './routes/me.ts';
+import { webhookRoutes } from './routes/webhooks.ts';
+
+export interface AppEnv {
+  Bindings: Env;
+  Variables: {
+    auth: Auth;
+    user: Session['user'] | null;
+    session: Session['session'] | null;
+  };
+}
+
+// Everything lives under /api so the dashboard can call it same-origin.
+export const app = new Hono<AppEnv>().basePath('/api');
+
+// Public routes. These never touch auth or D1.
+app.route('/health', healthRoutes);
+app.route('/webhooks', webhookRoutes);
+
+// Everything below sees c.var.auth, c.var.user and c.var.session.
+app.use('*', attachSession);
+app.route('/auth', authRoutes);
+app.route('/me', meRoutes);
+
+app.notFound(c => c.json({ error: 'not_found' }, 404));
