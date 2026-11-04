@@ -32,7 +32,24 @@
     "GITHUB_APP_SLUG": "relayrunner",
     // The GitHub App's numeric ID, the `iss` of the App JWTs that mint installation tokens.
     "GITHUB_APP_ID": "5605512",
+    // Zero Trust team domain and the Access app AUD whose JWTs /api/dev/* accepts
+    // (packages/access). Dashboard previews forward /api/* here with the Access JWT, so this is
+    // the AUD of "relayrunner-app previews", the same as in apps/web/wrangler.jsonc. Requests to
+    // this Worker's own workers.dev URL, or from the production dashboard, carry no JWT and get 403.
+    "ACCESS_TEAM_DOMAIN": "relayrunner.cloudflareaccess.com",
+    "ACCESS_AUD": "bc8e87c4c78375b0b1e61b4a2a73354543030492e218d02a28c56bc0f95702f7",
+    // Alert when at least this many webhook deliveries are dead-lettered in an hour
+    // (src/dead-letter-alert.ts). Set DEAD_LETTER_ALERT_WEBHOOK_URL with `wrangler secret put` to
+    // also post the alert to a Slack or Discord incoming webhook.
+    "DEAD_LETTER_ALERT_THRESHOLD": "10",
   },
+  // Webhook dead letters (src/dead-letters.ts), kept out of D1 on purpose: D1 failing is the
+  // likeliest reason a delivery dead-letters. Create once, with the 30-day retention:
+  //   wrangler r2 bucket create relayrunner-webhook-dead-letters
+  //   wrangler r2 bucket lifecycle add relayrunner-webhook-dead-letters expire-30d --expire-days 30
+  "r2_buckets": [{ "binding": "DEAD_LETTERS", "bucket_name": "relayrunner-webhook-dead-letters" }],
+  // Hourly dead-letter growth check (src/dead-letter-alert.ts).
+  "triggers": { "crons": ["0 * * * *"] },
   // From the account's Secrets Store (default_secrets_store), not `wrangler secret put`.
   // GITHUB_APP_PRIVATE_KEY is the App's private key converted to PKCS#8 PEM, which is what
   // WebCrypto imports (GitHub downloads PKCS#1):
@@ -64,10 +81,12 @@
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["PickRunner", "Router", "MachineLink"] }],
   // GitHub webhooks: apps/webhooks verifies each delivery and enqueues it; this Worker's `queue()`
   // export (src/webhook-queue.ts) processes it. Messages that fail max_retries times (with backoff,
-  // about half an hour) move to the DLQ, whose consumer logs and acks them. Create both once:
+  // about half an hour) move to the DLQ, whose consumer archives them to R2 and only then acks.
+  // The producer is for replays from /api/dev/webhooks. Create both queues once:
   //   wrangler queues create relayrunner-github-webhooks
   //   wrangler queues create relayrunner-github-webhooks-dlq
   "queues": {
+    "producers": [{ "binding": "WEBHOOK_QUEUE", "queue": "relayrunner-github-webhooks" }],
     "consumers": [
       {
         "queue": "relayrunner-github-webhooks",
@@ -80,7 +99,8 @@
         "queue": "relayrunner-github-webhooks-dlq",
         "max_batch_size": 10,
         "max_batch_timeout": 5,
-        "max_retries": 0,
+        // Retries a failed R2 write (with backoff, about an hour and a half) instead of dropping it.
+        "max_retries": 10,
       },
     ],
   },

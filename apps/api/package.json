@@ -11,6 +11,7 @@
     "db:migrate:remote": "wrangler d1 execute relayrunner --remote --file scripts/rename-legacy-migrations.sql && wrangler d1 migrations apply relayrunner --remote"
   },
   "dependencies": {
+    "@relayrunner/access": "workspace:*",
     "@relayrunner/activity": "workspace:*",
     "@relayrunner/github-webhooks": "workspace:*",
     "@relayrunner/machine-protocol": "workspace:*",

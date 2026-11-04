@@ -80,10 +80,16 @@ describe("webhook queue consumer", () => {
     expect(good.ack).toHaveBeenCalledOnce();
   });
 
-  test("logs and acks dead letters without processing them", async () => {
+  test("archives dead letters without processing them", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const put = vi.fn(async () => null);
+    const dlqEnv = {
+      ...env,
+      DEAD_LETTERS: { get: vi.fn(async () => null), put },
+    } as unknown as Env;
     const msg = message(malformed, 7);
-    await consumer.handleWebhookBatch(batch(WEBHOOK_DLQ, [msg]), env);
+    await consumer.handleWebhookBatch(batch(WEBHOOK_DLQ, [msg]), dlqEnv);
+    expect(put).toHaveBeenCalledOnce();
     expect(msg.ack).toHaveBeenCalledOnce();
     expect(msg.retry).not.toHaveBeenCalled();
     expect(JSON.parse(error.mock.calls[0][0])).toMatchObject({

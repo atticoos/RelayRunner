@@ -14,6 +14,7 @@ import { Route as AuthedRouteImport } from './routes/_authed'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthedWorkspaceRouteImport } from './routes/_authed/_workspace'
 import { Route as AuthedDeviceRouteImport } from './routes/_authed/device'
+import { Route as DevWebhooksRouteImport } from './routes/dev/webhooks'
 import { Route as AuthedWorkspaceActivityRouteImport } from './routes/_authed/_workspace/activity'
 import { Route as AuthedWorkspaceRunnersRouteImport } from './routes/_authed/_workspace/runners'
 import { Route as AuthedWorkspaceWorkspaceRouteImport } from './routes/_authed/_workspace/workspace'
@@ -45,6 +46,11 @@ const AuthedDeviceRoute = AuthedDeviceRouteImport.update({
   id: '/device',
   path: '/device',
   getParentRoute: () => AuthedRoute,
+} as any)
+const DevWebhooksRoute = DevWebhooksRouteImport.update({
+  id: '/dev/webhooks',
+  path: '/dev/webhooks',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AuthedWorkspaceActivityRoute = AuthedWorkspaceActivityRouteImport.update({
   id: '/activity',
@@ -96,6 +102,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/device': typeof AuthedDeviceRoute
+  '/dev/webhooks': typeof DevWebhooksRoute
   '/activity': typeof AuthedWorkspaceActivityRoute
   '/runners': typeof AuthedWorkspaceRunnersRoute
   '/workspace': typeof AuthedWorkspaceWorkspaceRoute
@@ -109,6 +116,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/device': typeof AuthedDeviceRoute
+  '/dev/webhooks': typeof DevWebhooksRoute
   '/activity': typeof AuthedWorkspaceActivityRoute
   '/runners': typeof AuthedWorkspaceRunnersRoute
   '/workspace': typeof AuthedWorkspaceWorkspaceRoute
@@ -125,6 +133,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/_authed/_workspace': typeof AuthedWorkspaceRouteWithChildren
   '/_authed/device': typeof AuthedDeviceRoute
+  '/dev/webhooks': typeof DevWebhooksRoute
   '/_authed/_workspace/activity': typeof AuthedWorkspaceActivityRoute
   '/_authed/_workspace/runners': typeof AuthedWorkspaceRunnersRoute
   '/_authed/_workspace/workspace': typeof AuthedWorkspaceWorkspaceRoute
@@ -140,6 +149,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/device'
+    | '/dev/webhooks'
     | '/activity'
     | '/runners'
     | '/workspace'
@@ -153,6 +163,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/device'
+    | '/dev/webhooks'
     | '/activity'
     | '/runners'
     | '/workspace'
@@ -168,6 +179,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/_authed/_workspace'
     | '/_authed/device'
+    | '/dev/webhooks'
     | '/_authed/_workspace/activity'
     | '/_authed/_workspace/runners'
     | '/_authed/_workspace/workspace'
@@ -182,6 +194,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthedRoute: typeof AuthedRouteWithChildren
   LoginRoute: typeof LoginRoute
+  DevWebhooksRoute: typeof DevWebhooksRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -220,6 +233,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/device'
       preLoaderRoute: typeof AuthedDeviceRouteImport
       parentRoute: typeof AuthedRoute
+    }
+    '/dev/webhooks': {
+      id: '/dev/webhooks'
+      path: '/dev/webhooks'
+      fullPath: '/dev/webhooks'
+      preLoaderRoute: typeof DevWebhooksRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_authed/_workspace/activity': {
       id: '/_authed/_workspace/activity'
@@ -323,6 +343,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthedRoute: AuthedRouteWithChildren,
   LoginRoute: LoginRoute,
+  DevWebhooksRoute: DevWebhooksRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

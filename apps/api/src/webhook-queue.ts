@@ -6,9 +6,9 @@
  * batchmates. Retries back off exponentially (see retryDelaySeconds), so the retry budget spans
  * about half an hour: long enough to roll back a bad API deploy before anything is dead-lettered.
  *
- * After max_retries a message moves to `relayrunner-github-webhooks-dlq`. That is terminal: the
- * consumer logs the full message (the replay source, alongside GitHub's Recent Deliveries) and
- * acks it.
+ * After max_retries a message moves to `relayrunner-github-webhooks-dlq`. The DLQ consumer archives
+ * it to R2 (src/dead-letters.ts) and acks it only once the write succeeds; a failed write leaves it
+ * unacked, so the DLQ retries it rather than losing it. `/dev/webhooks` lists and replays them.
  *
  * Delivery is at least once and unordered. A redelivery or a queue retry can repeat a message, and
  * `workflow_job` `queued` can arrive after `in_progress`, so processing must be idempotent and
@@ -16,6 +16,7 @@
  */
 import { WEBHOOK_DLQ, type WebhookMessage } from "@relayrunner/github-webhooks";
 import { eq } from "drizzle-orm";
+import { archiveDeadLetter, recordLastError } from "./dead-letters.ts";
 import { createDb, schema } from "./db/index.ts";
 import type { Env } from "./env.ts";
 import { upsertInstallation } from "./installations.ts";
@@ -28,6 +29,9 @@ export const RELAYRUNNER_LABEL = "relayrunner";
 
 const BASE_RETRY_DELAY_SECONDS = 30;
 const MAX_RETRY_DELAY_SECONDS = 15 * 60;
+// The main consumer's max_retries in wrangler.jsonc. From this attempt on, a failure records its
+// error so the dead letter can say why it failed.
+export const MAX_RETRIES = 6;
 
 /** Handle one batch from the webhook queue or its DLQ. Never throws. */
 export async function handleWebhookBatch(
@@ -37,15 +41,7 @@ export async function handleWebhookBatch(
   const isDlq = batch.queue === WEBHOOK_DLQ;
   for (const msg of batch.messages) {
     if (isDlq) {
-      console.error(
-        JSON.stringify({
-          msg: "github webhook dead-lettered",
-          deliveryId: msg.body.deliveryId,
-          attempts: msg.attempts,
-          message: msg.body,
-        }),
-      );
-      msg.ack();
+      await deadLetter(env, msg);
       continue;
     }
     try {
@@ -53,6 +49,7 @@ export async function handleWebhookBatch(
       msg.ack();
     } catch (error) {
       const delaySeconds = retryDelaySeconds(msg.attempts);
+      const message = errorMessage(error);
       console.warn(
         JSON.stringify({
           msg: "github webhook processing failed; retrying",
@@ -60,12 +57,56 @@ export async function handleWebhookBatch(
           deliveryId: msg.body.deliveryId,
           attempts: msg.attempts,
           delaySeconds,
-          error: error instanceof Error ? error.message : String(error),
+          error: message,
         }),
       );
+      if (msg.attempts >= MAX_RETRIES) {
+        await recordLastError(env.DEAD_LETTERS, msg.body.deliveryId, {
+          error: message,
+          attempts: msg.attempts,
+          at: new Date().toISOString(),
+        });
+      }
       msg.retry({ delaySeconds });
     }
   }
+}
+
+// Archive first, then ack. If the write fails the message stays on the DLQ and comes back with the
+// same backoff (the DLQ consumer's max_retries is 10, about an hour and a half). Each failure logs the full
+// message, so even one that runs out of retries can be replayed from Workers Logs.
+async function deadLetter(env: Env, msg: Message<WebhookMessage>) {
+  try {
+    const letter = await archiveDeadLetter(env.DEAD_LETTERS, msg.body, msg.attempts);
+    console.error(
+      JSON.stringify({
+        msg: "github webhook dead-lettered",
+        id: letter.id,
+        deliveryId: letter.deliveryId,
+        event: letter.event,
+        action: letter.action,
+        repository: letter.repository,
+        attempts: letter.attempts,
+        lastError: letter.lastError,
+      }),
+    );
+    msg.ack();
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        msg: "github webhook dead letter not archived; retrying",
+        deliveryId: msg.body.deliveryId,
+        attempts: msg.attempts,
+        error: errorMessage(error),
+        message: msg.body,
+      }),
+    );
+    msg.retry({ delaySeconds: retryDelaySeconds(msg.attempts) });
+  }
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
 }
 
 // GitHub matches runs-on labels case-insensitively, so `RelayRunner` counts too.
