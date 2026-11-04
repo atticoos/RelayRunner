@@ -36,9 +36,8 @@ pnpm dev                          # http://localhost:8787/api/health
 `wrangler.jsonc` pins the RelayRunner Cloudflare account (`account_id`), so wrangler targets it even if your login can see other accounts. Then:
 
 ```sh
-pnpm db:migrate:remote
 wrangler secret put BETTER_AUTH_SECRET   # and GITHUB_APP_CLIENT_ID, GITHUB_APP_CLIENT_SECRET
-pnpm run deploy
+pnpm run deploy:api                      # from the repo root; D1 migrations apply separately (pnpm db:migrate:remote)
 ```
 
 The browser never talks to this Worker directly: the dashboard Worker (`apps/web`) forwards `/api/*` here over a service binding, so `BETTER_AUTH_URL` (in `wrangler.jsonc` vars) is the dashboard's origin: `https://relayrunner-app.relayrun.workers.dev` until `app.relayrunner.dev` moves to this account. `.dev.vars` overrides it for local dev. Deploy this Worker before `apps/web`, since the binding needs it to exist. The GitHub App's callback URL is `<BETTER_AUTH_URL>/api/auth/callback/github` and its webhook URL is `<BETTER_AUTH_URL>/api/webhooks/github`, which the dashboard Worker forwards to `apps/webhooks`.
