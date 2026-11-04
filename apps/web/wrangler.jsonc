@@ -1,0 +1,21 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  // Gateway dashboard: a React SPA served as Worker static assets.
+  // No `main` yet, so no Worker script runs; add one (or move to TanStack
+  // Start) when the dashboard needs server code of its own.
+  "name": "relayrunner-app",
+  "compatibility_date": "2026-11-03",
+  // account_id is intentionally omitted: RelayRunner is moving to its own
+  // Cloudflare account. Set CLOUDFLARE_ACCOUNT_ID in the environment (or add
+  // "account_id" here once the account move is done).
+  "assets": {
+    // Unknown paths fall back to index.html so client-side routes deep-link.
+    "not_found_handling": "single-page-application"
+  },
+  "workers_dev": true
+  // Production routing (enable once DNS lives in the new account):
+  // app.relayrunner.dev       -> this Worker (custom domain)
+  // app.relayrunner.dev/api/* -> the apps/api Worker (route on that Worker),
+  // so the dashboard and API share an origin and auth cookies.
+  // "routes": [{ "pattern": "app.relayrunner.dev", "custom_domain": true }]
+}
