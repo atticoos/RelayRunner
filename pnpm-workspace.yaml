@@ -1,3 +1,22 @@
 packages:
   - 'apps/*'
   - 'packages/*'
+# pnpm 11 fails installs when a dependency's build script is neither allowed
+# nor denied. esbuild and workerd need theirs to fetch platform binaries.
+allowBuilds:
+  esbuild: true
+  workerd: true
+# pnpm 11 holds back releases newer than a day (minimumReleaseAge). These
+# lockfile entries were published inside that window; drop them once they age.
+minimumReleaseAgeExclude:
+  - "@better-auth/core@1.7.16"
+  - "@better-auth/drizzle-adapter@1.7.16"
+  - "@better-auth/kysely-adapter@1.7.16"
+  - "@better-auth/memory-adapter@1.7.16"
+  - "@better-auth/mongo-adapter@1.7.16"
+  - "@better-auth/prisma-adapter@1.7.16"
+  - "@better-auth/telemetry@1.7.16"
+  - "@cloudflare/workers-types@5.20261104.1"
+  - better-auth@1.7.16
+  - better-call@1.4.5
+  - electron-to-chromium@1.5.475

@@ -4,14 +4,15 @@ RelayRunner is a hosted gateway that routes GitHub Actions jobs to the runners a
 
 ## Workspace
 
-Use pnpm 10.13.1 and run `pnpm install` from the repository root.
+Use pnpm 11.28.9 (pinned by `packageManager`; Corepack picks it up) and run
+`pnpm install` from the repository root.
 
 - `apps/` holds runnable applications.
 - `packages/` holds shared libraries.
 
 ## Development checks
 
-Use Node.js 22.18 or later in the 22.x release line. Write workspace code in
+Use the Node.js version in `.nvmrc` (24.x). Write workspace code in
 TypeScript and place Vitest tests next to the code they cover, using
 `*.test.ts` or `*.test.mts`.
 
