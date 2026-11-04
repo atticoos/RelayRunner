@@ -1,8 +1,20 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Ban, Cloud, ExternalLink, Laptop, Lock, Plug, Plus, Unplug } from "lucide-react";
+import {
+  Ban,
+  CircleCheck,
+  CircleMinus,
+  CircleX,
+  Clock,
+  Cloud,
+  Laptop,
+  LoaderCircle,
+  Lock,
+  Plug,
+  Plus,
+  Unplug,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/page-header";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   duration,
@@ -211,96 +223,90 @@ function EventRow({ item, now }: { item: ActivityItem; now: number }) {
   );
 }
 
+// What happened to the job, and where: "passed on", "waiting for", ...
+function jobVerb(job: ActivityJob) {
+  if (job.status === "in_progress") return "running on";
+  if (job.status !== "completed")
+    return job.runner.type === "machine" ? "waiting for" : "queued for";
+  if (job.conclusion === "success") return "passed on";
+  if (job.conclusion === "failure" || job.conclusion === "timed_out") return "failed on";
+  return `${job.conclusion?.replace("_", " ") ?? "finished"} on`;
+}
+
+function JobIcon({ job }: { job: ActivityJob }) {
+  const base = "mt-0.5 size-3.5 shrink-0";
+  if (job.status === "in_progress")
+    return <LoaderCircle aria-label="Running" className={`${base} animate-spin text-run`} />;
+  if (job.status !== "completed")
+    return <Clock aria-label="Queued" className={`${base} text-muted-foreground`} />;
+  if (job.conclusion === "success")
+    return <CircleCheck aria-label="Passed" className={`${base} text-go`} />;
+  if (job.conclusion === "failure" || job.conclusion === "timed_out")
+    return <CircleX aria-label="Failed" className={`${base} text-destructive`} />;
+  return <CircleMinus aria-label="Finished" className={`${base} text-muted-foreground`} />;
+}
+
+// A one-line row in the same shape as EventRow: "test in RelayRunner dev passed on Atticus's
+// MacBook · relayrunner-ci-tests · main · 1m 30s · 2m ago". The job name opens the job on
+// GitHub, the workflow name opens its run.
 function JobRow({ job, now }: { job: ActivityJob; now: number }) {
   const took = duration(job, now);
+  const { runner } = job;
+  const RunnerIcon = runner.type === "machine" ? Laptop : Cloud;
+  const runnerName =
+    runner.type === "machine" ? (runner.name ?? "a local machine") : runner.label || "unknown";
   return (
-    <li className="grid gap-x-4 gap-y-1.5 rounded-xl border bg-card px-4 py-3 text-sm sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-      <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
-        <a
-          href={job.runUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="truncate text-muted-foreground hover:text-foreground hover:underline"
-          title="Open the run on GitHub"
-        >
-          {job.workflow ?? "Workflow"}
-        </a>
-        <span aria-hidden className="text-muted-foreground">
-          ·
-        </span>
+    <li className="flex min-w-0 items-start gap-2 px-4 py-1.5 text-sm">
+      <JobIcon job={job} />
+      <p className="min-w-0">
         <a
           href={job.url}
           target="_blank"
           rel="noreferrer"
-          className="inline-flex min-w-0 items-center gap-1 font-medium hover:underline"
+          className="font-medium hover:underline"
+          title="Open the job on GitHub"
         >
-          <span className="truncate">{job.name}</span>
-          <ExternalLink aria-hidden className="size-3 shrink-0 text-muted-foreground" />
-        </a>
-        <span aria-hidden className="text-muted-foreground">
-          ·
+          {job.name}
+        </a>{" "}
+        <span className="text-muted-foreground">in</span>{" "}
+        <a
+          href={job.runUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="hover:underline"
+          title="Open the run on GitHub"
+        >
+          {job.workflow ?? "a workflow"}
+        </a>{" "}
+        <span className="text-muted-foreground">{jobVerb(job)}</span>{" "}
+        <span
+          className="inline-flex items-baseline gap-1 font-medium"
+          title={job.runnerName ? `Ran on ${job.runnerName}` : "Not picked up yet"}
+        >
+          <RunnerIcon aria-hidden className="size-3 shrink-0 self-center text-muted-foreground" />
+          <span className={runner.type === "github" ? "font-mono text-xs" : undefined}>
+            {runnerName}
+          </span>
+        </span>{" "}
+        <span className="text-xs text-muted-foreground">
+          ·{" "}
+          {job.private && (
+            <Lock aria-label="Private repo" className="mb-0.5 inline size-3 align-middle" />
+          )}{" "}
+          <span className="font-mono">{job.repository}</span>
+          {job.branch && (
+            <>
+              {" "}
+              · <span className="font-mono">{job.branch}</span>
+            </>
+          )}
+          {took && <span className="tabular-nums"> · {took}</span>}{" "}
+          <span className="whitespace-nowrap" title={new Date(job.createdAt).toLocaleString()}>
+            · {timeAgo(job.createdAt, now)}
+          </span>
         </span>
-        <RunnerChip job={job} />
-      </div>
-      <div className="flex items-center gap-2 sm:justify-self-end">
-        <StatusBadge job={job} />
-      </div>
-      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground sm:col-span-2">
-        <span className="inline-flex min-w-0 items-center gap-1 font-mono">
-          {job.private && <Lock aria-label="Private repo" className="size-3 shrink-0" />}
-          <span className="truncate">{job.repository}</span>
-        </span>
-        {job.branch && <span className="truncate font-mono">{job.branch}</span>}
-        <span title={new Date(job.createdAt).toLocaleString()}>{timeAgo(job.createdAt, now)}</span>
-        {took && <span className="tabular-nums">{took}</span>}
-      </div>
+      </p>
     </li>
-  );
-}
-
-function RunnerChip({ job }: { job: ActivityJob }) {
-  const { runner } = job;
-  const title = job.runnerName ? `Ran on ${job.runnerName}` : "Not picked up yet";
-  if (runner.type === "machine")
-    return (
-      <span
-        className="inline-flex items-center gap-1 rounded-md border border-go-edge bg-go-soft px-1.5 py-0.5 text-xs"
-        title={title}
-      >
-        <Laptop aria-hidden className="size-3 shrink-0" />
-        <span className="truncate">{runner.name ?? "Local machine"}</span>
-      </span>
-    );
-  return (
-    <span
-      className="inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 font-mono text-xs"
-      title={title}
-    >
-      <Cloud aria-hidden className="size-3 shrink-0 text-muted-foreground" />
-      <span className="truncate">{runner.label || "unknown"}</span>
-    </span>
-  );
-}
-
-function StatusBadge({ job }: { job: ActivityJob }) {
-  if (job.status === "in_progress") return <Badge variant="run">Running</Badge>;
-  if (job.status !== "completed")
-    return (
-      <Badge variant="idle">
-        {job.runner.type === "machine" ? `Waiting for ${job.runner.name ?? "a machine"}` : "Queued"}
-      </Badge>
-    );
-  if (job.conclusion === "success") return <Badge variant="go">Passed</Badge>;
-  if (job.conclusion === "failure" || job.conclusion === "timed_out")
-    return (
-      <Badge variant="outline" className="border-destructive/60 text-destructive">
-        Failed
-      </Badge>
-    );
-  return (
-    <Badge variant="idle" className="capitalize">
-      {job.conclusion?.replace("_", " ") ?? "Done"}
-    </Badge>
   );
 }
 
