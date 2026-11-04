@@ -12,7 +12,10 @@
     // The dashboard origin (apps/web forwards /api/* here over a service binding).
     // Switch to https://app.relayrunner.dev once the domain moves to this account.
     // Local dev overrides this in .dev.vars.
-    "BETTER_AUTH_URL": "https://relayrunner-app.relayrun.workers.dev"
+    "BETTER_AUTH_URL": "https://relayrunner-app.relayrun.workers.dev",
+    // Dashboard previews (<alias>-relayrunner-app.relayrun.workers.dev) that may sign in through
+    // the oAuthProxy plugin. Only this account's Workers live under relayrun.workers.dev.
+    "PREVIEW_ORIGINS": "https://*-relayrunner-app.relayrun.workers.dev"
   },
   "d1_databases": [
     {

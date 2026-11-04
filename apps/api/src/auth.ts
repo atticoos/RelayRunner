@@ -1,16 +1,29 @@
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
-import { organization } from 'better-auth/plugins';
+import { oAuthProxy, organization } from 'better-auth/plugins';
 import { createDb, schema } from './db/index.ts';
 import type { Env } from './env.ts';
+
+// Preview dashboards (Workers Builds `wrangler preview`) reach this Worker through their own API
+// service binding, so requests arrive with the preview host. PREVIEW_ORIGINS lists their origin
+// patterns, comma-separated, e.g. https://*-relayrunner-app.relayrun.workers.dev.
+export function previewOrigins(env: Pick<Env, 'PREVIEW_ORIGINS'>) {
+  return (env.PREVIEW_ORIGINS ?? '')
+    .split(',')
+    .map(origin => origin.trim())
+    .filter(Boolean);
+}
 
 // Workers only expose bindings per request, so build the auth instance per request too. It is
 // cheap: no I/O happens until a handler runs.
 export function createAuth(env: Env) {
   return betterAuth({
+    // Always the production dashboard origin, so GitHub only ever sees one OAuth callback URL.
     baseURL: env.BETTER_AUTH_URL,
     basePath: '/api/auth',
     secret: env.BETTER_AUTH_SECRET,
+    // Lets preview origins call /api/auth/* (origin check) and be redirect targets.
+    trustedOrigins: previewOrigins(env),
     database: drizzleAdapter(createDb(env.DB), { provider: 'sqlite', schema }),
     socialProviders: {
       github: {
@@ -24,6 +37,15 @@ export function createAuth(env: Env) {
     },
     plugins: [
       workspaces(),
+      // Sign-in from a preview: GitHub returns to the production callback, which exchanges the
+      // code and redirects to <preview>/api/auth/callback/github/oauth-proxy with the profile
+      // encrypted (BETTER_AUTH_SECRET). The preview then creates the session and sets its own
+      // host-only cookie. On production itself the plugin steps aside.
+      oAuthProxy({
+        productionURL: env.BETTER_AUTH_URL,
+        // Seconds the encrypted hand-off stays valid; it only has to survive one redirect.
+        maxAge: 60,
+      }),
       // Next: deviceAuthorization() for `relayrunner login` and bearer() for per-machine
       // credentials, both from better-auth/plugins. Each adds tables, so regenerate migrations.
     ],

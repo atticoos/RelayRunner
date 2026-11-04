@@ -37,3 +37,7 @@ pnpm run deploy
 ```
 
 The browser never talks to this Worker directly: the dashboard Worker (`apps/web`) forwards `/api/*` here over a service binding, so `BETTER_AUTH_URL` (in `wrangler.jsonc` vars) is the dashboard's origin: `https://relayrunner-app.relayrun.workers.dev` until `app.relayrunner.dev` moves to this account. `.dev.vars` overrides it for local dev. Deploy this Worker before `apps/web`, since the binding needs it to exist. The GitHub App's callback URL is `<BETTER_AUTH_URL>/api/auth/callback/github` and its webhook URL is `<BETTER_AUTH_URL>/api/webhooks/github`.
+
+### Sign-in on dashboard previews
+
+Workers Builds previews of the dashboard (`<alias>-relayrunner-app.relayrun.workers.dev`) forward `/api/*` to this production Worker too, so a signed-in preview acts on production data. Better Auth's `oAuthProxy` plugin makes sign-in work there without another GitHub callback URL: GitHub always returns to `<BETTER_AUTH_URL>/api/auth/callback/github`, production exchanges the code and redirects to `<preview>/api/auth/callback/github/oauth-proxy` with the profile encrypted under `BETTER_AUTH_SECRET` (valid for 60 seconds), and the preview sets its own session cookie. Only origins matching `PREVIEW_ORIGINS` (wrangler vars) can start a proxied sign-in; any other host gets handed back to production. When the dashboard moves to `app.relayrunner.dev`, update `BETTER_AUTH_URL` and `PREVIEW_ORIGINS` together.
