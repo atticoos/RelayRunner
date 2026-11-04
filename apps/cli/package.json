@@ -20,5 +20,12 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "prepack": "pnpm run build"
+  },
+  "dependencies": {
+    "citty": "^0.2.2",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@relayrunner/machine-protocol": "workspace:*"
   }
 }
