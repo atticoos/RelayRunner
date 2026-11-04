@@ -6,28 +6,28 @@
       "idx": 0,
       "version": "6",
       "when": 1793770116843,
-      "tag": "0000_init",
+      "tag": "20261104052836_init",
       "breakpoints": true
     },
     {
       "idx": 1,
       "version": "6",
       "when": 1793808122855,
-      "tag": "0001_workspaces",
+      "tag": "20261104160202_workspaces",
       "breakpoints": true
     },
     {
       "idx": 2,
       "version": "6",
       "when": 1793810012103,
-      "tag": "0002_installation_repository_selection",
+      "tag": "20261104163332_installation_repository_selection",
       "breakpoints": true
     },
     {
       "idx": 3,
       "version": "6",
       "when": 1793810966043,
-      "tag": "0003_installation_github_state_at",
+      "tag": "20261104164926_installation_github_state_at",
       "breakpoints": true
     },
     {

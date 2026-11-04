@@ -3,10 +3,10 @@
 GitHub webhook ingress, on its own Cloudflare Worker. It verifies each delivery's signature, turns it into a compact `WebhookMessage` (from `packages/github-webhooks`) and puts it on the `relayrunner-github-webhooks` queue. The API Worker (`apps/api`) consumes the queue and does the work.
 
 ```
-GitHub ──▶ relayrunner-app ──▶ relayrunner-webhooks ──▶ queue ──▶ relayrunner-api queue()
-           /api/webhooks/*      verify + enqueue                    │ 6 retries, backoff
-                                                                    ▼
-                                                                   DLQ ──▶ log + ack
+GitHub ──▶ relayrunner-webhooks ──▶ queue ──▶ relayrunner-api queue()
+           verify + enqueue                    │ 6 retries, backoff
+                                               ▼
+                                              DLQ ──▶ log + ack
 ```
 
 It is separate from the API so that API deploys, and bugs in processing, never change what GitHub sees. While the API is broken, messages wait and retry (30 seconds, doubling, up to about half an hour in total) instead of failing deliveries. Keep this Worker small: it should rarely need a deploy.
@@ -48,4 +48,4 @@ pnpm run deploy:api    # attaches the queue consumers
 pnpm run deploy:web    # forwards /api/webhooks/* here
 ```
 
-The GitHub App's webhook URL doesn't change. It can also point straight at `https://relayrunner-webhooks.relayrun.workers.dev/api/webhooks/github`, which takes the dashboard Worker out of the path.
+The GitHub App's webhook URL is `https://relayrunner-webhooks.relayrun.workers.dev/api/webhooks/github`, so deliveries reach this Worker directly. The dashboard also forwards `/api/webhooks/*` here, so `<dashboard origin>/api/webhooks/github` works too.
