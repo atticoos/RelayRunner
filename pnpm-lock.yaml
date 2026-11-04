@@ -62,6 +62,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@relayrunner/access':
+        specifier: workspace:*
+        version: link:../../packages/access
       '@relayrunner/github-webhooks':
         specifier: workspace:*
         version: link:../../packages/github-webhooks

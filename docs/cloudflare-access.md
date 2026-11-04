@@ -25,6 +25,21 @@ The Worker checks the JWT in addition to the Access edge check. If the Access ap
 
 To add a dev-only view, put its page under `/dev/` and its data under `/api/dev/`. The API Worker's own `workers.dev` URL is public. An `/api/dev/*` route in `apps/api` must call `gateDevOnly` itself, and must not trust a header set by the dashboard Worker.
 
+## Webhook dead letters
+
+`/dev/webhooks` is the first dev view. It lists GitHub webhook deliveries that failed every retry and reached `relayrunner-github-webhooks-dlq`, with Replay and Discard buttons and a bulk replay by event or repository. The API's DLQ consumer archives each one to the R2 bucket `relayrunner-webhook-dead-letters` as `YYYY/MM/DD/<delivery-id>.json`, and acks only after that write succeeds. A lifecycle rule deletes objects after 30 days. The archive is in R2, not D1, because D1 failing is the likeliest reason a delivery dead-letters.
+
+Agents can call the API directly through a preview host with the service token:
+
+| Route                                            | What it does                                                                                                     |
+| ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| `GET /api/dev/webhooks/dead-letters`             | Newest first. `?cursor=` takes the `nextCursor` of the last page; `?event=` and `?repository=` filter.           |
+| `POST /api/dev/webhooks/dead-letters/:id/replay` | Sends the original message, with its delivery ID, back to the main queue, then deletes the dead letter.          |
+| `POST /api/dev/webhooks/dead-letters/replay`     | Bulk replay of up to 100 dead letters matching a JSON body of `{ "event", "repository" }`. A filter is required. |
+| `DELETE /api/dev/webhooks/dead-letters/:id`      | Discards one.                                                                                                    |
+
+Previews share the production API, so replaying from a preview acts on production. Fix the cause first, then replay what failed. An hourly cron logs `webhook dead letters rising` when `DEAD_LETTER_ALERT_THRESHOLD` (10) or more land in an hour, and posts to `DEAD_LETTER_ALERT_WEBHOOK_URL` if that secret is set.
+
 ## Account setup
 
 All of this is already set up in the RelayRunner Zero Trust organization (team domain `relayrunner.cloudflareaccess.com`). Look in Zero Trust > Access to find each item.
@@ -34,7 +49,7 @@ All of this is already set up in the RelayRunner Zero Trust organization (team d
 - **Policy** `RelayRunner team` (Allow): members of the `relayrunner` GitHub org, plus the team's email addresses as a fallback. Adding someone to the GitHub org gives them access.
 - **Policy** `RelayRunner agents` (Service Auth): the `relayrunner-agents` service token. The token expires after one year.
 
-To rebuild the setup, create the application with the same domain and attach both policies, then copy the new AUD into `wrangler.jsonc`. Deploy `api`, `webhooks` and `web` so that the `preview_urls` settings apply.
+To rebuild the setup, create the application with the same domain and attach both policies, then copy the new AUD into `wrangler.jsonc`. Also copy it into `vars.ACCESS_AUD` in `apps/api/wrangler.jsonc`, which checks the same JWT on `/api/dev/*`. Deploy `api`, `webhooks` and `web` so that the `preview_urls` settings apply.
 
 ## Agent access
 

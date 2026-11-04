@@ -1,10 +1,19 @@
+import type { AccessEnv } from "@relayrunner/access";
+import type { WebhookMessage } from "@relayrunner/github-webhooks";
 import type { MachineLink } from "./durable-objects/machine-link.ts";
 import type { PickRunner } from "./durable-objects/pick-runner.ts";
 import type { Router } from "./durable-objects/router.ts";
 
 // Bindings from wrangler.jsonc, plus secrets set with `wrangler secret put` (or .dev.vars locally).
-export interface Env {
+export interface Env extends AccessEnv {
   DB: D1Database;
+  // Webhook dead letters (src/dead-letters.ts), and the queue a replay sends them back to.
+  DEAD_LETTERS: R2Bucket;
+  WEBHOOK_QUEUE: Queue<WebhookMessage>;
+  // Alert when more than this many messages are dead-lettered in an hour (src/dead-letter-alert.ts).
+  DEAD_LETTER_ALERT_THRESHOLD?: string;
+  // Optional: also POST the alert here (a Slack or Discord incoming webhook), via `wrangler secret put`.
+  DEAD_LETTER_ALERT_WEBHOOK_URL?: string;
   PICK_RUNNER: DurableObjectNamespace<PickRunner>;
   ROUTER: DurableObjectNamespace<Router>;
   MACHINE_LINK: DurableObjectNamespace<MachineLink>;

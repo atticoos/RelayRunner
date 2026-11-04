@@ -1,5 +1,6 @@
 import { app } from "./app.ts";
 import type { WebhookMessage } from "@relayrunner/github-webhooks";
+import { checkDeadLetterGrowth } from "./dead-letter-alert.ts";
 import type { Env } from "./env.ts";
 import { handleWebhookBatch } from "./webhook-queue.ts";
 
@@ -11,4 +12,8 @@ export { Router } from "./durable-objects/router.ts";
 export default {
   fetch: app.fetch,
   queue: handleWebhookBatch,
+  // Hourly: alert when webhook dead letters pile up.
+  async scheduled(_controller, env) {
+    await checkDeadLetterGrowth(env);
+  },
 } satisfies ExportedHandler<Env, WebhookMessage>;
