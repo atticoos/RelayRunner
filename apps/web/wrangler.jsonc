@@ -22,7 +22,16 @@
     { "binding": "WEBHOOKS", "service": "relayrunner-webhooks" }
   ],
   "workers_dev": true,
-  "observability": { "enabled": true },
+  // Workers Logs, traces and Issues (errors grouped per Worker). Wrangler deploys overwrite
+  // dashboard settings, so these must stay on here. Source maps make Issues' stacks point at
+  // the TypeScript source.
+  "observability": {
+    "enabled": true,
+    "logs": { "enabled": true, "invocation_logs": true },
+    "traces": { "enabled": true },
+    "issues": { "enabled": true }
+  },
+  "upload_source_maps": true,
   // Settings for PR preview builds (`wrangler preview` in Workers Builds).
   // Bindings aren't inherited here, so previews forward /api/* to the
   // production API Worker too. Sign-in works through the API's oAuthProxy plugin
