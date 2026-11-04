@@ -2,9 +2,9 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "web",
+      "name": "landing",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--dir", "apps/web", "dev", "--port", "5178", "--strictPort"],
+      "runtimeArgs": ["--dir", "apps/landing", "dev", "--port", "5178", "--strictPort"],
       "port": 5178
     }
   ]
