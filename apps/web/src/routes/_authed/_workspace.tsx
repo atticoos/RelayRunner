@@ -1,7 +1,9 @@
-import { Link, Outlet, createFileRoute, redirect, useRouter } from "@tanstack/react-router";
-import { Brand } from "@/components/brand";
-import { Button } from "@/components/ui/button";
-import { authDisabled, signOut } from "@/lib/auth-client";
+import { Link, Outlet, createFileRoute, redirect, useMatchRoute } from "@tanstack/react-router";
+import { ArrowLeftIcon } from "lucide-react";
+import type { ReactNode } from "react";
+import { Badge } from "@/components/ui/badge";
+import { WorkspaceMenu } from "@/components/workspace-menu";
+import { authDisabled } from "@/lib/auth-client";
 import { ensureActiveWorkspace, getCurrentWorkspace, type CurrentWorkspace } from "@/lib/workspace";
 
 const devWorkspace: CurrentWorkspace = {
@@ -36,56 +38,85 @@ export const Route = createFileRoute("/_authed/_workspace")({
 const nav = [
   { to: "/runners", label: "Runners" },
   { to: "/activity", label: "Activity" },
-  { to: "/workspace", label: "Workspace" },
 ] as const;
+
+const navLink =
+  "rounded-md px-2.5 py-1.5 text-[15px] text-sidebar-foreground transition-colors hover:text-sidebar-accent-foreground";
+const navActive = { className: "bg-sidebar-accent text-sidebar-accent-foreground" };
 
 function WorkspaceLayout() {
   const { user, current } = Route.useRouteContext();
-  const router = useRouter();
-
-  async function handleSignOut() {
-    await signOut();
-    await router.navigate({ to: "/login" });
-  }
+  const inSettings = useMatchRoute()({ to: "/settings", fuzzy: true });
 
   return (
-    <div className="grid min-h-screen grid-cols-1 grid-rows-[auto_1fr] sm:grid-cols-[220px_1fr] sm:grid-rows-1">
-      <aside className="flex flex-col gap-3 border-b border-sidebar-border bg-sidebar px-4 py-5 sm:gap-6 sm:border-r sm:border-b-0">
-        <div className="grid gap-1 px-2.5">
-          <Brand />
-          <Link
-            to="/workspace"
-            className="truncate text-sm text-muted-foreground hover:text-foreground"
-          >
-            {current.workspace.name}
-          </Link>
-        </div>
-        <nav className="flex flex-row flex-wrap gap-0.5 sm:flex-col">
-          {nav.map((item) => (
-            <Link
-              key={item.to}
-              to={item.to}
-              className="rounded-md px-2.5 py-1.5 text-[15px] text-sidebar-foreground transition-colors hover:text-sidebar-accent-foreground"
-              activeProps={{ className: "bg-sidebar-accent text-sidebar-accent-foreground" }}
-            >
-              {item.label}
-            </Link>
-          ))}
-        </nav>
-        <div className="flex flex-row items-center gap-2 px-2.5 sm:mt-auto sm:flex-col sm:items-start">
-          <span className="text-sm text-muted-foreground">
-            {user?.name ?? "Dev (auth disabled)"}
-          </span>
-          {user && (
-            <Button variant="outline" size="sm" onClick={handleSignOut}>
-              Sign out
-            </Button>
-          )}
-        </div>
+    <div className="grid min-h-screen grid-cols-1 grid-rows-[auto_1fr] sm:grid-cols-[240px_1fr] sm:grid-rows-1">
+      <aside className="flex flex-col gap-3 border-b border-sidebar-border bg-sidebar px-3 py-4 sm:gap-6 sm:border-r sm:border-b-0 sm:py-5">
+        {inSettings ? (
+          <SettingsNav workspaceName={current.workspace.name} />
+        ) : (
+          <>
+            <WorkspaceMenu workspace={current.workspace} user={user} />
+            <nav className="flex flex-row flex-wrap gap-0.5 px-1 sm:flex-col">
+              {nav.map((item) => (
+                <Link key={item.to} to={item.to} className={navLink} activeProps={navActive}>
+                  {item.label}
+                </Link>
+              ))}
+            </nav>
+          </>
+        )}
       </aside>
       <main className="p-4 sm:p-8">
         <Outlet />
       </main>
+    </div>
+  );
+}
+
+/** Takes the sidebar's place under /settings: workspace pages, then the user's own. */
+function SettingsNav({ workspaceName }: { workspaceName: string }) {
+  return (
+    <div className="grid gap-3 px-1 sm:gap-5">
+      <Link
+        to="/runners"
+        className="inline-flex items-center gap-1.5 px-2.5 text-sm text-muted-foreground hover:text-foreground"
+      >
+        <ArrowLeftIcon aria-hidden className="size-4" />
+        Back to dashboard
+      </Link>
+      <nav className="flex flex-row flex-wrap gap-x-4 gap-y-3 sm:flex-col">
+        <SettingsGroup label={workspaceName}>
+          <Link to="/settings/general" className={navLink} activeProps={navActive}>
+            General
+          </Link>
+          <Link to="/settings/github" className={navLink} activeProps={navActive}>
+            GitHub orgs
+          </Link>
+          <span
+            aria-disabled
+            className="flex items-center gap-2 px-2.5 py-1.5 text-[15px] text-sidebar-foreground/60"
+          >
+            Members
+            <Badge variant="idle" className="px-1.5 text-[10px] tracking-wider">
+              SOON
+            </Badge>
+          </span>
+        </SettingsGroup>
+        <SettingsGroup label="Account">
+          <Link to="/settings/account" className={navLink} activeProps={navActive}>
+            Profile
+          </Link>
+        </SettingsGroup>
+      </nav>
+    </div>
+  );
+}
+
+function SettingsGroup({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="grid min-w-0 content-start gap-0.5">
+      <span className="truncate px-2.5 pb-1 text-xs text-muted-foreground">{label}</span>
+      <div className="flex flex-row flex-wrap gap-0.5 sm:flex-col">{children}</div>
     </div>
   );
 }

@@ -19,6 +19,10 @@ import { Route as AuthedWorkspaceActivityRouteImport } from './routes/_authed/_w
 import { Route as AuthedWorkspaceRunnersRouteImport } from './routes/_authed/_workspace/runners'
 import { Route as AuthedWorkspaceWorkspaceRouteImport } from './routes/_authed/_workspace/workspace'
 import { Route as AuthedWorkspacesNewRouteImport } from './routes/_authed/workspaces.new'
+import { Route as AuthedWorkspaceSettingsIndexRouteImport } from './routes/_authed/_workspace/settings.index'
+import { Route as AuthedWorkspaceSettingsAccountRouteImport } from './routes/_authed/_workspace/settings.account'
+import { Route as AuthedWorkspaceSettingsGeneralRouteImport } from './routes/_authed/_workspace/settings.general'
+import { Route as AuthedWorkspaceSettingsGithubRouteImport } from './routes/_authed/_workspace/settings.github'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -69,6 +73,30 @@ const AuthedWorkspacesNewRoute = AuthedWorkspacesNewRouteImport.update({
   path: '/workspaces/new',
   getParentRoute: () => AuthedRoute,
 } as any)
+const AuthedWorkspaceSettingsIndexRoute =
+  AuthedWorkspaceSettingsIndexRouteImport.update({
+    id: '/settings/',
+    path: '/settings/',
+    getParentRoute: () => AuthedWorkspaceRoute,
+  } as any)
+const AuthedWorkspaceSettingsAccountRoute =
+  AuthedWorkspaceSettingsAccountRouteImport.update({
+    id: '/settings/account',
+    path: '/settings/account',
+    getParentRoute: () => AuthedWorkspaceRoute,
+  } as any)
+const AuthedWorkspaceSettingsGeneralRoute =
+  AuthedWorkspaceSettingsGeneralRouteImport.update({
+    id: '/settings/general',
+    path: '/settings/general',
+    getParentRoute: () => AuthedWorkspaceRoute,
+  } as any)
+const AuthedWorkspaceSettingsGithubRoute =
+  AuthedWorkspaceSettingsGithubRouteImport.update({
+    id: '/settings/github',
+    path: '/settings/github',
+    getParentRoute: () => AuthedWorkspaceRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -79,6 +107,10 @@ export interface FileRoutesByFullPath {
   '/runners': typeof AuthedWorkspaceRunnersRoute
   '/workspace': typeof AuthedWorkspaceWorkspaceRoute
   '/workspaces/new': typeof AuthedWorkspacesNewRoute
+  '/settings/account': typeof AuthedWorkspaceSettingsAccountRoute
+  '/settings/general': typeof AuthedWorkspaceSettingsGeneralRoute
+  '/settings/github': typeof AuthedWorkspaceSettingsGithubRoute
+  '/settings/': typeof AuthedWorkspaceSettingsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -89,6 +121,10 @@ export interface FileRoutesByTo {
   '/runners': typeof AuthedWorkspaceRunnersRoute
   '/workspace': typeof AuthedWorkspaceWorkspaceRoute
   '/workspaces/new': typeof AuthedWorkspacesNewRoute
+  '/settings/account': typeof AuthedWorkspaceSettingsAccountRoute
+  '/settings/general': typeof AuthedWorkspaceSettingsGeneralRoute
+  '/settings/github': typeof AuthedWorkspaceSettingsGithubRoute
+  '/settings': typeof AuthedWorkspaceSettingsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -102,6 +138,10 @@ export interface FileRoutesById {
   '/_authed/_workspace/runners': typeof AuthedWorkspaceRunnersRoute
   '/_authed/_workspace/workspace': typeof AuthedWorkspaceWorkspaceRoute
   '/_authed/workspaces/new': typeof AuthedWorkspacesNewRoute
+  '/_authed/_workspace/settings/account': typeof AuthedWorkspaceSettingsAccountRoute
+  '/_authed/_workspace/settings/general': typeof AuthedWorkspaceSettingsGeneralRoute
+  '/_authed/_workspace/settings/github': typeof AuthedWorkspaceSettingsGithubRoute
+  '/_authed/_workspace/settings/': typeof AuthedWorkspaceSettingsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -114,6 +154,10 @@ export interface FileRouteTypes {
     | '/runners'
     | '/workspace'
     | '/workspaces/new'
+    | '/settings/account'
+    | '/settings/general'
+    | '/settings/github'
+    | '/settings/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -124,6 +168,10 @@ export interface FileRouteTypes {
     | '/runners'
     | '/workspace'
     | '/workspaces/new'
+    | '/settings/account'
+    | '/settings/general'
+    | '/settings/github'
+    | '/settings'
   id:
     | '__root__'
     | '/'
@@ -136,6 +184,10 @@ export interface FileRouteTypes {
     | '/_authed/_workspace/runners'
     | '/_authed/_workspace/workspace'
     | '/_authed/workspaces/new'
+    | '/_authed/_workspace/settings/account'
+    | '/_authed/_workspace/settings/general'
+    | '/_authed/_workspace/settings/github'
+    | '/_authed/_workspace/settings/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -217,6 +269,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedWorkspacesNewRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/_workspace/settings/': {
+      id: '/_authed/_workspace/settings/'
+      path: '/settings'
+      fullPath: '/settings/'
+      preLoaderRoute: typeof AuthedWorkspaceSettingsIndexRouteImport
+      parentRoute: typeof AuthedWorkspaceRoute
+    }
+    '/_authed/_workspace/settings/account': {
+      id: '/_authed/_workspace/settings/account'
+      path: '/settings/account'
+      fullPath: '/settings/account'
+      preLoaderRoute: typeof AuthedWorkspaceSettingsAccountRouteImport
+      parentRoute: typeof AuthedWorkspaceRoute
+    }
+    '/_authed/_workspace/settings/general': {
+      id: '/_authed/_workspace/settings/general'
+      path: '/settings/general'
+      fullPath: '/settings/general'
+      preLoaderRoute: typeof AuthedWorkspaceSettingsGeneralRouteImport
+      parentRoute: typeof AuthedWorkspaceRoute
+    }
+    '/_authed/_workspace/settings/github': {
+      id: '/_authed/_workspace/settings/github'
+      path: '/settings/github'
+      fullPath: '/settings/github'
+      preLoaderRoute: typeof AuthedWorkspaceSettingsGithubRouteImport
+      parentRoute: typeof AuthedWorkspaceRoute
+    }
   }
 }
 
@@ -224,12 +304,20 @@ interface AuthedWorkspaceRouteChildren {
   AuthedWorkspaceActivityRoute: typeof AuthedWorkspaceActivityRoute
   AuthedWorkspaceRunnersRoute: typeof AuthedWorkspaceRunnersRoute
   AuthedWorkspaceWorkspaceRoute: typeof AuthedWorkspaceWorkspaceRoute
+  AuthedWorkspaceSettingsAccountRoute: typeof AuthedWorkspaceSettingsAccountRoute
+  AuthedWorkspaceSettingsGeneralRoute: typeof AuthedWorkspaceSettingsGeneralRoute
+  AuthedWorkspaceSettingsGithubRoute: typeof AuthedWorkspaceSettingsGithubRoute
+  AuthedWorkspaceSettingsIndexRoute: typeof AuthedWorkspaceSettingsIndexRoute
 }
 
 const AuthedWorkspaceRouteChildren: AuthedWorkspaceRouteChildren = {
   AuthedWorkspaceActivityRoute: AuthedWorkspaceActivityRoute,
   AuthedWorkspaceRunnersRoute: AuthedWorkspaceRunnersRoute,
   AuthedWorkspaceWorkspaceRoute: AuthedWorkspaceWorkspaceRoute,
+  AuthedWorkspaceSettingsAccountRoute: AuthedWorkspaceSettingsAccountRoute,
+  AuthedWorkspaceSettingsGeneralRoute: AuthedWorkspaceSettingsGeneralRoute,
+  AuthedWorkspaceSettingsGithubRoute: AuthedWorkspaceSettingsGithubRoute,
+  AuthedWorkspaceSettingsIndexRoute: AuthedWorkspaceSettingsIndexRoute,
 }
 
 const AuthedWorkspaceRouteWithChildren = AuthedWorkspaceRoute._addFileChildren(
