@@ -1,5 +1,7 @@
+import type { ActivityJob, ActivityRunner } from "@relayrunner/activity";
 import type { WebhookMessage } from "@relayrunner/github-webhooks";
-import { and, desc, eq, isNull, lt, type SQL, sql } from "drizzle-orm";
+import { and, eq, isNull, type SQL, sql } from "drizzle-orm";
+import { recordEvent } from "./activity.ts";
 import { type Db, schema } from "./db/index.ts";
 import { findInstallation } from "./installations.ts";
 import { routeIdFromLabels } from "./routing.ts";
@@ -17,7 +19,8 @@ const rank = (status: SQL) =>
 /**
  * Records a workflow_job delivery for the Activity page. A `pick` job (it asked for the relayrunner
  * label) is always stored and marks its run as routed. Any other job is stored only when its run
- * already has a pick. Returns whether anything was written.
+ * already has a pick. A stored non-pick job also logs one `job.routed` event in its workspace's
+ * Activity, the first time it's seen. Returns whether anything was written.
  *
  * Skipped when the installation has no row yet (its webhook hasn't arrived, or it was uninstalled).
  * A later event for the same job writes it, since each one carries the job's full state.
@@ -28,7 +31,8 @@ export async function recordWorkflowJob(
   isPick: boolean,
 ): Promise<boolean> {
   const { installationId, job, repository } = message;
-  if (!installationId || !(await findInstallation(db, installationId))) return false;
+  const installation = installationId ? await findInstallation(db, installationId) : null;
+  if (!installationId || !installation) return false;
   // Matched on run id alone, so a re-run of failed jobs (a new attempt that reuses the earlier
   // attempt's pick output) still counts as routed.
   if (!isPick && !(await runHasPick(db, job.runId))) return false;
@@ -72,6 +76,16 @@ export async function recordWorkflowJob(
       },
       setWhere: sql`${rank(sql`${table.status}`)} <= ${rank(sql`excluded.status`)}`,
     });
+  // The job's row now exists, so its event can point at it. Logged once per job (the event's
+  // unique job index), whatever order its webhooks arrive in.
+  if (!isPick && installation.workspaceId)
+    await recordEvent(db, {
+      workspaceId: installation.workspaceId,
+      type: "job.routed",
+      data: {},
+      jobId: job.id,
+      occurredAt: row.githubCreatedAt,
+    });
   return true;
 }
 
@@ -102,65 +116,20 @@ function parseDate(value: string | null | undefined) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-export const ACTIVITY_PAGE_SIZE = 50;
-
-/**
- * The workspace's routed jobs, newest first: the real work jobs, not the pick jobs that routed
- * them. `before` is a job id from a previous page. GitHub job ids increase over time, so ordering
- * by id is ordering by when the job was created.
- */
-export async function listActivity(db: Db, workspaceId: string, before?: number) {
-  const rows = await db
-    .select({
-      job: table,
-      private: schema.githubRepository.private,
-      machineName: schema.machine.name,
-    })
-    .from(table)
-    .innerJoin(schema.githubInstallation, eq(schema.githubInstallation.id, table.installationId))
-    .leftJoin(schema.githubRepository, eq(schema.githubRepository.id, table.repositoryId))
-    .leftJoin(schema.machine, eq(schema.machine.id, table.machineId))
-    .where(
-      and(
-        eq(schema.githubInstallation.workspaceId, workspaceId),
-        eq(table.kind, "job"),
-        before === undefined ? undefined : lt(table.id, before),
-      ),
-    )
-    .orderBy(desc(table.id))
-    .limit(ACTIVITY_PAGE_SIZE + 1);
-  const page = rows.slice(0, ACTIVITY_PAGE_SIZE);
-  return {
-    jobs: page.map(({ job, private: isPrivate, machineName }) =>
-      presentJob(job, isPrivate, machineName),
-    ),
-    nextBefore: rows.length > ACTIVITY_PAGE_SIZE ? page[page.length - 1].job.id : null,
-  };
-}
-
-export type ActivityJob = ReturnType<typeof presentJob>;
-
-/**
- * Where RelayRunner sent a job. A job on a route's `rr-<id>` label went to a machine: `name` is the
- * machine's current name, or null before the route is claimed or once the machine is deleted. Any
- * other job ran on the GitHub label the pick answered, such as `ubuntu-latest`. The `rr-` label
- * itself is never shown: it's a one-time id, not a runner.
- */
-export type ActivityRunner =
-  | { type: "machine"; machineId: string | null; name: string | null }
-  | { type: "github"; label: string };
-
+// Where RelayRunner sent the job. The `rr-` label itself is never shown: it's a one-time id, not a
+// runner.
 function presentRunner(job: typeof table.$inferSelect, machineName: string | null): ActivityRunner {
   if (job.machineId || routeIdFromLabels(job.labels))
     return { type: "machine", machineId: job.machineId, name: machineName };
   return { type: "github", label: job.labels.join(", ") };
 }
 
-function presentJob(
+/** A routed job's current state, for its Activity entry. */
+export function presentJob(
   job: typeof table.$inferSelect,
   isPrivate: boolean | null,
   machineName: string | null,
-) {
+): ActivityJob {
   return {
     id: job.id,
     repository: job.repositoryFullName,
@@ -181,5 +150,6 @@ function presentJob(
     startedAt: job.startedAt?.toISOString() ?? null,
     completedAt: job.completedAt?.toISOString() ?? null,
     url: `https://github.com/${job.repositoryFullName}/actions/runs/${job.runId}/job/${job.id}`,
+    runUrl: `https://github.com/${job.repositoryFullName}/actions/runs/${job.runId}`,
   };
 }

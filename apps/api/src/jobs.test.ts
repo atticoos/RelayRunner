@@ -2,7 +2,7 @@ import type { WebhookMessage, WorkflowJob } from "@relayrunner/github-webhooks";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import { createDb, schema } from "./db/index.ts";
 import type { Env } from "./env.ts";
-import type { ActivityJob } from "./jobs.ts";
+import type { ActivityPage } from "@relayrunner/activity";
 import * as testing from "./testing.ts";
 import { processWebhook } from "./webhook-queue.ts";
 
@@ -80,10 +80,16 @@ function jobEvent(
   };
 }
 
+// The routed jobs in a page of the Activity log.
 async function activity(cookie: string, query = "") {
   const res = await testing.call(env, `/activity${query}`, cookie);
   expect(res.status).toBe(200);
-  return (await res.json()) as { jobs: ActivityJob[]; nextBefore: number | null };
+  const page = (await res.json()) as ActivityPage;
+  return {
+    items: page.items,
+    jobs: page.items.flatMap((item) => (item.type === "job.routed" && item.job ? [item.job] : [])),
+    nextBefore: page.nextBefore,
+  };
 }
 
 describe("Activity", () => {
@@ -126,8 +132,11 @@ describe("Activity", () => {
         repository: "relayrunner/relayrunner-ci-tests",
         startedAt: "2026-11-04T18:01:00.000Z",
         url: `https://github.com/relayrunner/relayrunner-ci-tests/actions/runs/${runId}/job/${test.id}`,
+        runUrl: `https://github.com/relayrunner/relayrunner-ci-tests/actions/runs/${runId}`,
       },
     ]);
+    // One event for the job, however many webhooks it got.
+    expect((await activity(cookie)).items).toHaveLength(1);
   });
 
   test("names the machine a route sent the job to, never the rr- label", async () => {
@@ -275,12 +284,14 @@ describe("Activity", () => {
     const first = await activity(cookie);
     expect(first.jobs).toHaveLength(50);
     expect(first.jobs[0].name).toBe("test 50");
-    expect(first.nextBefore).toBe(runId * 100 + 1);
+    expect(first.nextBefore).toBe(first.items[49].id);
     const second = await activity(cookie, `?before=${first.nextBefore}`);
     expect(second.jobs.map((job) => job.name)).toEqual(["test 0"]);
     expect(second.nextBefore).toBeNull();
 
-    const bad = await testing.call(env, "/activity?before=nope", cookie);
-    expect(bad.status).toBe(400);
+    for (const query of ["?before=nope", "?filter=repo"]) {
+      const bad = await testing.call(env, `/activity${query}`, cookie);
+      expect(bad.status).toBe(400);
+    }
   });
 });
