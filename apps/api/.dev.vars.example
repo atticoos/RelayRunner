@@ -1,5 +1,6 @@
 # Copy to .dev.vars for `pnpm dev`. Use a GitHub App's OAuth client id/secret with the callback
 # URL http://localhost:8787/api/auth/callback/github.
+BETTER_AUTH_URL=http://localhost:8787
 BETTER_AUTH_SECRET=generate-with-openssl-rand-base64-32
 GITHUB_APP_CLIENT_ID=
 GITHUB_APP_CLIENT_SECRET=
