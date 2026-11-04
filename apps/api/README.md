@@ -31,5 +31,7 @@ pnpm dev                          # http://localhost:8787/api/health
 wrangler d1 create relayrunner    # paste the id into wrangler.jsonc
 pnpm db:migrate:remote
 wrangler secret put BETTER_AUTH_SECRET   # and GITHUB_APP_CLIENT_ID, GITHUB_APP_CLIENT_SECRET, GITHUB_WEBHOOK_SECRET
-pnpm deploy --var BETTER_AUTH_URL:https://relayrunner.dev
+pnpm deploy --var BETTER_AUTH_URL:https://app.relayrunner.dev
 ```
+
+The browser never talks to this Worker directly: the dashboard Worker (`apps/web`) forwards `/api/*` here over a service binding, so `BETTER_AUTH_URL` is the dashboard's origin. Until `app.relayrunner.dev` is set up, use the dashboard's workers.dev URL (`https://relayrunner-app.<subdomain>.workers.dev`). Deploy this Worker before `apps/web`, since the binding needs it to exist. The GitHub App's callback URL is `<BETTER_AUTH_URL>/api/auth/callback/github`.
