@@ -94,7 +94,18 @@ importers:
         specifier: 'catalog:'
         version: 4.157.0(@cloudflare/workers-types@5.20261104.1)(@types/node@22.20.5)
 
-  apps/cli: {}
+  apps/cli:
+    dependencies:
+      citty:
+        specifier: ^0.2.2
+        version: 0.2.2
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.7
+    devDependencies:
+      '@relayrunner/machine-protocol':
+        specifier: workspace:*
+        version: link:../../packages/machine-protocol
 
   apps/landing:
     dependencies:
@@ -2765,6 +2776,9 @@ packages:
   chokidar@5.0.0:
     resolution: {integrity: sha512-TQMmc3w+5AxjpL8iIiwebF73dRDF4fBIieAqGn9RGCWaEVwQ6Fb2cGe31Yns0RRIzii5goJ1Y7xbMwo1TxMplw==}
     engines: {node: '>= 20.19.0'}
+
+  citty@0.2.2:
+    resolution: {integrity: sha512-+6vJA3L98yv+IdfKGZHBNiGW5KHn22e/JwID0Strsz8h4S/csAu/OuICwxrg44k5MRiZHWIo8XXuJgQTriRP4w==}
 
   class-variance-authority@0.7.1:
     resolution: {integrity: sha512-Ka+9Trutv7G8M6WT6SeiRWz792K5qEqIGEGzXKhAE6xOWAY6pPH8U+9IY3oCMv6kqTmLsv7Xh/2w2RigkePMsg==}
@@ -5577,6 +5591,8 @@ snapshots:
   chokidar@5.0.0:
     dependencies:
       readdirp: 5.1.1
+
+  citty@0.2.2: {}
 
   class-variance-authority@0.7.1:
     dependencies:
