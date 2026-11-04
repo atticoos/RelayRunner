@@ -50,6 +50,13 @@
       "when": 1793824474552,
       "tag": "20261104203434_workflow_job",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1793826345415,
+      "tag": "20261104210545_activity_event",
+      "breakpoints": true
     }
   ]
 }

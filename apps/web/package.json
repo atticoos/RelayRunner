@@ -10,9 +10,10 @@
     "deploy": "vite build && wrangler deploy"
   },
   "dependencies": {
-    "@relayrunner/access": "workspace:*",
     "@fontsource-variable/hanken-grotesk": "catalog:",
     "@fontsource-variable/jetbrains-mono": "catalog:",
+    "@relayrunner/access": "workspace:*",
+    "@relayrunner/activity": "workspace:*",
     "@tanstack/react-router": "^1.170.46",
     "better-auth": "catalog:",
     "class-variance-authority": "^0.7.1",

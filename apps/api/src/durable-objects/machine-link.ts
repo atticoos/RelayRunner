@@ -1,5 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { eq } from "drizzle-orm";
+import type { DisconnectReason } from "@relayrunner/activity";
+import { recordMachineEvent } from "../activity.ts";
 import { createDb, schema } from "../db/index.ts";
 import type { Env } from "../env.ts";
 import { encodeMessage, PROTOCOL_VERSION, type JobMessage } from "@relayrunner/machine-protocol";
@@ -65,11 +67,18 @@ export class MachineLink extends DurableObject<Env> {
     if (!session) return close(ws, CLOSE.policy, "unknown socket");
     const outcome = handleFrame(session, frame, Date.now());
     ws.serializeAttachment(outcome.state);
+    // The first hello is when the machine comes online.
+    if (!session.hello && outcome.state.hello)
+      await recordMachineEvent(createDb(this.env.DB), session.machineId, {
+        type: "machine.connected",
+        data: { runnerVersion: outcome.state.hello.runnerVersion ?? null },
+      });
     if ("job" in outcome && outcome.job) await this.onJob(session.machineId, outcome.job);
     if ("reply" in outcome) {
       ws.send(outcome.reply);
       close(ws, outcome.close.code, outcome.close.reason);
       await this.touch(session.machineId);
+      await this.disconnected(session, "error");
     }
   }
 
@@ -77,7 +86,11 @@ export class MachineLink extends DurableObject<Env> {
     // Finish the closing handshake; the machine started it.
     close(ws, code === 1005 || code === 1006 ? 1000 : code, reason);
     const session = attachment(ws);
-    if (session) await this.touch(session.machineId);
+    if (!session) return;
+    await this.touch(session.machineId);
+    // A close this side started (timeout, revoke, replaced, protocol error) was logged when it
+    // closed, or deliberately not logged (replaced), so only the machine's own close counts here.
+    if (!OWN_CLOSE_CODES.has(code)) await this.disconnected(session, "closed");
   }
 
   async webSocketError(ws: WebSocket) {
@@ -93,7 +106,10 @@ export class MachineLink extends DurableObject<Env> {
       const session = attachment(ws);
       if (!session || isStale(session, now)) {
         close(ws, CLOSE.timeout, "heartbeat timeout");
-        if (session) await this.touch(session.machineId);
+        if (session) {
+          await this.touch(session.machineId);
+          await this.disconnected(session, "timeout");
+        }
         continue;
       }
       earliest = Math.min(earliest ?? Infinity, session.lastHeardAt);
@@ -167,7 +183,11 @@ export class MachineLink extends DurableObject<Env> {
 
   /** Closes the machine's socket for good. DELETE /api/machines/:id calls this on revoke. */
   async revoke(): Promise<void> {
-    for (const ws of this.ctx.getWebSockets()) close(ws, CLOSE.revoked, "revoked");
+    for (const ws of this.ctx.getWebSockets()) {
+      close(ws, CLOSE.revoked, "revoked");
+      const session = attachment(ws);
+      if (session) await this.disconnected(session, "revoked");
+    }
   }
 
   // The machine's progress on a route. Once the job has started (the machine now says busy) or
@@ -200,6 +220,16 @@ export class MachineLink extends DurableObject<Env> {
     );
   }
 
+  // Logs that an online machine went offline. A socket that never said hello was never online, so
+  // it logs nothing.
+  private async disconnected(session: SessionState, reason: DisconnectReason) {
+    if (!session.hello) return;
+    await recordMachineEvent(createDb(this.env.DB), session.machineId, {
+      type: "machine.disconnected",
+      data: { reason },
+    });
+  }
+
   // last_seen_at is written when a connection opens or ends, not on every heartbeat. While the
   // machine is online, status() is the live answer.
   private async touch(machineId: string) {
@@ -209,6 +239,9 @@ export class MachineLink extends DurableObject<Env> {
       .where(eq(schema.machine.id, machineId));
   }
 }
+
+// Close codes this side sends. When the machine echoes one back, webSocketClose sees it again.
+const OWN_CLOSE_CODES = new Set<number>(Object.values(CLOSE));
 
 function attachment(ws: WebSocket) {
   return ws.deserializeAttachment() as SessionState | null;

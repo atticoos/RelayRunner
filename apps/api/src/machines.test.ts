@@ -1,3 +1,4 @@
+import type { ActivityPage } from "@relayrunner/activity";
 import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import { app } from "./app.ts";
 import { createDb } from "./db/index.ts";
@@ -297,6 +298,27 @@ describe("machines in the dashboard", () => {
       machines: unknown[];
     };
     expect(machines).toEqual([]);
+  });
+
+  test("enrolling and revoking a machine are logged in Activity, with who did it", async () => {
+    const { cookie, machine } = await enroll("revoke-log", "studio");
+    const revoked = await app.request(
+      `/api/machines/${machine.id}`,
+      { method: "DELETE", headers: { cookie, origin: env.BETTER_AUTH_URL } },
+      env,
+    );
+    expect(revoked.status).toBe(200);
+    const { items } = (await (await call("/activity", cookie)).json()) as ActivityPage;
+    expect(items).toMatchObject([
+      { type: "machine.revoked", machine: { id: machine.id, name: "studio" }, actor: {} },
+      {
+        type: "machine.enrolled",
+        data: { machineName: "studio", os: "macos", arch: "arm64" },
+        actor: {},
+      },
+    ]);
+    expect(items[0].actor).toEqual(items[1].actor);
+    expect(items[0].actor).not.toBeNull();
   });
 
   test("another workspace can't revoke the machine", async () => {

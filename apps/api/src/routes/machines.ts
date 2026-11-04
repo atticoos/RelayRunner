@@ -1,3 +1,4 @@
+import { recordEvent } from "../activity.ts";
 import { and, asc, eq, isNotNull, isNull } from "drizzle-orm";
 import { Hono } from "hono";
 import { APIError } from "better-auth/api";
@@ -121,6 +122,13 @@ export const machineRoutes = new Hono<AppEnv>()
       )
       .returning();
     if (!machine) return c.json({ error: "not_found" }, 404);
+    await recordEvent(db, {
+      workspaceId: machine.workspaceId,
+      type: "machine.enrolled",
+      data: { machineName: machine.name, os: machine.os, arch: machine.arch },
+      machineId: machine.id,
+      actorUserId: c.var.user!.id,
+    });
 
     // The CLI is done with the user session; only the machine token stays on the machine.
     await db.delete(schema.session).where(eq(schema.session.id, c.var.session!.id));
@@ -183,6 +191,13 @@ export const machineRoutes = new Hono<AppEnv>()
       )
       .returning();
     if (!machine) return c.json({ error: "not_found" }, 404);
+    await recordEvent(c.var.db, {
+      workspaceId: machine.workspaceId,
+      type: "machine.revoked",
+      data: { machineName: machine.name },
+      machineId: machine.id,
+      actorUserId: c.var.user!.id,
+    });
     // The token can't open a new socket any more; close the one that's open.
     await c.env.MACHINE_LINK.getByName(machine.id).revoke();
     return c.json({ machine: presentMachine(machine) });

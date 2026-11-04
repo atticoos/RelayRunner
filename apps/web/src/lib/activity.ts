@@ -1,42 +1,21 @@
+import type { ActivityFilter, ActivityJob, ActivityPage } from "@relayrunner/activity";
 import { api } from "@/lib/api";
 
-/**
- * A machine (name is null before the route is claimed, or once the machine is deleted), or the
- * GitHub label the pick answered, e.g. "ubuntu-latest".
- */
-export type ActivityRunner =
-  | { type: "machine"; machineId: string | null; name: string | null }
-  | { type: "github"; label: string };
+export type {
+  ActivityFilter,
+  ActivityItem,
+  ActivityJob,
+  ActivityPage,
+  ActivityRunner,
+} from "@relayrunner/activity";
 
-/** A job RelayRunner routed, as GET /api/activity returns it. */
-export type ActivityJob = {
-  id: number;
-  repository: string;
-  /** null when the gateway hasn't mirrored the repo yet. */
-  private: boolean | null;
-  runId: number;
-  runAttempt: number;
-  workflow: string | null;
-  name: string;
-  /** Where RelayRunner sent the job. */
-  runner: ActivityRunner;
-  /** The runner that took the job, e.g. "GitHub Actions 3". */
-  runnerName: string | null;
-  branch: string | null;
-  sha: string;
-  status: string;
-  conclusion: string | null;
-  createdAt: string;
-  startedAt: string | null;
-  completedAt: string | null;
-  /** The job's page on GitHub. */
-  url: string;
-};
-
-export type ActivityPage = { jobs: ActivityJob[]; nextBefore: number | null };
-
-export function getActivity(before?: number) {
-  return api<ActivityPage>(before === undefined ? "/activity" : `/activity?before=${before}`);
+/** A page of the workspace's Activity log, newest first. */
+export function getActivity({ before, filter }: { before?: number; filter?: ActivityFilter } = {}) {
+  const query = new URLSearchParams();
+  if (before !== undefined) query.set("before", String(before));
+  if (filter) query.set("filter", filter);
+  const qs = query.toString();
+  return api<ActivityPage>(qs ? `/activity?${qs}` : "/activity");
 }
 
 /** "3m ago", "2h ago", or a date for anything older than a day. */

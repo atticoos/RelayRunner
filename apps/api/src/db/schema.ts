@@ -268,3 +268,34 @@ export const workflowJob = sqliteTable(
     index("workflow_job_run_idx").on(table.runId, table.kind),
   ],
 );
+
+// The workspace's audit log for the Activity page: one append-only row per event, typed by
+// @relayrunner/activity (src/activity.ts writes and reads it). `data` holds the type's own fields
+// as JSON. The id increases with time, so it orders the log and pages it. Rows go with their
+// workspace, and a job's event goes with its workflow_job row.
+export const activityEvent = sqliteTable(
+  "activity_event",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspace.id, { onDelete: "cascade" }),
+    // e.g. 'machine.connected' or 'job.routed'.
+    type: text("type").notNull(),
+    // What the event is about. Each is set for its own kind of event, for joining live state.
+    machineId: text("machine_id").references(() => machine.id, { onDelete: "set null" }),
+    jobId: integer("job_id").references(() => workflowJob.id, { onDelete: "cascade" }),
+    // The user who did it. Null for things RelayRunner or a machine did on their own.
+    actorUserId: text("actor_user_id").references(() => user.id, { onDelete: "set null" }),
+    data: text("data", { mode: "json" }).$type<Record<string, unknown>>().notNull(),
+    occurredAt: integer("occurred_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (table) => [
+    index("activity_event_workspace_idx").on(table.workspaceId, table.id),
+    // One event per type per job, so a redelivered webhook never logs a job twice. Machine events
+    // have no job id, and NULLs never collide.
+    uniqueIndex("activity_event_job_idx").on(table.jobId, table.type),
+  ],
+);

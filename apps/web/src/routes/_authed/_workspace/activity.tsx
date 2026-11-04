@@ -1,16 +1,29 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Cloud, ExternalLink, Laptop, Lock } from "lucide-react";
+import {
+  Ban,
+  CircleCheck,
+  CircleMinus,
+  CircleX,
+  Clock,
+  Cloud,
+  Laptop,
+  LoaderCircle,
+  Lock,
+  Plug,
+  Plus,
+  Unplug,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/page-header";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   duration,
   getActivity,
   timeAgo,
+  type ActivityFilter,
+  type ActivityItem,
   type ActivityJob,
   type ActivityPage,
-  type ActivityRunner,
 } from "@/lib/activity";
 import { authDisabled } from "@/lib/auth-client";
 
@@ -19,32 +32,58 @@ const POLL_MS = 5_000;
 
 export const Route = createFileRoute("/_authed/_workspace/activity")({
   loader: (): Promise<ActivityPage> =>
-    authDisabled ? Promise.resolve(samplePage()) : getActivity(),
+    authDisabled ? Promise.resolve(samplePage(undefined)) : getActivity(),
   component: ActivityPage,
 });
 
+const FILTERS: { value: ActivityFilter | undefined; label: string }[] = [
+  { value: undefined, label: "All" },
+  { value: "job", label: "Jobs" },
+  { value: "machine", label: "Machines" },
+];
+
 function ActivityPage() {
   const first = Route.useLoaderData();
+  const [filter, setFilter] = useState<ActivityFilter | undefined>(undefined);
   const [latest, setLatest] = useState(first);
-  const [older, setOlder] = useState<ActivityJob[]>([]);
+  const [older, setOlder] = useState<ActivityItem[]>([]);
   // Where the next older page starts, once one has been loaded. Before that it's the newest page's.
   const [olderCursor, setOlderCursor] = useState<number | null>(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [now, setNow] = useState(() => Date.now());
 
-  // Refresh the newest page while the tab is visible. Older pages don't change much, so they're
-  // left as loaded.
+  // Refresh the newest page while the tab is visible, and right away when the filter changes.
+  // Older pages don't change much, so they're left as loaded.
   useEffect(() => {
     if (authDisabled) return;
+    let current = true;
+    const refresh = () =>
+      getActivity({ filter })
+        .then((page) => current && setLatest(page))
+        .catch(() => undefined); // Keep showing the last good page; the next tick retries.
     const timer = setInterval(() => {
       setNow(Date.now());
-      if (document.visibilityState !== "visible") return;
-      getActivity()
-        .then(setLatest)
-        .catch(() => undefined); // Keep showing the last good page; the next tick retries.
+      if (document.visibilityState === "visible") void refresh();
     }, POLL_MS);
-    return () => clearInterval(timer);
-  }, []);
+    return () => {
+      current = false;
+      clearInterval(timer);
+    };
+  }, [filter]);
+
+  function chooseFilter(next: ActivityFilter | undefined) {
+    if (next === filter) return;
+    setFilter(next);
+    setOlder([]);
+    setOlderCursor(null);
+    if (authDisabled) {
+      setLatest(samplePage(next));
+      return;
+    }
+    getActivity({ filter: next })
+      .then(setLatest)
+      .catch(() => undefined);
+  }
 
   const cursor = older.length ? olderCursor : latest.nextBefore;
 
@@ -52,35 +91,58 @@ function ActivityPage() {
     if (cursor === null) return;
     setLoadingOlder(true);
     try {
-      const page = await getActivity(cursor);
-      setOlder((jobs) => [...jobs, ...page.jobs]);
+      const page = await getActivity({ before: cursor, filter });
+      setOlder((items) => [...items, ...page.items]);
       setOlderCursor(page.nextBefore);
     } finally {
       setLoadingOlder(false);
     }
   }
 
-  const seen = new Set(latest.jobs.map((job) => job.id));
-  const jobs = [...latest.jobs, ...older.filter((job) => !seen.has(job.id))];
+  const seen = new Set(latest.items.map((item) => item.id));
+  const items = [...latest.items, ...older.filter((item) => !seen.has(item.id))];
 
   return (
     <section>
       <PageHeader title="Activity">
-        Jobs RelayRunner routed, newest first, and the runner it picked for each one. Updates every
-        few seconds.
+        Everything that happened in this workspace, newest first: the jobs RelayRunner routed and
+        where each one ran, and machines coming and going. Updates every few seconds.
       </PageHeader>
       <div className="grid max-w-4xl gap-2">
-        {jobs.length === 0 ? (
+        <div role="group" aria-label="Show" className="flex gap-1.5">
+          {FILTERS.map(({ value, label }) => (
+            <Button
+              key={label}
+              size="sm"
+              variant={filter === value ? "secondary" : "ghost"}
+              aria-pressed={filter === value}
+              onClick={() => chooseFilter(value)}
+            >
+              {label}
+            </Button>
+          ))}
+        </div>
+        {items.length === 0 ? (
           <p className="rounded-xl border bg-card px-4 py-6 text-sm text-muted-foreground">
-            No jobs yet. Add a{" "}
-            <span className="font-mono text-foreground">runs-on: relayrunner</span> pick job to a
-            workflow in a connected org, push, and its jobs show up here.
+            {filter === "machine" ? (
+              <>Nothing yet. Machines show up here when they enroll, connect or disconnect.</>
+            ) : (
+              <>
+                Nothing yet. Add a{" "}
+                <span className="font-mono text-foreground">runs-on: relayrunner</span> pick job to
+                a workflow in a connected org, push, and its jobs show up here.
+              </>
+            )}
           </p>
         ) : (
           <ul className="grid gap-2">
-            {jobs.map((job) => (
-              <JobRow key={job.id} job={job} now={now} />
-            ))}
+            {items.map((item) =>
+              item.job ? (
+                <JobRow key={item.id} job={item.job} now={now} />
+              ) : (
+                <EventRow key={item.id} item={item} now={now} />
+              ),
+            )}
           </ul>
         )}
         {cursor !== null && (
@@ -91,7 +153,7 @@ function ActivityPage() {
             disabled={loadingOlder}
             onClick={() => void loadOlder()}
           >
-            {loadingOlder ? "Loading…" : "Show older jobs"}
+            {loadingOlder ? "Loading…" : "Show older"}
           </Button>
         )}
       </div>
@@ -99,148 +161,242 @@ function ActivityPage() {
   );
 }
 
-function JobRow({ job, now }: { job: ActivityJob; now: number }) {
-  const took = duration(job, now);
+const DISCONNECT_REASONS = {
+  closed: "its CLI stopped",
+  timeout: "it stopped responding",
+  revoked: "it was revoked",
+  error: "of a protocol error",
+} as const;
+
+// What a non-job event says, in a sentence after the machine's name.
+function sentence(item: ActivityItem) {
+  switch (item.type) {
+    case "machine.enrolled": {
+      const platform = [item.data.os, item.data.arch].filter(Boolean).join(" ");
+      return `enrolled${platform ? ` (${platform})` : ""}`;
+    }
+    case "machine.connected":
+      return "connected";
+    case "machine.disconnected":
+      return `disconnected because ${DISCONNECT_REASONS[item.data.reason]}`;
+    case "machine.revoked":
+      return "was revoked";
+    case "job.routed":
+      return "routed a job";
+  }
+}
+
+const EVENT_ICONS = {
+  "machine.enrolled": Plus,
+  "machine.connected": Plug,
+  "machine.disconnected": Unplug,
+  "machine.revoked": Ban,
+  "job.routed": Laptop,
+} as const;
+
+// A one-line row for anything that isn't a job: "Atticus's MacBook connected · 2m ago".
+function EventRow({ item, now }: { item: ActivityItem; now: number }) {
+  const Icon = EVENT_ICONS[item.type];
+  const online = item.type === "machine.connected";
   return (
-    <li className="grid gap-x-4 gap-y-1.5 rounded-xl border bg-card px-4 py-3 text-sm sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-      <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
-        <span className="truncate text-muted-foreground">{job.workflow ?? "Workflow"}</span>
-        <span aria-hidden className="text-muted-foreground">
-          ·
-        </span>
-        <a
-          href={job.url}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex min-w-0 items-center gap-1 font-medium hover:underline"
+    <li className="flex min-w-0 items-start gap-2 px-4 py-1.5 text-sm">
+      <Icon
+        aria-hidden
+        className={
+          online
+            ? "mt-0.5 size-3.5 shrink-0 text-go"
+            : "mt-0.5 size-3.5 shrink-0 text-muted-foreground"
+        }
+      />
+      <p className="min-w-0">
+        <span className="font-medium">{item.machine?.name ?? "A machine"}</span>{" "}
+        <span className="text-muted-foreground">{sentence(item)}</span>
+        {item.actor && <span className="text-muted-foreground"> by {item.actor.name}</span>}{" "}
+        <span
+          className="whitespace-nowrap text-xs text-muted-foreground"
+          title={new Date(item.occurredAt).toLocaleString()}
         >
-          <span className="truncate">{job.name}</span>
-          <ExternalLink aria-hidden className="size-3 shrink-0 text-muted-foreground" />
-        </a>
-        <span aria-hidden className="text-muted-foreground">
-          ·
+          · {timeAgo(item.occurredAt, now)}
         </span>
-        <RunnerChip job={job} />
-      </div>
-      <div className="flex items-center gap-2 sm:justify-self-end">
-        <StatusBadge job={job} />
-      </div>
-      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground sm:col-span-2">
-        <span className="inline-flex min-w-0 items-center gap-1 font-mono">
-          {job.private && <Lock aria-label="Private repo" className="size-3 shrink-0" />}
-          <span className="truncate">{job.repository}</span>
-        </span>
-        {job.branch && <span className="truncate font-mono">{job.branch}</span>}
-        <span title={new Date(job.createdAt).toLocaleString()}>{timeAgo(job.createdAt, now)}</span>
-        {took && <span className="tabular-nums">{took}</span>}
-      </div>
+      </p>
     </li>
   );
 }
 
-function RunnerChip({ job }: { job: ActivityJob }) {
-  const { runner } = job;
-  const title = job.runnerName ? `Ran on ${job.runnerName}` : "Not picked up yet";
-  if (runner.type === "machine")
-    return (
-      <span
-        className="inline-flex items-center gap-1 rounded-md border border-go-edge bg-go-soft px-1.5 py-0.5 text-xs"
-        title={title}
-      >
-        <Laptop aria-hidden className="size-3 shrink-0" />
-        <span className="truncate">{runner.name ?? "Local machine"}</span>
-      </span>
-    );
-  return (
-    <span
-      className="inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 font-mono text-xs"
-      title={title}
-    >
-      <Cloud aria-hidden className="size-3 shrink-0 text-muted-foreground" />
-      <span className="truncate">{runner.label || "unknown"}</span>
-    </span>
-  );
-}
-
-function StatusBadge({ job }: { job: ActivityJob }) {
-  if (job.status === "in_progress") return <Badge variant="run">Running</Badge>;
+// What happened to the job, and where: "passed on", "waiting for", ...
+function jobVerb(job: ActivityJob) {
+  if (job.status === "in_progress") return "running on";
   if (job.status !== "completed")
-    return (
-      <Badge variant="idle">
-        {job.runner.type === "machine" ? `Waiting for ${job.runner.name ?? "a machine"}` : "Queued"}
-      </Badge>
-    );
-  if (job.conclusion === "success") return <Badge variant="go">Passed</Badge>;
+    return job.runner.type === "machine" ? "waiting for" : "queued for";
+  if (job.conclusion === "success") return "passed on";
+  if (job.conclusion === "failure" || job.conclusion === "timed_out") return "failed on";
+  return `${job.conclusion?.replace("_", " ") ?? "finished"} on`;
+}
+
+function JobIcon({ job }: { job: ActivityJob }) {
+  const base = "mt-0.5 size-3.5 shrink-0";
+  if (job.status === "in_progress")
+    return <LoaderCircle aria-label="Running" className={`${base} animate-spin text-run`} />;
+  if (job.status !== "completed")
+    return <Clock aria-label="Queued" className={`${base} text-muted-foreground`} />;
+  if (job.conclusion === "success")
+    return <CircleCheck aria-label="Passed" className={`${base} text-go`} />;
   if (job.conclusion === "failure" || job.conclusion === "timed_out")
-    return (
-      <Badge variant="outline" className="border-destructive/60 text-destructive">
-        Failed
-      </Badge>
-    );
+    return <CircleX aria-label="Failed" className={`${base} text-destructive`} />;
+  return <CircleMinus aria-label="Finished" className={`${base} text-muted-foreground`} />;
+}
+
+// A one-line row in the same shape as EventRow: "test in RelayRunner dev passed on Atticus's
+// MacBook · relayrunner-ci-tests · main · 1m 30s · 2m ago". The job name opens the job on
+// GitHub, the workflow name opens its run.
+function JobRow({ job, now }: { job: ActivityJob; now: number }) {
+  const took = duration(job, now);
+  const { runner } = job;
+  const RunnerIcon = runner.type === "machine" ? Laptop : Cloud;
+  const runnerName =
+    runner.type === "machine" ? (runner.name ?? "a local machine") : runner.label || "unknown";
   return (
-    <Badge variant="idle" className="capitalize">
-      {job.conclusion?.replace("_", " ") ?? "Done"}
-    </Badge>
+    <li className="flex min-w-0 items-start gap-2 px-4 py-1.5 text-sm">
+      <JobIcon job={job} />
+      <p className="min-w-0">
+        <a
+          href={job.url}
+          target="_blank"
+          rel="noreferrer"
+          className="font-medium hover:underline"
+          title="Open the job on GitHub"
+        >
+          {job.name}
+        </a>{" "}
+        <span className="text-muted-foreground">in</span>{" "}
+        <a
+          href={job.runUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="hover:underline"
+          title="Open the run on GitHub"
+        >
+          {job.workflow ?? "a workflow"}
+        </a>{" "}
+        <span className="text-muted-foreground">{jobVerb(job)}</span>{" "}
+        <span
+          className="inline-flex items-baseline gap-1 font-medium"
+          title={job.runnerName ? `Ran on ${job.runnerName}` : "Not picked up yet"}
+        >
+          <RunnerIcon aria-hidden className="size-3 shrink-0 self-center text-muted-foreground" />
+          <span className={runner.type === "github" ? "font-mono text-xs" : undefined}>
+            {runnerName}
+          </span>
+        </span>{" "}
+        <span className="text-xs text-muted-foreground">
+          ·{" "}
+          {job.private && (
+            <Lock aria-label="Private repo" className="mb-0.5 inline size-3 align-middle" />
+          )}{" "}
+          <span className="font-mono">{job.repository}</span>
+          {job.branch && (
+            <>
+              {" "}
+              · <span className="font-mono">{job.branch}</span>
+            </>
+          )}
+          {took && <span className="tabular-nums"> · {took}</span>}{" "}
+          <span className="whitespace-nowrap" title={new Date(job.createdAt).toLocaleString()}>
+            · {timeAgo(job.createdAt, now)}
+          </span>
+        </span>
+      </p>
+    </li>
   );
 }
 
-// Example rows for `VITE_AUTH_DISABLED=true` dev builds, which have no API.
-function samplePage(): ActivityPage {
+// Example entries for `VITE_AUTH_DISABLED=true` dev builds, which have no API.
+function samplePage(filter: ActivityFilter | undefined): ActivityPage {
   const at = (minutesAgo: number) => new Date(Date.now() - minutesAgo * 60_000).toISOString();
-  const base = {
+  const runs = "https://github.com/relayrunner/relayrunner-ci-tests/actions/runs";
+  const job = (id: number, minutesAgo: number, rest: Partial<ActivityJob>): ActivityJob => ({
+    id,
     repository: "relayrunner/relayrunner-ci-tests",
-    private: false,
+    private: true,
+    runId: id * 10,
     runAttempt: 1,
     workflow: "RelayRunner dev",
-    runner: { type: "github", label: "ubuntu-latest" } as ActivityRunner,
+    name: "test",
+    runner: { type: "github", label: "ubuntu-latest" },
+    runnerName: null,
     branch: "main",
     sha: "abc123",
-    url: "https://github.com/relayrunner/relayrunner-ci-tests/actions",
-  };
-  return {
-    nextBefore: null,
-    jobs: [
-      {
-        ...base,
-        id: 3,
-        runId: 30,
-        name: "test",
-        private: true,
-        runner: { type: "machine", machineId: "m1", name: "Atticus's MacBook" },
-        runnerName: null,
-        status: "queued",
-        conclusion: null,
-        createdAt: at(0.2),
-        startedAt: null,
-        completedAt: null,
-      },
-      {
-        ...base,
-        id: 2,
-        runId: 20,
-        name: "test",
-        runnerName: "GitHub Actions 12",
+    status: "queued",
+    conclusion: null,
+    createdAt: at(minutesAgo),
+    startedAt: null,
+    completedAt: null,
+    url: `${runs}/${id * 10}/job/${id}`,
+    runUrl: `${runs}/${id * 10}`,
+    ...rest,
+  });
+  const mac = { id: "m1", name: "Atticus's MacBook" };
+  const items: ActivityItem[] = [
+    {
+      id: 7,
+      type: "job.routed",
+      data: {},
+      occurredAt: at(0.2),
+      actor: null,
+      machine: null,
+      job: job(3, 0.2, {
+        runner: { type: "machine", machineId: "m1", name: mac.name },
+        runnerName: "Atticus-s-MacBook-0123456789ab",
         status: "in_progress",
-        conclusion: null,
-        createdAt: at(2),
-        startedAt: at(1.5),
-        completedAt: null,
-      },
-      {
-        ...base,
-        id: 1,
-        runId: 10,
-        name: "test",
-        private: true,
-        repository: "relayrunner/relayrunner",
-        workflow: "CI",
+        startedAt: at(0.1),
+      }),
+    },
+    {
+      id: 6,
+      type: "machine.connected",
+      data: { machineName: mac.name, runnerVersion: "2.330.0" },
+      occurredAt: at(1),
+      actor: null,
+      machine: mac,
+      job: null,
+    },
+    {
+      id: 5,
+      type: "machine.disconnected",
+      data: { machineName: mac.name, reason: "timeout" },
+      occurredAt: at(25),
+      actor: null,
+      machine: mac,
+      job: null,
+    },
+    {
+      id: 4,
+      type: "job.routed",
+      data: {},
+      occurredAt: at(38),
+      actor: null,
+      machine: null,
+      job: job(2, 38, {
+        private: false,
         runnerName: "GitHub Actions 7",
         status: "completed",
         conclusion: "success",
-        createdAt: at(40),
-        startedAt: at(39.5),
-        completedAt: at(38),
-      },
-    ],
+        startedAt: at(37.5),
+        completedAt: at(36),
+      }),
+    },
+    {
+      id: 2,
+      type: "machine.enrolled",
+      data: { machineName: mac.name, os: "macos", arch: "arm64" },
+      occurredAt: at(60),
+      actor: { id: "u1", name: "Atticus White" },
+      machine: mac,
+      job: null,
+    },
+  ];
+  return {
+    nextBefore: null,
+    items: filter ? items.filter((item) => item.type.startsWith(`${filter}.`)) : items,
   };
 }
