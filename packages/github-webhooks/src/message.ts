@@ -18,6 +18,9 @@ export interface WorkflowJob {
   headSha: string;
   runnerName: string | null;
   createdAt: string;
+  // Absent on messages from an ingress that predates them.
+  startedAt?: string | null;
+  completedAt?: string | null;
 }
 
 export interface InstallationRepo {
@@ -114,6 +117,8 @@ export function toWebhookMessage(
           headSha: String(job.head_sha ?? ""),
           runnerName: stringOrNull(job.runner_name),
           createdAt: String(job.created_at ?? ""),
+          startedAt: stringOrNull(job.started_at),
+          completedAt: stringOrNull(job.completed_at),
         },
       };
     }

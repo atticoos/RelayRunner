@@ -96,6 +96,17 @@ export class Router extends DurableObject<Env> {
     return claimed;
   }
 
+  /**
+   * The machine a route sent `job` to, without claiming anything: for the Activity page, when a
+   * job's later webhooks arrive before (or without) its `queued` one. Null when the route is
+   * unknown, expired, or belongs to another repo, run or job.
+   */
+  async machineFor(routeId: string, job: QueuedJob): Promise<string | null> {
+    const route = await this.ctx.storage.get<Route>(ROUTE_KEY + routeId);
+    if (!route || Date.now() - route.createdAt > ROUTE_TTL_MS || !canClaim(route, job)) return null;
+    return route.machineId;
+  }
+
   /** Stops a route holding its machine. MachineLink calls this when the machine reports in. */
   async release(routeId: string): Promise<void> {
     const route = await this.ctx.storage.get<Route>(ROUTE_KEY + routeId);

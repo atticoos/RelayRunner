@@ -14,6 +14,7 @@ import { Route as AuthedRouteImport } from './routes/_authed'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthedWorkspaceRouteImport } from './routes/_authed/_workspace'
 import { Route as AuthedDeviceRouteImport } from './routes/_authed/device'
+import { Route as AuthedWorkspaceActivityRouteImport } from './routes/_authed/_workspace/activity'
 import { Route as AuthedWorkspaceRunnersRouteImport } from './routes/_authed/_workspace/runners'
 import { Route as AuthedWorkspaceWorkspaceRouteImport } from './routes/_authed/_workspace/workspace'
 import { Route as AuthedWorkspacesNewRouteImport } from './routes/_authed/workspaces.new'
@@ -41,6 +42,11 @@ const AuthedDeviceRoute = AuthedDeviceRouteImport.update({
   path: '/device',
   getParentRoute: () => AuthedRoute,
 } as any)
+const AuthedWorkspaceActivityRoute = AuthedWorkspaceActivityRouteImport.update({
+  id: '/activity',
+  path: '/activity',
+  getParentRoute: () => AuthedWorkspaceRoute,
+} as any)
 const AuthedWorkspaceRunnersRoute = AuthedWorkspaceRunnersRouteImport.update({
   id: '/runners',
   path: '/runners',
@@ -62,6 +68,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/device': typeof AuthedDeviceRoute
+  '/activity': typeof AuthedWorkspaceActivityRoute
   '/runners': typeof AuthedWorkspaceRunnersRoute
   '/workspace': typeof AuthedWorkspaceWorkspaceRoute
   '/workspaces/new': typeof AuthedWorkspacesNewRoute
@@ -70,6 +77,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/device': typeof AuthedDeviceRoute
+  '/activity': typeof AuthedWorkspaceActivityRoute
   '/runners': typeof AuthedWorkspaceRunnersRoute
   '/workspace': typeof AuthedWorkspaceWorkspaceRoute
   '/workspaces/new': typeof AuthedWorkspacesNewRoute
@@ -81,6 +89,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/_authed/_workspace': typeof AuthedWorkspaceRouteWithChildren
   '/_authed/device': typeof AuthedDeviceRoute
+  '/_authed/_workspace/activity': typeof AuthedWorkspaceActivityRoute
   '/_authed/_workspace/runners': typeof AuthedWorkspaceRunnersRoute
   '/_authed/_workspace/workspace': typeof AuthedWorkspaceWorkspaceRoute
   '/_authed/workspaces/new': typeof AuthedWorkspacesNewRoute
@@ -88,9 +97,22 @@ export interface FileRoutesById {
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    '/' | '/login' | '/device' | '/runners' | '/workspace' | '/workspaces/new'
+    | '/'
+    | '/login'
+    | '/device'
+    | '/activity'
+    | '/runners'
+    | '/workspace'
+    | '/workspaces/new'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/device' | '/runners' | '/workspace' | '/workspaces/new'
+  to:
+    | '/'
+    | '/login'
+    | '/device'
+    | '/activity'
+    | '/runners'
+    | '/workspace'
+    | '/workspaces/new'
   id:
     | '__root__'
     | '/'
@@ -98,6 +120,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/_authed/_workspace'
     | '/_authed/device'
+    | '/_authed/_workspace/activity'
     | '/_authed/_workspace/runners'
     | '/_authed/_workspace/workspace'
     | '/_authed/workspaces/new'
@@ -146,6 +169,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedDeviceRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/_workspace/activity': {
+      id: '/_authed/_workspace/activity'
+      path: '/activity'
+      fullPath: '/activity'
+      preLoaderRoute: typeof AuthedWorkspaceActivityRouteImport
+      parentRoute: typeof AuthedWorkspaceRoute
+    }
     '/_authed/_workspace/runners': {
       id: '/_authed/_workspace/runners'
       path: '/runners'
@@ -171,11 +201,13 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthedWorkspaceRouteChildren {
+  AuthedWorkspaceActivityRoute: typeof AuthedWorkspaceActivityRoute
   AuthedWorkspaceRunnersRoute: typeof AuthedWorkspaceRunnersRoute
   AuthedWorkspaceWorkspaceRoute: typeof AuthedWorkspaceWorkspaceRoute
 }
 
 const AuthedWorkspaceRouteChildren: AuthedWorkspaceRouteChildren = {
+  AuthedWorkspaceActivityRoute: AuthedWorkspaceActivityRoute,
   AuthedWorkspaceRunnersRoute: AuthedWorkspaceRunnersRoute,
   AuthedWorkspaceWorkspaceRoute: AuthedWorkspaceWorkspaceRoute,
 }
