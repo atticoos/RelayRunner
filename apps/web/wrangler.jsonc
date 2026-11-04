@@ -29,7 +29,7 @@
     "enabled": true,
     "logs": { "enabled": true, "invocation_logs": true },
     "traces": { "enabled": true },
-    "issues": { "enabled": true }
+    "issues": { "enabled": true },
   },
   "upload_source_maps": true,
   // Settings for PR preview builds (`wrangler preview` in Workers Builds).
