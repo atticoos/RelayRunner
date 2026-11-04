@@ -6,7 +6,6 @@ import { attachSession } from './middleware/session.ts';
 import { authRoutes } from './routes/auth.ts';
 import { healthRoutes } from './routes/health.ts';
 import { meRoutes } from './routes/me.ts';
-import { webhookRoutes } from './routes/webhooks.ts';
 import { workspaceRoutes } from './routes/workspaces.ts';
 
 export interface AppEnv {
@@ -27,7 +26,6 @@ export const app = new Hono<AppEnv>().basePath('/api');
 
 // Public routes. These never touch auth or D1.
 app.route('/health', healthRoutes);
-app.route('/webhooks', webhookRoutes);
 
 // Everything below sees c.var.auth, c.var.user and c.var.session.
 app.use('*', attachSession);

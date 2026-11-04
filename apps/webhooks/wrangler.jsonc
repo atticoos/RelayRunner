@@ -1,0 +1,21 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  // GitHub webhook ingress: verify, then enqueue. Processing runs in the API Worker's queue
+  // consumer, so deploying the API never touches the endpoint GitHub posts to.
+  "name": "relayrunner-webhooks",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-03",
+  // The RelayRunner Cloudflare account (separate from Atticus's personal account).
+  "account_id": "b233b6d6fd9eae9e093651bfb043c119",
+  // Its own URL (https://relayrunner-webhooks.relayrun.workers.dev/api/webhooks/github) works too,
+  // so the GitHub App can point straight here and skip the dashboard Worker.
+  "workers_dev": true,
+  "observability": { "enabled": true },
+  // Create once per account before the first deploy (apps/api consumes both):
+  //   wrangler queues create relayrunner-github-webhooks
+  //   wrangler queues create relayrunner-github-webhooks-dlq
+  "queues": {
+    "producers": [{ "binding": "WEBHOOK_QUEUE", "queue": "relayrunner-github-webhooks" }]
+  }
+  // Secret: wrangler secret put GITHUB_WEBHOOK_SECRET
+}

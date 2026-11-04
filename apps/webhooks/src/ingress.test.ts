@@ -1,0 +1,88 @@
+import { describe, expect, test } from 'vitest';
+import type { WebhookMessage } from '@relayrunner/github-webhooks';
+import { handleRequest, type Env } from './ingress.ts';
+
+const secret = 'test-secret';
+
+class FakeQueue {
+  sent: WebhookMessage[] = [];
+  fail = false;
+  async send(message: WebhookMessage) {
+    if (this.fail) throw new Error('queue down');
+    this.sent.push(message);
+  }
+}
+
+async function sign(body: string) {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const digest = new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(body)));
+  return `sha256=${[...digest].map(byte => byte.toString(16).padStart(2, '0')).join('')}`;
+}
+
+function setup(envOverrides: Partial<Env> = {}) {
+  const queue = new FakeQueue();
+  const env = { GITHUB_WEBHOOK_SECRET: secret, WEBHOOK_QUEUE: queue, ...envOverrides } as unknown as Env;
+  const post = (body: string, headers: Record<string, string>) =>
+    handleRequest(new Request('https://hooks.test/api/webhooks/github', { method: 'POST', body, headers }), env);
+  return { queue, post };
+}
+
+const workflowJob = JSON.stringify({
+  action: 'queued',
+  installation: { id: 7 },
+  repository: { id: 1, full_name: 'acme/app' },
+  workflow_job: { id: 42, run_id: 9, run_attempt: 1, name: 'test', workflow_name: 'CI', status: 'queued', conclusion: null, labels: ['relayrunner'], head_branch: 'main', head_sha: 'abc', runner_name: null, created_at: '2026-11-04T00:00:00Z' },
+});
+
+describe('webhook ingress', () => {
+  test('rejects a missing or wrong signature', async () => {
+    const { post, queue } = setup();
+    expect((await post('{}', { 'x-github-event': 'ping' })).status).toBe(401);
+    expect((await post('{}', { 'x-github-event': 'ping', 'x-hub-signature-256': `sha256=${'0'.repeat(64)}` })).status).toBe(401);
+    expect(queue.sent).toHaveLength(0);
+  });
+
+  test('fails loudly when the secret is not configured', async () => {
+    const { post } = setup({ GITHUB_WEBHOOK_SECRET: '' });
+    expect((await post('{}', { 'x-github-event': 'ping' })).status).toBe(500);
+  });
+
+  test('answers ping with ok and does not enqueue it', async () => {
+    const { post, queue } = setup();
+    const body = JSON.stringify({ zen: 'Keep it logically awesome.', hook_id: 1 });
+    const response = await post(body, { 'x-github-event': 'ping', 'x-hub-signature-256': await sign(body) });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ok: true });
+    expect(queue.sent).toHaveLength(0);
+  });
+
+  test('enqueues a compact message for a signed workflow_job', async () => {
+    const { post, queue } = setup();
+    const response = await post(workflowJob, { 'x-github-event': 'workflow_job', 'x-github-delivery': 'd-1', 'x-hub-signature-256': await sign(workflowJob) });
+    expect(response.status).toBe(202);
+    expect(queue.sent).toHaveLength(1);
+    expect(queue.sent[0]).toMatchObject({ event: 'workflow_job', deliveryId: 'd-1', action: 'queued', installationId: 7, repository: { fullName: 'acme/app' }, job: { id: 42, labels: ['relayrunner'] } });
+  });
+
+  test('accepts events it does not act on without enqueueing', async () => {
+    const { post, queue } = setup();
+    const body = JSON.stringify({ action: 'created' });
+    const response = await post(body, { 'x-github-event': 'star', 'x-hub-signature-256': await sign(body) });
+    expect(response.status).toBe(202);
+    expect(queue.sent).toHaveLength(0);
+  });
+
+  test('returns 503 when the queue rejects the message', async () => {
+    const { post, queue } = setup();
+    queue.fail = true;
+    const response = await post(workflowJob, { 'x-github-event': 'workflow_job', 'x-hub-signature-256': await sign(workflowJob) });
+    expect(response.status).toBe(503);
+  });
+
+  test('only answers POST on the webhook path', async () => {
+    const { queue } = setup();
+    const env = { GITHUB_WEBHOOK_SECRET: secret, WEBHOOK_QUEUE: queue } as unknown as Env;
+    expect((await handleRequest(new Request('https://hooks.test/api/webhooks/github'), env)).status).toBe(405);
+    expect((await handleRequest(new Request('https://hooks.test/other', { method: 'POST' }), env)).status).toBe(404);
+  });
+});
