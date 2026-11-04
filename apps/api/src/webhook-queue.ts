@@ -21,6 +21,9 @@ import type { Env } from './env.ts';
 import { upsertInstallation } from './installations.ts';
 import { recordRepositoryEvent, removeRepositories, upsertRepositories } from './repositories.ts';
 
+// The `runs-on` label that routes a job through RelayRunner.
+export const RELAYRUNNER_LABEL = 'relayrunner';
+
 const BASE_RETRY_DELAY_SECONDS = 30;
 const MAX_RETRY_DELAY_SECONDS = 15 * 60;
 
@@ -51,6 +54,11 @@ export async function handleWebhookBatch(batch: MessageBatch<WebhookMessage>, en
   }
 }
 
+// GitHub matches runs-on labels case-insensitively, so `RelayRunner` counts too.
+export function usesRelayRunner(labels: string[]) {
+  return labels.some((label) => label.toLowerCase() === RELAYRUNNER_LABEL);
+}
+
 // 30s, 60s, 120s, ... capped at 15 minutes. `attempts` starts at 1.
 export function retryDelaySeconds(attempts: number) {
   return Math.min(BASE_RETRY_DELAY_SECONDS * 2 ** Math.max(0, attempts - 1), MAX_RETRY_DELAY_SECONDS);
@@ -61,16 +69,24 @@ export async function processWebhook(env: Env, message: WebhookMessage): Promise
   const lagMs = Date.now() - Date.parse(message.receivedAt);
   switch (message.event) {
     case 'workflow_job':
-      // TODO: on `queued` for a repo that uses RelayRunner, hand the job to that repo's Router,
-      // which wakes a PickRunner. See the spike in PR #21 for the flow.
+      // Only jobs that ask for RelayRunner (`runs-on: relayrunner`) are ours. Everything else the
+      // App sees is some other runner's job, so drop it quietly.
+      if (!usesRelayRunner(message.job.labels)) return;
+      // TODO(#48): on `queued`, hand the job to that repo's Router, which wakes a PickRunner. See
+      // the spike in PR #21 for the flow. For now this only proves the label reaches us.
       console.log(JSON.stringify({
-        msg: 'github webhook processed',
-        event: message.event,
+        msg: 'relayrunner job received',
         action: message.action,
         deliveryId: message.deliveryId,
+        installationId: message.installationId,
         repository: message.repository.fullName,
         jobId: message.job.id,
+        runId: message.job.runId,
+        runAttempt: message.job.runAttempt,
+        job: message.job.name,
+        workflow: message.job.workflowName,
         labels: message.job.labels,
+        runnerName: message.job.runnerName,
         lagMs,
       }));
       return;
