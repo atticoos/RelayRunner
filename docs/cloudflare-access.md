@@ -17,8 +17,8 @@ The API and webhooks Workers set `"preview_urls": false`, so they have no previe
 
 Paths under `/dev` and `/api/dev` on the dashboard Worker are development-only. `packages/access` checks the `Cf-Access-Jwt-Assertion` JWT that Access adds to each request it lets through:
 
-- If `ACCESS_TEAM_DOMAIN` or `ACCESS_AUD` is unset, the path returns 404. This is the state on the production `workers.dev` host.
-- If the JWT is missing or invalid, the path returns 403 with a `reason`.
+- If `ACCESS_TEAM_DOMAIN` or `ACCESS_AUD` is unset, the path returns 404.
+- If the JWT is missing or invalid, the path returns 403 with a `reason`. This is what happens on the production `workers.dev` host, which has no Access app to add a JWT.
 - If the JWT is valid, the request continues. `GET /dev/access` returns the caller's identity, either a person's email or a service token's Client ID.
 
 The Worker checks the JWT in addition to the Access edge check. If the Access app is removed or misconfigured, these paths stay closed.
@@ -59,4 +59,4 @@ To rotate the token, create a new one, add it to the Service Auth policy, update
 
 ## After the custom domain moves
 
-When `app.relayrunner.dev` serves the dashboard, add a self-hosted Access application for the paths `app.relayrunner.dev/dev` and `app.relayrunner.dev/api/dev`, with the same two policies. Add its AUD to the top-level `vars.ACCESS_AUD`, comma-separated if there is more than one. Dev views then work in production for allowed people and agents, and stay 404 for everyone else.
+When `app.relayrunner.dev` serves the dashboard, add a self-hosted Access application for the paths `app.relayrunner.dev/dev` and `app.relayrunner.dev/api/dev`, with the same two policies. Add its AUD to the top-level `vars.ACCESS_AUD`, separated by a comma from the AUD already there. Dev views then work in production for allowed people and agents.

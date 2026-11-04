@@ -27,9 +27,12 @@
   // Cloudflare Access in front of them: docs/cloudflare-access.md.
   "preview_urls": true,
   "vars": {
-    // Zero Trust team domain whose Access JWTs the dev-only views accept (packages/access).
-    // ACCESS_AUD stays unset here: production workers.dev has no Access app, so /dev/* is 404.
+    // Zero Trust team domain and Access app AUD whose JWTs the dev-only views accept
+    // (packages/access). Per-version preview URLs (<version>-relayrunner-app...) use these top-level
+    // vars, not `previews`, so the AUD has to be here too. Production workers.dev has no Access app,
+    // so a request there carries no JWT and /dev/* answers 403.
     "ACCESS_TEAM_DOMAIN": "relayrunner.cloudflareaccess.com",
+    "ACCESS_AUD": "bc8e87c4c78375b0b1e61b4a2a73354543030492e218d02a28c56bc0f95702f7",
   },
   // Workers Logs, traces and Issues (errors grouped per Worker). Wrangler deploys overwrite
   // dashboard settings, so these must stay on here. Source maps make Issues' stacks point at
