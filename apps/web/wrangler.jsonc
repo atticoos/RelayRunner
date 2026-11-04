@@ -5,9 +5,8 @@
   "name": "relayrunner-app",
   "main": "worker/index.ts",
   "compatibility_date": "2026-11-03",
-  // account_id is intentionally omitted: RelayRunner is moving to its own
-  // Cloudflare account. Set CLOUDFLARE_ACCOUNT_ID in the environment (or add
-  // "account_id" here once the account move is done).
+  // The RelayRunner Cloudflare account (separate from Atticus's personal account).
+  "account_id": "b233b6d6fd9eae9e093651bfb043c119",
   "assets": {
     "binding": "ASSETS",
     // Unknown paths fall back to index.html so client-side routes deep-link.

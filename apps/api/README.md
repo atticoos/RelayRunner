@@ -25,7 +25,7 @@ pnpm dev                          # http://localhost:8787/api/health
 
 ## Deploy
 
-`wrangler.jsonc` has no `account_id`, since RelayRunner is moving to its own Cloudflare account. Set `CLOUDFLARE_ACCOUNT_ID`, then:
+`wrangler.jsonc` pins the RelayRunner Cloudflare account (`account_id`), so wrangler targets it even if your login can see other accounts. Then:
 
 ```sh
 wrangler d1 create relayrunner    # paste the id into wrangler.jsonc

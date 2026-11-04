@@ -4,8 +4,8 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-11-03",
   "compatibility_flags": ["nodejs_compat"],
-  // No account_id: RelayRunner is moving to its own Cloudflare account. Set CLOUDFLARE_ACCOUNT_ID
-  // in the shell or CI, or add "account_id" here once the account exists.
+  // The RelayRunner Cloudflare account (separate from Atticus's personal account).
+  "account_id": "b233b6d6fd9eae9e093651bfb043c119",
   "workers_dev": true,
   "observability": { "enabled": true },
   "vars": {
