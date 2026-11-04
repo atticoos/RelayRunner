@@ -16,7 +16,11 @@
   },
   // Same-origin API: the dashboard forwards /api/* to apps/api over this binding,
   // so auth cookies stay first-party on workers.dev and on the custom domain.
-  "services": [{ "binding": "API", "service": "relayrunner-api" }],
+  // /api/webhooks/* goes to the webhook ingress Worker instead, so API deploys never touch it.
+  "services": [
+    { "binding": "API", "service": "relayrunner-api" },
+    { "binding": "WEBHOOKS", "service": "relayrunner-webhooks" }
+  ],
   "workers_dev": true,
   "observability": { "enabled": true },
   // Settings for PR preview builds (`wrangler preview` in Workers Builds).
@@ -24,7 +28,10 @@
   // production API Worker too. Sign-in works through the API's oAuthProxy plugin
   // (PREVIEW_ORIGINS in apps/api/wrangler.jsonc), against production data.
   "previews": {
-    "services": [{ "binding": "API", "service": "relayrunner-api" }],
+    "services": [
+      { "binding": "API", "service": "relayrunner-api" },
+      { "binding": "WEBHOOKS", "service": "relayrunner-webhooks" }
+    ],
     "observability": { "enabled": true }
   }
   // Production routing (enable once DNS lives in the new account):

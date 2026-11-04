@@ -16,5 +16,4 @@ export interface Env {
   // The RelayRunner GitHub App's OAuth credentials, used as Better Auth's GitHub provider.
   GITHUB_APP_CLIENT_ID: string;
   GITHUB_APP_CLIENT_SECRET: string;
-  GITHUB_WEBHOOK_SECRET: string;
 }

@@ -1,0 +1,26 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  // GitHub webhook ingress: verify, then enqueue. Processing runs in the API Worker's queue
+  // consumer, so deploying the API never touches the endpoint GitHub posts to.
+  "name": "relayrunner-webhooks",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-03",
+  // The RelayRunner Cloudflare account (separate from Atticus's personal account).
+  "account_id": "b233b6d6fd9eae9e093651bfb043c119",
+  // Its own URL (https://relayrunner-webhooks.relayrun.workers.dev/api/webhooks/github) works too,
+  // so the GitHub App can point straight here and skip the dashboard Worker.
+  "workers_dev": true,
+  "observability": { "enabled": true },
+  // Create once per account before the first deploy (apps/api consumes both):
+  //   wrangler queues create relayrunner-github-webhooks
+  //   wrangler queues create relayrunner-github-webhooks-dlq
+  "queues": {
+    "producers": [{ "binding": "WEBHOOK_QUEUE", "queue": "relayrunner-github-webhooks" }]
+  },
+  // From the account's Secrets Store (default_secrets_store), not `wrangler secret put`.
+  // Locally, `wrangler dev` reads a local store: seed it once with
+  //   wrangler secrets-store secret create eac3493b9fef4234a832f5f3fdcc8a41 --name GITHUB_WEBHOOK_SECRET --scopes workers
+  "secrets_store_secrets": [
+    { "binding": "GITHUB_WEBHOOK_SECRET", "store_id": "eac3493b9fef4234a832f5f3fdcc8a41", "secret_name": "GITHUB_WEBHOOK_SECRET" }
+  ]
+}

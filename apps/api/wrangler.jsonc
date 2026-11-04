@@ -32,5 +32,27 @@
       { "name": "MACHINE_LINK", "class_name": "MachineLink" }
     ]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["PickRunner", "Router", "MachineLink"] }]
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["PickRunner", "Router", "MachineLink"] }],
+  // GitHub webhooks: apps/webhooks verifies each delivery and enqueues it; this Worker's `queue()`
+  // export (src/webhook-queue.ts) processes it. Messages that fail max_retries times (with backoff,
+  // about half an hour) move to the DLQ, whose consumer logs and acks them. Create both once:
+  //   wrangler queues create relayrunner-github-webhooks
+  //   wrangler queues create relayrunner-github-webhooks-dlq
+  "queues": {
+    "consumers": [
+      {
+        "queue": "relayrunner-github-webhooks",
+        "max_batch_size": 10,
+        "max_batch_timeout": 5,
+        "max_retries": 6,
+        "dead_letter_queue": "relayrunner-github-webhooks-dlq"
+      },
+      {
+        "queue": "relayrunner-github-webhooks-dlq",
+        "max_batch_size": 10,
+        "max_batch_timeout": 5,
+        "max_retries": 0
+      }
+    ]
+  }
 }
