@@ -10,7 +10,7 @@
 export const FALLBACK_RUNNER = "ubuntu-latest";
 
 export const ROUTE_LABEL_PREFIX = "rr-";
-// 12 lowercase hex characters. `rr-test` (the debug label) never matches.
+// 12 lowercase hex characters.
 const ROUTE_LABEL = /^rr-([0-9a-f]{12})$/;
 
 // How long a picked machine is held for its route's job before the hold lapses. The job is
