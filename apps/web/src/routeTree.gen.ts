@@ -12,9 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthedRouteImport } from './routes/_authed'
 import { Route as LoginRouteImport } from './routes/login'
-import { Route as AuthedDecisionsRouteImport } from './routes/_authed/decisions'
 import { Route as AuthedReposRouteImport } from './routes/_authed/repos'
-import { Route as AuthedRoutingRouteImport } from './routes/_authed/routing'
 import { Route as AuthedRunnersRouteImport } from './routes/_authed/runners'
 
 const IndexRoute = IndexRouteImport.update({
@@ -31,19 +29,9 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthedDecisionsRoute = AuthedDecisionsRouteImport.update({
-  id: '/decisions',
-  path: '/decisions',
-  getParentRoute: () => AuthedRoute,
-} as any)
 const AuthedReposRoute = AuthedReposRouteImport.update({
   id: '/repos',
   path: '/repos',
-  getParentRoute: () => AuthedRoute,
-} as any)
-const AuthedRoutingRoute = AuthedRoutingRouteImport.update({
-  id: '/routing',
-  path: '/routing',
   getParentRoute: () => AuthedRoute,
 } as any)
 const AuthedRunnersRoute = AuthedRunnersRouteImport.update({
@@ -55,17 +43,13 @@ const AuthedRunnersRoute = AuthedRunnersRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
-  '/decisions': typeof AuthedDecisionsRoute
   '/repos': typeof AuthedReposRoute
-  '/routing': typeof AuthedRoutingRoute
   '/runners': typeof AuthedRunnersRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
-  '/decisions': typeof AuthedDecisionsRoute
   '/repos': typeof AuthedReposRoute
-  '/routing': typeof AuthedRoutingRoute
   '/runners': typeof AuthedRunnersRoute
 }
 export interface FileRoutesById {
@@ -73,24 +57,20 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authed': typeof AuthedRouteWithChildren
   '/login': typeof LoginRoute
-  '/_authed/decisions': typeof AuthedDecisionsRoute
   '/_authed/repos': typeof AuthedReposRoute
-  '/_authed/routing': typeof AuthedRoutingRoute
   '/_authed/runners': typeof AuthedRunnersRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/decisions' | '/repos' | '/routing' | '/runners'
+  fullPaths: '/' | '/login' | '/repos' | '/runners'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/decisions' | '/repos' | '/routing' | '/runners'
+  to: '/' | '/login' | '/repos' | '/runners'
   id:
     | '__root__'
     | '/'
     | '/_authed'
     | '/login'
-    | '/_authed/decisions'
     | '/_authed/repos'
-    | '/_authed/routing'
     | '/_authed/runners'
   fileRoutesById: FileRoutesById
 }
@@ -123,25 +103,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_authed/decisions': {
-      id: '/_authed/decisions'
-      path: '/decisions'
-      fullPath: '/decisions'
-      preLoaderRoute: typeof AuthedDecisionsRouteImport
-      parentRoute: typeof AuthedRoute
-    }
     '/_authed/repos': {
       id: '/_authed/repos'
       path: '/repos'
       fullPath: '/repos'
       preLoaderRoute: typeof AuthedReposRouteImport
-      parentRoute: typeof AuthedRoute
-    }
-    '/_authed/routing': {
-      id: '/_authed/routing'
-      path: '/routing'
-      fullPath: '/routing'
-      preLoaderRoute: typeof AuthedRoutingRouteImport
       parentRoute: typeof AuthedRoute
     }
     '/_authed/runners': {
@@ -155,16 +121,12 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthedRouteChildren {
-  AuthedDecisionsRoute: typeof AuthedDecisionsRoute
   AuthedReposRoute: typeof AuthedReposRoute
-  AuthedRoutingRoute: typeof AuthedRoutingRoute
   AuthedRunnersRoute: typeof AuthedRunnersRoute
 }
 
 const AuthedRouteChildren: AuthedRouteChildren = {
-  AuthedDecisionsRoute: AuthedDecisionsRoute,
   AuthedReposRoute: AuthedReposRoute,
-  AuthedRoutingRoute: AuthedRoutingRoute,
   AuthedRunnersRoute: AuthedRunnersRoute,
 }
 

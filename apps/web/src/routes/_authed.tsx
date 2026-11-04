@@ -25,8 +25,6 @@ export const Route = createFileRoute("/_authed")({
 const nav = [
   { to: "/repos", label: "Repos" },
   { to: "/runners", label: "Runners" },
-  { to: "/routing", label: "Routing" },
-  { to: "/decisions", label: "Decision log" },
 ] as const;
 
 function AuthedLayout() {
