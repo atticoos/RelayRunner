@@ -29,6 +29,22 @@ Jobs run in `actions/runner`, which is downloaded into
 `~/.relayrunner/runner/<version>` on first connect and checked against its
 SHA-256. Set `RELAYRUNNER_HOME` to keep everything somewhere else.
 
+## `relayrunner whoami`
+
+```sh
+npx relayrunner whoami
+```
+
+Asks the gateway who the saved machine token belongs to and prints the machine,
+its workspace, who enrolled it (name and email) and whether it's online now.
+
+- Not signed in: says so and exits 1.
+- Removed from the workspace (or the token is no longer valid): says so and
+  exits 1. The saved token is left alone; the next `connect` replaces it.
+- Gateway unreachable: prints what's saved locally, marked unverified, and exits 0.
+- `--json` prints the same as JSON (never the token). `--server <url>` or
+  `RELAYRUNNER_URL` only reports a sign-in for that gateway.
+
 ## Building
 
 `pnpm --filter relayrunner build` bundles the CLI into `dist/cli.js` with

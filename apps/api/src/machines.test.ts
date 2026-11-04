@@ -385,3 +385,45 @@ describe("the machine WebSocket", () => {
     expect(forwarded.headers.get("authorization")).toBeNull();
   });
 });
+
+describe("a machine looking itself up", () => {
+  const me = (headers: Record<string, string> = {}) =>
+    app.request("/api/machines/me", { headers }, env);
+
+  test("returns the machine, its workspace, who enrolled it and its live status", async () => {
+    const { token, machine, workspaceId } = await enroll("me-ok", "build-box");
+    link(machine.id).status.mockResolvedValue({
+      online: true,
+      state: "idle",
+      connectedAt: 5,
+    } as never);
+    const response = await me({ authorization: `Bearer ${token}` });
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as Record<string, Record<string, unknown>>;
+    expect(body.machine).toMatchObject({
+      id: machine.id,
+      name: "build-box",
+      os: "macos",
+      arch: "arm64",
+      revokedAt: null,
+      status: { online: true, state: "idle", connectedAt: 5 },
+    });
+    expect(body.machine).not.toHaveProperty("tokenHash");
+    expect(body.workspace).toEqual({ id: workspaceId, name: "me-ok", slug: "me-ok" });
+    expect(body.enrolledBy).toMatchObject({ name: expect.any(String), email: expect.any(String) });
+  });
+
+  test("rejects a missing, unknown, user or revoked token", async () => {
+    const { token, machine, cookie } = await enroll("me-auth");
+    expect((await me()).status).toBe(401);
+    expect((await me({ authorization: "Bearer rrm_nope" })).status).toBe(401);
+    expect((await me({ cookie })).status).toBe(401);
+
+    await app.request(
+      `/api/machines/${machine.id}`,
+      { method: "DELETE", headers: { cookie, origin: env.BETTER_AUTH_URL } },
+      env,
+    );
+    expect((await me({ authorization: `Bearer ${token}` })).status).toBe(401);
+  });
+});

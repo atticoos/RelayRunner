@@ -157,6 +157,39 @@ export const machineRoutes = new Hono<AppEnv>()
     headers.set(MACHINE_ID_HEADER, machine.id);
     return c.env.MACHINE_LINK.getByName(machine.id).fetch(new Request(c.req.raw, { headers }));
   })
+  // Who a machine token belongs to, for `relayrunner whoami`: `Authorization: Bearer rrm_…`. A
+  // missing, unknown or revoked token gets a 401, the same as /connect.
+  .get("/me", async (c) => {
+    const token = c.req.header("authorization")?.match(/^Bearer\s+(\S+)$/i)?.[1];
+    const db = createDb(c.env.DB);
+    const machine = await verifyMachineToken(db, token);
+    if (!machine) return c.json({ error: "unauthorized" }, 401);
+
+    const [[workspace], [enrolledBy], status] = await Promise.all([
+      db
+        .select({
+          id: schema.workspace.id,
+          name: schema.workspace.name,
+          slug: schema.workspace.slug,
+        })
+        .from(schema.workspace)
+        .where(eq(schema.workspace.id, machine.workspaceId))
+        .limit(1),
+      machine.createdBy
+        ? db
+            .select({ id: schema.user.id, name: schema.user.name, email: schema.user.email })
+            .from(schema.user)
+            .where(eq(schema.user.id, machine.createdBy))
+            .limit(1)
+        : Promise.resolve([]),
+      c.env.MACHINE_LINK.getByName(machine.id).status(),
+    ]);
+    return c.json({
+      machine: { ...presentMachine(machine), status },
+      workspace,
+      enrolledBy: enrolledBy ?? null,
+    });
+  })
   .get("/", requireUser, requireWorkspace, async (c) => {
     const machines = await c.var.db
       .select()

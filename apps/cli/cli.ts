@@ -13,6 +13,7 @@ import {
 import { ensureRunner, RunnerError, runnerPlatform } from "./install.ts";
 import { runJob } from "./job.ts";
 import { login, LoginError, openBrowser } from "./login.ts";
+import { whoami, type WhoamiResponse } from "./whoami.ts";
 
 // The dashboard's origin. It forwards /api/* (including the machine WebSocket) to the API.
 const DEFAULT_SERVER = "https://relayrunner-app.relayrun.workers.dev";
@@ -192,6 +193,100 @@ function show(event: ConnectionEvent) {
   }
 }
 
+const whoamiCommand = defineCommand({
+  meta: {
+    name: "whoami",
+    description:
+      "Show which machine and workspace this computer is signed in as, checked with the gateway.",
+  },
+  args: {
+    server: {
+      type: "string",
+      description: "Only report a sign-in for this RelayRunner URL (default: the saved one)",
+    },
+    json: { type: "boolean", description: "Print the result as JSON" },
+  },
+  async run({ args }) {
+    const print = (human: string, json: Record<string, unknown>) =>
+      console.log(args.json ? JSON.stringify(json, null, 2) : human);
+
+    const credentials = readCredentials();
+    const requested = args.server || process.env.RELAYRUNNER_URL;
+    const server = requested ? normalizeServer(requested) : credentials?.server;
+    if (!credentials || credentials.server !== server) {
+      print(
+        credentials
+          ? `Not signed in to ${server}. This machine is enrolled with ${credentials.server}.`
+          : "Not signed in. Run `relayrunner connect` to sign in.",
+        { status: "signed_out", server: server ?? null },
+      );
+      process.exitCode = 1;
+      return;
+    }
+
+    const saved = {
+      server: credentials.server,
+      machine: credentials.machine,
+      workspace: credentials.workspace,
+    };
+    const result = await whoami({ server: credentials.server, token: credentials.token });
+    switch (result.status) {
+      case "ok":
+        print(describeIdentity(credentials.server, result.identity), {
+          status: "ok",
+          server: credentials.server,
+          ...result.identity,
+        });
+        break;
+      case "revoked":
+        print(
+          `${credentials.machine.name} was removed from ${credentials.workspace.name} or its token is no longer valid.\nRun \`relayrunner connect\` to sign in again.`,
+          { status: "revoked", ...saved },
+        );
+        process.exitCode = 1;
+        break;
+      case "unverified":
+        print(
+          `${describeSaved(saved)}\n\nUnverified: ${result.reason}. This is what's saved in ${credentialsPath()}.`,
+          { status: "unverified", reason: result.reason, ...saved },
+        );
+        break;
+    }
+  },
+});
+
+function describeIdentity(server: string, identity: WhoamiResponse) {
+  const { machine, workspace, enrolledBy } = identity;
+  const status = machine.status.online
+    ? `online${machine.status.state ? `, ${machine.status.state}` : ""}`
+    : "offline";
+  const enrolled = [
+    enrolledBy && `by ${enrolledBy.name} <${enrolledBy.email}>`,
+    `on ${new Date(machine.createdAt).toLocaleDateString()}`,
+  ]
+    .filter(Boolean)
+    .join(" ");
+  return table(`${machine.name} (${machine.id})`, [
+    ["Workspace", workspace.slug ? `${workspace.name} (${workspace.slug})` : workspace.name],
+    ["Platform", [machine.os, machine.arch].filter(Boolean).join(" ") || "unknown"],
+    ["Enrolled", enrolled],
+    ["Status", status],
+    ["Gateway", server],
+  ]);
+}
+
+function describeSaved(saved: Pick<Credentials, "server" | "machine" | "workspace">) {
+  return table(`${saved.machine.name} (${saved.machine.id})`, [
+    ["Workspace", saved.workspace.name],
+    ["Gateway", saved.server],
+  ]);
+}
+
+function table(title: string, rows: [string, string][]) {
+  const width = Math.max(...rows.map(([label]) => label.length));
+  return [title, ...rows.map(([label, value]) => `  ${label.padEnd(width)}  ${value}`)].join("\n");
+}
+
 function normalizeServer(value: string) {
   try {
     const url = new URL(value);
@@ -207,7 +302,7 @@ const main = defineCommand({
     name: "relayrunner",
     description: "Run GitHub Actions jobs on your machine through the RelayRunner gateway.",
   },
-  subCommands: { connect: connectCommand },
+  subCommands: { connect: connectCommand, whoami: whoamiCommand },
 });
 
 void runMain(main);
