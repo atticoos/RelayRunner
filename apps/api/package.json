@@ -11,15 +11,15 @@
     "db:migrate:remote": "wrangler d1 execute relayrunner --remote --file scripts/rename-legacy-migrations.sql && wrangler d1 migrations apply relayrunner --remote"
   },
   "dependencies": {
-    "better-auth": "^1.7.16",
+    "better-auth": "catalog:",
     "drizzle-orm": "^0.45.4",
     "hono": "^4.13.16",
     "@relayrunner/github-webhooks": "workspace:*"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^5.20261104.1",
+    "@cloudflare/workers-types": "catalog:",
     "drizzle-kit": "^0.31.11",
-    "typescript": "^5.9.3",
-    "wrangler": "^4.157.0"
+    "typescript": "catalog:",
+    "wrangler": "catalog:"
   }
 }

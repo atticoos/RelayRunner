@@ -3,12 +3,12 @@
   "private": true,
   "packageManager": "pnpm@11.28.9",
   "devDependencies": {
-    "@types/node": "^22.20.5",
+    "@types/node": "catalog:",
     "husky": "^9.1.7",
     "lint-staged": "^17.6.0",
     "oxfmt": "^0.75.0",
     "oxlint": "^1.91.0",
-    "typescript": "^5.9.3",
+    "typescript": "catalog:",
     "vitest": "^5.1.0"
   },
   "scripts": {

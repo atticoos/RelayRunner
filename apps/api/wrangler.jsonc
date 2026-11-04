@@ -14,7 +14,7 @@
     "enabled": true,
     "logs": { "enabled": true, "invocation_logs": true },
     "traces": { "enabled": true },
-    "issues": { "enabled": true }
+    "issues": { "enabled": true },
   },
   "upload_source_maps": true,
   "vars": {

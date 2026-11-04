@@ -10,10 +10,10 @@
     "deploy": "vite build && wrangler deploy"
   },
   "dependencies": {
-    "@fontsource-variable/hanken-grotesk": "^5.3.0",
-    "@fontsource-variable/jetbrains-mono": "^5.3.0",
+    "@fontsource-variable/hanken-grotesk": "catalog:",
+    "@fontsource-variable/jetbrains-mono": "catalog:",
     "@tanstack/react-router": "^1.170.46",
-    "better-auth": "^1.7.16",
+    "better-auth": "catalog:",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.67.0",
@@ -25,16 +25,16 @@
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.67.0",
-    "@cloudflare/workers-types": "^5.20261104.1",
+    "@cloudflare/workers-types": "catalog:",
     "@tailwindcss/vite": "^4.3.4",
     "@tanstack/router-plugin": "^1.168.48",
-    "@types/node": "^22.20.5",
+    "@types/node": "catalog:",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^5.2.0",
     "tailwindcss": "^4.3.4",
-    "typescript": "^5.9.3",
-    "vite": "^7.3.7",
-    "wrangler": "^4.157.0"
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "wrangler": "catalog:"
   }
 }
