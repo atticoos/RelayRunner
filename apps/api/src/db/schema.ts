@@ -172,3 +172,51 @@ export const githubRepository = sqliteTable(
   },
   (table) => [index("github_repository_installation_idx").on(table.installationId)],
 );
+
+// Better Auth's device authorization plugin: one row per `relayrunner connect` sign-in in flight.
+// The CLI polls with device_code while the user approves user_code in the dashboard. The plugin
+// deletes the row once the CLI redeems it.
+export const deviceCode = sqliteTable("device_code", {
+  id: text("id").primaryKey(),
+  deviceCode: text("device_code").notNull().unique(),
+  userCode: text("user_code").notNull().unique(),
+  // Set when a signed-in user opens the approval page; only that user can approve or deny.
+  userId: text("user_id").references(() => user.id, { onDelete: "cascade" }),
+  expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+  // 'pending', 'approved' or 'denied'.
+  status: text("status").notNull(),
+  lastPolledAt: integer("last_polled_at", { mode: "timestamp_ms" }),
+  pollingInterval: integer("polling_interval"),
+  clientId: text("client_id"),
+  scope: text("scope"),
+  ...timestamps,
+});
+
+// A machine enrolled with `relayrunner connect`. It belongs to one workspace and authenticates
+// with its own token, not a user session. Enrollment runs in two steps (src/machines.ts):
+// approving the device code in the dashboard creates the row with enrollment_hash set, and the
+// CLI's claim fills in os/arch and token_hash and clears enrollment_hash. Revoking keeps the row
+// so past routes can still name the machine.
+export const machine = sqliteTable(
+  "machine",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspace.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    // The protocol's values (linux, macos, windows; x64, arm64, arm). Null until claimed.
+    os: text("os"),
+    arch: text("arch"),
+    // SHA-256 (hex) of the machine token. The token itself is only ever shown to the CLI.
+    tokenHash: text("token_hash").unique(),
+    // SHA-256 (hex) of the device code that approved this machine, while the claim is pending.
+    enrollmentHash: text("enrollment_hash").unique(),
+    // The user who approved the enrollment.
+    createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
+    lastSeenAt: integer("last_seen_at", { mode: "timestamp_ms" }),
+    revokedAt: integer("revoked_at", { mode: "timestamp_ms" }),
+    ...timestamps,
+  },
+  (table) => [index("machine_workspace_idx").on(table.workspaceId)],
+);

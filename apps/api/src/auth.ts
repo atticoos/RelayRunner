@@ -1,6 +1,6 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { oAuthProxy, organization } from "better-auth/plugins";
+import { bearer, deviceAuthorization, oAuthProxy, organization } from "better-auth/plugins";
 import { createDb, schema } from "./db/index.ts";
 import type { Env } from "./env.ts";
 
@@ -13,6 +13,9 @@ export function previewOrigins(env: Pick<Env, "PREVIEW_ORIGINS">) {
     .map((origin) => origin.trim())
     .filter(Boolean);
 }
+
+// The client_id `relayrunner connect` sends with its device code requests.
+export const MACHINE_CLIENT_ID = "relayrunner-cli";
 
 // Workers only expose bindings per request, so build the auth instance per request too. It is
 // cheap: no I/O happens until a handler runs.
@@ -46,8 +49,17 @@ export function createAuth(env: Env) {
         // Seconds the encrypted hand-off stays valid; it only has to survive one redirect.
         maxAge: 60,
       }),
-      // Next: deviceAuthorization() for `relayrunner login` and bearer() for per-machine
-      // credentials, both from better-auth/plugins. Each adds tables, so regenerate migrations.
+      // `relayrunner connect` signs in with a device code the user approves at /device in the
+      // dashboard (src/machines.ts). The CLI only holds the resulting user session long enough to
+      // trade it for a machine token at POST /api/machines/claim.
+      deviceAuthorization({
+        verificationUri: new URL("/device", env.BETTER_AUTH_URL).toString(),
+        validateClient: (clientId) => clientId === MACHINE_CLIENT_ID,
+        expiresIn: "10m",
+        interval: "5s",
+      }),
+      // Lets that claim call send the device-flow session as `Authorization: Bearer <token>`.
+      bearer(),
     ],
   });
 }
