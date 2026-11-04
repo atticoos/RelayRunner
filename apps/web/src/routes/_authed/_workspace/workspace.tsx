@@ -4,7 +4,14 @@ import { useState, type ReactNode } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { ApiError } from "@/lib/api";
 import { authDisabled, signIn } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
@@ -22,29 +29,38 @@ const outcomes = {
   updated: { tone: "go", message: "Your changes on GitHub are saved." },
   unclaimed: {
     tone: "run",
-    message: "The GitHub App is installed but isn't in a workspace yet. Add it under Unclaimed installations.",
+    message:
+      "The GitHub App is installed but isn't in a workspace yet. Add it under Unclaimed installations.",
   },
   requested: {
     tone: "run",
-    message: "Install request sent to the org's owners. Once one approves it, add the org under Unclaimed installations.",
+    message:
+      "Install request sent to the org's owners. Once one approves it, add the org under Unclaimed installations.",
   },
   taken: {
     tone: "run",
-    message: "That GitHub org is already connected to another workspace. An org can only belong to one workspace.",
+    message:
+      "That GitHub org is already connected to another workspace. An org can only belong to one workspace.",
   },
   not_found: {
     tone: "run",
-    message: "Your GitHub account can't see that installation, so nothing was connected. Ask an org owner to connect it.",
+    message:
+      "Your GitHub account can't see that installation, so nothing was connected. Ask an org owner to connect it.",
   },
   expired: {
     tone: "run",
-    message: "That connect link expired, so nothing was connected. If the GitHub App is installed, add it under Unclaimed installations.",
+    message:
+      "That connect link expired, so nothing was connected. If the GitHub App is installed, add it under Unclaimed installations.",
   },
   reauth: {
     tone: "run",
-    message: "Your GitHub sign-in has expired, so nothing was connected. Sign in again, then add the org under Unclaimed installations.",
+    message:
+      "Your GitHub sign-in has expired, so nothing was connected. Sign in again, then add the org under Unclaimed installations.",
   },
-  invalid: { tone: "run", message: "GitHub didn't say which installation to connect. Try connecting again." },
+  invalid: {
+    tone: "run",
+    message: "GitHub didn't say which installation to connect. Try connecting again.",
+  },
 } as const;
 
 type GitHubOutcome = keyof typeof outcomes;
@@ -156,12 +172,19 @@ function ConnectedOrg({ installation }: { installation: Installation }) {
   return (
     <li className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 text-sm">
       <OrgName installation={installation}>
-        <span className="text-muted-foreground">{repositorySelection === "all" ? "All repos" : "Selected repos"}</span>
+        <span className="text-muted-foreground">
+          {repositorySelection === "all" ? "All repos" : "Selected repos"}
+        </span>
       </OrgName>
       <div className="flex items-center gap-2">
         {suspendedAt ? <Badge variant="run">Suspended</Badge> : <Badge variant="go">Active</Badge>}
         <Button asChild variant="outline" size="xs">
-          <a href={settingsUrl} target="_blank" rel="noreferrer" aria-label={`${suspendedAt ? "Fix" : "Configure"} ${accountLogin} on GitHub`}>
+          <a
+            href={settingsUrl}
+            target="_blank"
+            rel="noreferrer"
+            aria-label={`${suspendedAt ? "Fix" : "Configure"} ${accountLogin} on GitHub`}
+          >
             {suspendedAt ? "Fix" : "Configure"}
             <ExternalLink aria-hidden />
           </a>
@@ -220,15 +243,25 @@ function UnclaimedCard({
     <Card className="py-4">
       <CardHeader className="px-4">
         <CardTitle className="text-sm">Unclaimed installations</CardTitle>
-        <CardDescription>GitHub App installs your account can see that aren't in a workspace yet.</CardDescription>
+        <CardDescription>
+          GitHub App installs your account can see that aren't in a workspace yet.
+        </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-3 px-4 text-sm">
         {unclaimed.installations.length > 0 && (
           <ul className="grid gap-3">
             {unclaimed.installations.map((installation) => (
-              <li key={installation.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5">
+              <li
+                key={installation.id}
+                className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5"
+              >
                 <OrgName installation={installation} />
-                <Button variant="outline" size="xs" disabled={claiming !== null} onClick={() => claim(installation.id)}>
+                <Button
+                  variant="outline"
+                  size="xs"
+                  disabled={claiming !== null}
+                  onClick={() => claim(installation.id)}
+                >
                   {claiming === installation.id ? "Adding…" : `Add to ${workspaceName}`}
                 </Button>
               </li>
@@ -243,7 +276,11 @@ function UnclaimedCard({
             <SignInAgain />
           </div>
         )}
-        {unavailable && <p className="text-muted-foreground">Couldn't reach GitHub to check. Reload to try again.</p>}
+        {unavailable && (
+          <p className="text-muted-foreground">
+            Couldn't reach GitHub to check. Reload to try again.
+          </p>
+        )}
         {error && (
           <p role="alert" className="text-destructive">
             {error}
@@ -256,7 +293,8 @@ function UnclaimedCard({
 
 function claimErrorMessage(error: unknown) {
   const code = error instanceof ApiError ? error.code : undefined;
-  if (code === "installation_in_another_workspace") return "That GitHub org is already connected to another workspace.";
+  if (code === "installation_in_another_workspace")
+    return "That GitHub org is already connected to another workspace.";
   if (code === "not_found") return "Your GitHub account can no longer see that installation.";
   if (code === "forbidden") return "Only workspace owners and admins can add GitHub orgs.";
   return "Couldn't add that installation. Try again.";
@@ -264,7 +302,11 @@ function claimErrorMessage(error: unknown) {
 
 function SignInAgain() {
   return (
-    <Button variant="outline" size="xs" onClick={() => signIn.social({ provider: "github", callbackURL: "/workspace" })}>
+    <Button
+      variant="outline"
+      size="xs"
+      onClick={() => signIn.social({ provider: "github", callbackURL: "/workspace" })}
+    >
       Sign in again
     </Button>
   );

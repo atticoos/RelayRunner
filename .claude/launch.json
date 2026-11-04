@@ -4,27 +4,13 @@
     {
       "name": "landing",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": [
-        "--dir",
-        "apps/landing",
-        "dev",
-        "--port",
-        "5178",
-        "--strictPort"
-      ],
+      "runtimeArgs": ["--dir", "apps/landing", "dev", "--port", "5178", "--strictPort"],
       "port": 5178
     },
     {
       "name": "web",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": [
-        "--dir",
-        "apps/web",
-        "dev",
-        "--port",
-        "5179",
-        "--strictPort"
-      ],
+      "runtimeArgs": ["--dir", "apps/web", "dev", "--port", "5179", "--strictPort"],
       "port": 5179
     }
   ]

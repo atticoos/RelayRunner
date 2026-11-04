@@ -3,7 +3,12 @@ import { cn } from "@/lib/utils";
 /** The relayrunner fork mark and wordmark, as drawn on the landing page. */
 export function Brand({ className }: { className?: string }) {
   return (
-    <span className={cn("inline-flex items-center gap-2.5 text-xl font-bold tracking-[-0.01em]", className)}>
+    <span
+      className={cn(
+        "inline-flex items-center gap-2.5 text-xl font-bold tracking-[-0.01em]",
+        className,
+      )}
+    >
       <svg
         viewBox="0 0 28 28"
         aria-hidden="true"

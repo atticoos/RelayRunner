@@ -15,11 +15,11 @@ Use the user's current checkout unless they specify another path.
    from the installed package to the personal skill directory for the agent
    the user is running:
 
-   | Agent | Destination |
-   | --- | --- |
-   | Codex | `${CODEX_HOME:-$HOME/.codex}/skills/relayrunner/SKILL.md` |
-   | Claude Code | `$HOME/.claude/skills/relayrunner/SKILL.md` |
-   | Cursor | `$HOME/.cursor/skills/relayrunner/SKILL.md` |
+   | Agent       | Destination                                               |
+   | ----------- | --------------------------------------------------------- |
+   | Codex       | `${CODEX_HOME:-$HOME/.codex}/skills/relayrunner/SKILL.md` |
+   | Claude Code | `$HOME/.claude/skills/relayrunner/SKILL.md`               |
+   | Cursor      | `$HOME/.cursor/skills/relayrunner/SKILL.md`               |
 
    Create the destination directory if needed. If the destination file is
    identical, reuse it. If it differs, show the diff and ask before replacing

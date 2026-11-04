@@ -11,13 +11,13 @@ GitHub ──▶ relayrunner-webhooks ──▶ queue ──▶ relayrunner-api 
 
 It is separate from the API so that API deploys, and bugs in processing, never change what GitHub sees. While the API is broken, messages wait and retry (30 seconds, doubling, up to about half an hour in total) instead of failing deliveries. Keep this Worker small: it should rarely need a deploy.
 
-| Response | When |
-| --- | --- |
-| `200` | `ping` |
-| `202` | Queued, or an event RelayRunner doesn't act on |
-| `401` | Missing or wrong signature |
-| `500` | `GITHUB_WEBHOOK_SECRET` can't be read from the Secrets Store |
-| `503` | The queue rejected the message. GitHub doesn't retry, so redeliver it from the App's Recent Deliveries. |
+| Response | When                                                                                                    |
+| -------- | ------------------------------------------------------------------------------------------------------- |
+| `200`    | `ping`                                                                                                  |
+| `202`    | Queued, or an event RelayRunner doesn't act on                                                          |
+| `401`    | Missing or wrong signature                                                                              |
+| `500`    | `GITHUB_WEBHOOK_SECRET` can't be read from the Secrets Store                                            |
+| `503`    | The queue rejected the message. GitHub doesn't retry, so redeliver it from the App's Recent Deliveries. |
 
 Queue messages carry only the fields the consumer uses, never the raw payload, because a message is capped at 128 KB. Delivery is at least once and unordered, so processing must be idempotent.
 

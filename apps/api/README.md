@@ -2,17 +2,17 @@
 
 The gateway backend: a Hono app on a Cloudflare Worker. It serves everything under `/api`, so the dashboard in `apps/web` calls it same-origin.
 
-| Route | What it does |
-| --- | --- |
-| `GET /api/health` | Liveness check. Touches neither auth nor D1. |
-| `/api/auth/*` | [Better Auth](https://www.better-auth.com), with the GitHub App as its GitHub provider. |
-| `GET /api/me` | The signed-in user, or `401`. |
-| `/api/auth/organization/*` | Workspaces: Better Auth's organization plugin (create, list, set active). The creator is the owner. |
-| `GET /api/workspaces/current` | The session's active workspace, the user's role in it, and its GitHub App installations. `401` signed out, `409 no_active_workspace` if none. |
-| `GET /api/github/install` | Redirects to the GitHub App's install page with a signed `state` naming the active workspace ("Connect GitHub org"). |
-| `GET /api/github/setup` | The App's Setup URL. Links `installation_id` to the workspace in `state`, but only if the user's GitHub token sees it in `GET /user/installations`. Redirects to `/workspace?github=<outcome>`. |
-| `GET /api/github/installations/unclaimed` | Installations the user can see that no workspace has claimed (installed straight from GitHub). |
-| `POST /api/github/installations/:id/claim` | Links an unclaimed installation to the active workspace, with the same token check. `409` if another workspace has it. |
+| Route                                      | What it does                                                                                                                                                                                    |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/health`                          | Liveness check. Touches neither auth nor D1.                                                                                                                                                    |
+| `/api/auth/*`                              | [Better Auth](https://www.better-auth.com), with the GitHub App as its GitHub provider.                                                                                                         |
+| `GET /api/me`                              | The signed-in user, or `401`.                                                                                                                                                                   |
+| `/api/auth/organization/*`                 | Workspaces: Better Auth's organization plugin (create, list, set active). The creator is the owner.                                                                                             |
+| `GET /api/workspaces/current`              | The session's active workspace, the user's role in it, and its GitHub App installations. `401` signed out, `409 no_active_workspace` if none.                                                   |
+| `GET /api/github/install`                  | Redirects to the GitHub App's install page with a signed `state` naming the active workspace ("Connect GitHub org").                                                                            |
+| `GET /api/github/setup`                    | The App's Setup URL. Links `installation_id` to the workspace in `state`, but only if the user's GitHub token sees it in `GET /user/installations`. Redirects to `/workspace?github=<outcome>`. |
+| `GET /api/github/installations/unclaimed`  | Installations the user can see that no workspace has claimed (installed straight from GitHub).                                                                                                  |
+| `POST /api/github/installations/:id/claim` | Links an unclaimed installation to the active workspace, with the same token check. `409` if another workspace has it.                                                                          |
 
 GitHub webhooks don't come in over HTTP here. [`apps/webhooks`](../webhooks) verifies each delivery and puts it on the `relayrunner-github-webhooks` queue, and this Worker's `queue()` handler processes it (`src/webhook-queue.ts`). Failures retry with backoff for about half an hour, then move to `relayrunner-github-webhooks-dlq`, whose consumer logs the full message and acks it. `installation` and `installation_repositories` keep `github_installation` current (account, suspension, repository selection; `deleted` removes the row and its repos). They and `repository` events also keep `github_repository` current: the repos each installation can see, with name and visibility, so activity can be labeled by repo (`src/repositories.ts`). There's no repo opt-in: `runs-on: relayrunner` from a connected installation is the opt-in. `workflow_job` events for jobs with the `relayrunner` label are logged (`relayrunner job received`); others are ignored.
 
