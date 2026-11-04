@@ -13,7 +13,8 @@
   "dependencies": {
     "better-auth": "^1.7.16",
     "drizzle-orm": "^0.45.4",
-    "hono": "^4.13.16"
+    "hono": "^4.13.16",
+    "@relayrunner/github-webhooks": "workspace:*"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20261104.1",

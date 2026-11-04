@@ -1,0 +1,106 @@
+// Talking to GitHub on behalf of a signed-in user, and the signed `state` that carries a
+// workspace through the GitHub App install page.
+
+const API = 'https://api.github.com';
+
+// The slice of a GitHub App installation the gateway stores. Both GET /user/installations and
+// installation webhooks send this shape.
+export interface GitHubInstallation {
+  id: number;
+  account: { id: number; login: string; type: string } | null;
+  repository_selection: 'all' | 'selected';
+  suspended_at: string | null;
+}
+
+// Installations of this GitHub App that the user's token can see: accounts the user owns or
+// administers, or where they can reach a repo the App was given. Following the user's token is
+// what proves an installation_id from a query string really is theirs.
+export async function listUserInstallations(token: string): Promise<GitHubInstallation[]> {
+  const installations: GitHubInstallation[] = [];
+  for (let page = 1; ; page += 1) {
+    const response = await fetch(`${API}/user/installations?per_page=100&page=${page}`, {
+      headers: {
+        accept: 'application/vnd.github+json',
+        authorization: `Bearer ${token}`,
+        'user-agent': 'relayrunner-gateway',
+        'x-github-api-version': '2022-11-28',
+      },
+    });
+    if (!response.ok) throw new GitHubError(response.status, `GET /user/installations failed with ${response.status}`);
+    const body = (await response.json()) as { total_count: number; installations: GitHubInstallation[] };
+    installations.push(...body.installations);
+    if (body.installations.length < 100 || installations.length >= body.total_count) return installations;
+  }
+}
+
+export class GitHubError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+export function installUrl(appSlug: string, state: string) {
+  return `https://github.com/apps/${encodeURIComponent(appSlug)}/installations/new?state=${encodeURIComponent(state)}`;
+}
+
+// Where an owner changes which repos the App sees, accepts new permissions, or unsuspends it.
+export function installationSettingsUrl(installation: { id: number; accountLogin: string; accountType: string }) {
+  return installation.accountType === 'Organization'
+    ? `https://github.com/organizations/${encodeURIComponent(installation.accountLogin)}/settings/installations/${installation.id}`
+    : `https://github.com/settings/installations/${installation.id}`;
+}
+
+// The install link's `state`: which workspace to link the installation to, who started it, and
+// when it stops being valid. HMAC-signed with BETTER_AUTH_SECRET so it can't be forged. It only
+// picks the workspace: the installation itself is still checked against the user's token.
+export interface InstallState {
+  workspaceId: string;
+  userId: string;
+  expiresAt: number;
+}
+
+const STATE_TTL_MS = 60 * 60 * 1000;
+
+export async function signInstallState(secret: string, workspaceId: string, userId: string, now = Date.now()) {
+  const payload = base64url(new TextEncoder().encode(JSON.stringify({ w: workspaceId, u: userId, e: now + STATE_TTL_MS })));
+  return `${payload}.${base64url(await hmac(secret, payload))}`;
+}
+
+export async function verifyInstallState(secret: string, state: string, now = Date.now()): Promise<InstallState | null> {
+  const [payload, signature, extra] = state.split('.');
+  if (!payload || !signature || extra !== undefined) return null;
+  const expected = base64url(await hmac(secret, payload));
+  if (!timingSafeEqual(expected, signature)) return null;
+  try {
+    const { w, u, e } = JSON.parse(new TextDecoder().decode(fromBase64url(payload)));
+    if (typeof w !== 'string' || typeof u !== 'string' || typeof e !== 'number' || e < now) return null;
+    return { workspaceId: w, userId: u, expiresAt: e };
+  } catch {
+    return null;
+  }
+}
+
+async function hmac(secret: string, data: string) {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey('raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  return new Uint8Array(await crypto.subtle.sign('HMAC', key, encoder.encode(`github-install-state:${data}`)));
+}
+
+function base64url(bytes: Uint8Array) {
+  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function fromBase64url(text: string) {
+  const binary = atob(text.replace(/-/g, '+').replace(/_/g, '/'));
+  return Uint8Array.from(binary, char => char.charCodeAt(0));
+}
+
+function timingSafeEqual(a: string, b: string) {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i += 1) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}

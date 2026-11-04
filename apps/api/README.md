@@ -5,11 +5,16 @@ The gateway backend: a Hono app on a Cloudflare Worker. It serves everything und
 | Route | What it does |
 | --- | --- |
 | `GET /api/health` | Liveness check. Touches neither auth nor D1. |
-| `POST /api/webhooks/github` | GitHub App webhooks, verified with `GITHUB_WEBHOOK_SECRET`. Logs each delivery (event, action, delivery id, repo) and answers `ping` with `200`, everything else `202`. No processing yet. |
 | `/api/auth/*` | [Better Auth](https://www.better-auth.com), with the GitHub App as its GitHub provider. |
 | `GET /api/me` | The signed-in user, or `401`. |
 | `/api/auth/organization/*` | Workspaces: Better Auth's organization plugin (create, list, set active). The creator is the owner. |
 | `GET /api/workspaces/current` | The session's active workspace, the user's role in it, and its GitHub App installations. `401` signed out, `409 no_active_workspace` if none. |
+| `GET /api/github/install` | Redirects to the GitHub App's install page with a signed `state` naming the active workspace ("Connect GitHub org"). |
+| `GET /api/github/setup` | The App's Setup URL. Links `installation_id` to the workspace in `state`, but only if the user's GitHub token sees it in `GET /user/installations`. Redirects to `/workspace?github=<outcome>`. |
+| `GET /api/github/installations/unclaimed` | Installations the user can see that no workspace has claimed (installed straight from GitHub). |
+| `POST /api/github/installations/:id/claim` | Links an unclaimed installation to the active workspace, with the same token check. `409` if another workspace has it. |
+
+GitHub webhooks don't come in over HTTP here. [`apps/webhooks`](../webhooks) verifies each delivery and puts it on the `relayrunner-github-webhooks` queue, and this Worker's `queue()` handler processes it (`src/webhook-queue.ts`). Failures retry with backoff for about half an hour, then move to `relayrunner-github-webhooks-dlq`, whose consumer logs the full message and acks it. `installation` and `installation_repositories` keep `github_installation` current (account, suspension, repository selection; `deleted` removes the row). `workflow_job` is still only a log line.
 
 ## Layout
 
@@ -24,7 +29,7 @@ Change `src/db/schema.ts`, then run `pnpm db:generate`. Drizzle names the file w
 
 Merging to `main` applies new migrations to the production database: the `Apply D1 migrations` workflow runs `pnpm db:migrate:remote` with the `CLOUDFLARE_API_TOKEN` secret. It is the only thing that migrates production: the Workers Builds deploy (`pnpm run deploy:api`) does not. Migrations must be safe to run against the Worker that's already deployed, since the workflow can land before the new Worker does.
 
-The first two migrations were renamed from `0000_init.sql` and `0001_workspaces.sql`. Wrangler tracks applied migrations by filename, so `db:migrate:local` and `db:migrate:remote` first run `scripts/rename-legacy-migrations.sql`, which renames those rows in `d1_migrations` and does nothing on a fresh database or once they're renamed. It can go once every database (including your local `.wrangler` state) has been migrated with it.
+The first four migrations were renamed from `0000_init.sql`, `0001_workspaces.sql`, `0002_installation_repository_selection.sql` and `0003_installation_github_state_at.sql`. Wrangler tracks applied migrations by filename, so `db:migrate:local` and `db:migrate:remote` first run `scripts/rename-legacy-migrations.sql`, which renames those rows in `d1_migrations` and does nothing on a fresh database or once they're renamed. It can go once every database (including your local `.wrangler` state) has been migrated with it.
 
 ## Run it locally
 
@@ -39,9 +44,9 @@ pnpm dev                          # http://localhost:8787/api/health
 `wrangler.jsonc` pins the RelayRunner Cloudflare account (`account_id`), so wrangler targets it even if your login can see other accounts. Then:
 
 ```sh
-pnpm db:migrate:remote                   # CI does this on merge to main; only needed by hand for a new database
-wrangler secret put BETTER_AUTH_SECRET   # and GITHUB_APP_CLIENT_ID, GITHUB_APP_CLIENT_SECRET, GITHUB_WEBHOOK_SECRET
-pnpm run deploy
+pnpm db:migrate:remote                   # the D1 Migrations workflow does this on merge to main; only needed by hand for a new database
+wrangler secret put BETTER_AUTH_SECRET   # and GITHUB_APP_CLIENT_ID, GITHUB_APP_CLIENT_SECRET
+pnpm run deploy:api                      # from the repo root; deploys only, no migrations
 ```
 
-The browser never talks to this Worker directly: the dashboard Worker (`apps/web`) forwards `/api/*` here over a service binding, so `BETTER_AUTH_URL` (in `wrangler.jsonc` vars) is the dashboard's origin: `https://relayrunner-app.relayrun.workers.dev` until `app.relayrunner.dev` moves to this account. `.dev.vars` overrides it for local dev. Deploy this Worker before `apps/web`, since the binding needs it to exist. The GitHub App's callback URL is `<BETTER_AUTH_URL>/api/auth/callback/github` and its webhook URL is `<BETTER_AUTH_URL>/api/webhooks/github`.
+The browser never talks to this Worker directly: the dashboard Worker (`apps/web`) forwards `/api/*` here over a service binding, so `BETTER_AUTH_URL` (in `wrangler.jsonc` vars) is the dashboard's origin: `https://relayrunner-app.relayrun.workers.dev` until `app.relayrunner.dev` moves to this account. `.dev.vars` overrides it for local dev. Deploy this Worker before `apps/web`, since the binding needs it to exist. The GitHub App's callback URL is `<BETTER_AUTH_URL>/api/auth/callback/github` and its webhook URL is `<BETTER_AUTH_URL>/api/webhooks/github`, which the dashboard Worker forwards to `apps/webhooks`.

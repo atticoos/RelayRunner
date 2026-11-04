@@ -9,3 +9,5 @@ CREATE TABLE IF NOT EXISTS d1_migrations(
 );
 UPDATE d1_migrations SET name = '20261104052836_init.sql' WHERE name = '0000_init.sql';
 UPDATE d1_migrations SET name = '20261104160202_workspaces.sql' WHERE name = '0001_workspaces.sql';
+UPDATE d1_migrations SET name = '20261104163332_installation_repository_selection.sql' WHERE name = '0002_installation_repository_selection.sql';
+UPDATE d1_migrations SET name = '20261104164926_installation_github_state_at.sql' WHERE name = '0003_installation_github_state_at.sql';

@@ -26,6 +26,7 @@
     "**/dist",
     "**/coverage",
     "apps/api",
-    "apps/web"
+    "apps/web",
+    "apps/webhooks"
   ]
 }
