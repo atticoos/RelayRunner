@@ -86,7 +86,7 @@ function startSignIn(origin: string) {
     {
       method: "POST",
       headers: { "content-type": "application/json", origin },
-      body: JSON.stringify({ provider: "github", callbackURL: "/repos" }),
+      body: JSON.stringify({ provider: "github", callbackURL: "/runners" }),
     },
     env,
   );
@@ -130,7 +130,7 @@ describe("preview sign-in", () => {
       env,
     );
     expect(completed.status).toBe(302);
-    expect(completed.headers.get("location")).toBe("/repos");
+    expect(completed.headers.get("location")).toBe("/runners");
     const cookie = cookiesFrom(completed);
     expect(cookie).toContain("session_token");
     expect(completed.headers.getSetCookie().every((set) => !/domain=/i.test(set))).toBe(true);
