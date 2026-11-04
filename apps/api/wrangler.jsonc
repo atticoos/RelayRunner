@@ -7,6 +7,9 @@
   // The RelayRunner Cloudflare account (separate from Atticus's personal account).
   "account_id": "b233b6d6fd9eae9e093651bfb043c119",
   "workers_dev": true,
+  // No preview URLs: nothing reaches this Worker by one (dashboard previews bind to production),
+  // and each would be another public, unprotected hostname.
+  "preview_urls": false,
   // Workers Logs, traces and Issues (errors grouped per Worker). Wrangler deploys overwrite
   // dashboard settings, so these must stay on here. Source maps make Issues' stacks point at
   // the TypeScript source.
