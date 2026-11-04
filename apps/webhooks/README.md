@@ -16,7 +16,7 @@ It is separate from the API so that API deploys, and bugs in processing, never c
 | `200` | `ping` |
 | `202` | Queued, or an event RelayRunner doesn't act on |
 | `401` | Missing or wrong signature |
-| `500` | `GITHUB_WEBHOOK_SECRET` isn't set |
+| `500` | `GITHUB_WEBHOOK_SECRET` can't be read from the Secrets Store |
 | `503` | The queue rejected the message. GitHub doesn't retry, so redeliver it from the App's Recent Deliveries. |
 
 Queue messages carry only the fields the consumer uses, never the raw payload, because a message is capped at 128 KB. Delivery is at least once and unordered, so processing must be idempotent.
@@ -26,7 +26,8 @@ Queue messages carry only the fields the consumer uses, never the raw payload, b
 Run it in the same `wrangler dev` as the API so the local queue connects producer and consumer:
 
 ```sh
-cp apps/webhooks/.dev.vars.example apps/webhooks/.dev.vars   # set GITHUB_WEBHOOK_SECRET
+# once: seed the local Secrets Store (prompts for the value)
+npx wrangler secrets-store secret create eac3493b9fef4234a832f5f3fdcc8a41 --name GITHUB_WEBHOOK_SECRET --scopes workers -c apps/webhooks/wrangler.jsonc
 npx wrangler dev -c apps/webhooks/wrangler.jsonc -c apps/api/wrangler.jsonc
 ```
 
@@ -39,10 +40,9 @@ wrangler queues create relayrunner-github-webhooks
 wrangler queues create relayrunner-github-webhooks-dlq
 ```
 
-Then deploy in this order, since each step binds to the one before it:
+`GITHUB_WEBHOOK_SECRET` already lives in the account's Secrets Store, so there's nothing to set. Then deploy in this order, since each step binds to the one before it:
 
 ```sh
-pnpm --filter @relayrunner/webhooks exec wrangler secret put GITHUB_WEBHOOK_SECRET
 pnpm --filter @relayrunner/webhooks run deploy
 pnpm --filter @relayrunner/api run deploy    # attaches the queue consumers
 pnpm --filter @relayrunner/web run deploy    # forwards /api/webhooks/* here

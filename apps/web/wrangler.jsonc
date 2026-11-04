@@ -27,7 +27,10 @@
   // Bindings aren't inherited here, so previews forward /api/* to the
   // production API Worker too. Preview sign-in is tracked in #28.
   "previews": {
-    "services": [{ "binding": "API", "service": "relayrunner-api" }],
+    "services": [
+      { "binding": "API", "service": "relayrunner-api" },
+      { "binding": "WEBHOOKS", "service": "relayrunner-webhooks" }
+    ],
     "observability": { "enabled": true }
   }
   // Production routing (enable once DNS lives in the new account):

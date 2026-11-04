@@ -13,6 +13,13 @@ class FakeQueue {
   }
 }
 
+function storeSecret(value: string) {
+  return { get: async () => value } as SecretsStoreSecret;
+}
+
+// What get() does when the store has no secret by that name.
+const missingSecret = { get: async () => { throw new Error('secret not found'); } } as SecretsStoreSecret;
+
 async function sign(body: string) {
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   const digest = new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(body)));
@@ -21,7 +28,7 @@ async function sign(body: string) {
 
 function setup(envOverrides: Partial<Env> = {}) {
   const queue = new FakeQueue();
-  const env = { GITHUB_WEBHOOK_SECRET: secret, WEBHOOK_QUEUE: queue, ...envOverrides } as unknown as Env;
+  const env = { GITHUB_WEBHOOK_SECRET: storeSecret(secret), WEBHOOK_QUEUE: queue, ...envOverrides } as unknown as Env;
   const post = (body: string, headers: Record<string, string>) =>
     handleRequest(new Request('https://hooks.test/api/webhooks/github', { method: 'POST', body, headers }), env);
   return { queue, post };
@@ -43,7 +50,7 @@ describe('webhook ingress', () => {
   });
 
   test('fails loudly when the secret is not configured', async () => {
-    const { post } = setup({ GITHUB_WEBHOOK_SECRET: '' });
+    const { post } = setup({ GITHUB_WEBHOOK_SECRET: missingSecret });
     expect((await post('{}', { 'x-github-event': 'ping' })).status).toBe(500);
   });
 
@@ -81,7 +88,7 @@ describe('webhook ingress', () => {
 
   test('only answers POST on the webhook path', async () => {
     const { queue } = setup();
-    const env = { GITHUB_WEBHOOK_SECRET: secret, WEBHOOK_QUEUE: queue } as unknown as Env;
+    const env = { GITHUB_WEBHOOK_SECRET: storeSecret(secret), WEBHOOK_QUEUE: queue } as unknown as Env;
     expect((await handleRequest(new Request('https://hooks.test/api/webhooks/github'), env)).status).toBe(405);
     expect((await handleRequest(new Request('https://hooks.test/other', { method: 'POST' }), env)).status).toBe(404);
   });

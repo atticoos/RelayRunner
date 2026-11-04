@@ -1,3 +1,0 @@
-# Copy to .dev.vars for `pnpm dev`. Must match the GitHub App's webhook secret (or whatever you sign
-# test deliveries with).
-GITHUB_WEBHOOK_SECRET=

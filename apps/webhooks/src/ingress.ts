@@ -10,14 +10,15 @@
  * - 200 ping
  * - 202 accepted (queued, or an event RelayRunner doesn't act on)
  * - 401 bad or missing signature
- * - 500 GITHUB_WEBHOOK_SECRET not set
+ * - 500 GITHUB_WEBHOOK_SECRET can't be read from the Secrets Store
  * - 503 the queue rejected the message; GitHub doesn't retry, so redeliver from the App settings
  */
 import { toWebhookMessage, verifyGitHubSignature, type WebhookMessage } from '@relayrunner/github-webhooks';
 
 export interface Env {
   WEBHOOK_QUEUE: Queue<WebhookMessage>;
-  GITHUB_WEBHOOK_SECRET: string;
+  // Secrets Store binding; read with get().
+  GITHUB_WEBHOOK_SECRET: SecretsStoreSecret;
 }
 
 // The path GitHub posts to. The dashboard Worker forwards /api/webhooks/* here over a service
@@ -33,13 +34,14 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
   const event = request.headers.get('x-github-event') ?? '';
   const deliveryId = request.headers.get('x-github-delivery') ?? '';
 
-  if (!env.GITHUB_WEBHOOK_SECRET) {
+  const secret = await readSecret(env.GITHUB_WEBHOOK_SECRET);
+  if (!secret) {
     log('error', 'github webhook secret not configured', { event, deliveryId });
     return json({ error: 'webhook_secret_not_configured' }, 500);
   }
 
   const body = await request.text();
-  if (!await verifyGitHubSignature(env.GITHUB_WEBHOOK_SECRET, body, request.headers.get('x-hub-signature-256'))) {
+  if (!await verifyGitHubSignature(secret, body, request.headers.get('x-hub-signature-256'))) {
     log('warn', 'github webhook signature rejected', { event, deliveryId });
     return json({ error: 'invalid_signature' }, 401);
   }
@@ -71,6 +73,16 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
   }
   log('log', 'github webhook queued', summary);
   return new Response(null, { status: 202 });
+}
+
+// The binding is missing when wrangler.jsonc doesn't declare it, and get() throws when the store has
+// no secret by that name. Both mean "not configured".
+async function readSecret(binding: SecretsStoreSecret | undefined) {
+  try {
+    return binding ? await binding.get() : null;
+  } catch {
+    return null;
+  }
 }
 
 function json(body: unknown, status: number) {
