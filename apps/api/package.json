@@ -7,8 +7,8 @@
     "deploy": "wrangler deploy",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
-    "db:migrate:local": "wrangler d1 migrations apply relayrunner --local",
-    "db:migrate:remote": "wrangler d1 migrations apply relayrunner --remote"
+    "db:migrate:local": "wrangler d1 execute relayrunner --local --file scripts/rename-legacy-migrations.sql && wrangler d1 migrations apply relayrunner --local",
+    "db:migrate:remote": "wrangler d1 execute relayrunner --remote --file scripts/rename-legacy-migrations.sql && wrangler d1 migrations apply relayrunner --remote"
   },
   "dependencies": {
     "better-auth": "^1.7.16",
