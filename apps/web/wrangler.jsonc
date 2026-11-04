@@ -52,10 +52,10 @@
     ],
     "observability": { "enabled": true },
     // Vars aren't inherited either. ACCESS_AUD is the Application Audience tag of the Access app
-    // on this Worker's preview URLs; while it's empty, /dev/* answers 404 on previews too.
+    // "relayrunner-app previews" (*-relayrunner-app.relayrun.workers.dev). It is not a secret.
     "vars": {
       "ACCESS_TEAM_DOMAIN": "relayrunner.cloudflareaccess.com",
-      "ACCESS_AUD": "",
+      "ACCESS_AUD": "bc8e87c4c78375b0b1e61b4a2a73354543030492e218d02a28c56bc0f95702f7",
     },
   },
   // Production routing (enable once DNS lives in the new account):

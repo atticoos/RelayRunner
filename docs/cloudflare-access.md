@@ -25,15 +25,16 @@ The Worker checks the JWT in addition to the Access edge check. If the Access ap
 
 To add a dev-only view, put its page under `/dev/` and its data under `/api/dev/`. The API Worker's own `workers.dev` URL is public. An `/api/dev/*` route in `apps/api` must call `gateDevOnly` itself, and must not trust a header set by the dashboard Worker.
 
-## One-time setup
+## Account setup
 
-The team domain is `relayrunner.cloudflareaccess.com`.
+All of this is already set up in the RelayRunner Zero Trust organization (team domain `relayrunner.cloudflareaccess.com`). Look in Zero Trust > Access to find each item.
 
-1. **Protect the preview URLs.** In Workers & Pages, open `relayrunner-app`. Go to Settings > Domains & Routes > Preview URLs and turn on Cloudflare Access. This creates an Access application for the previews.
-2. **Copy the AUD.** In Zero Trust > Access > Applications, open that application and copy its Application Audience (AUD) tag. Put it in `previews.vars.ACCESS_AUD` in `apps/web/wrangler.jsonc`. The AUD is not a secret.
-3. **Choose who can log in.** Add a login method (GitHub, or One-time PIN). Then edit the application's Allow policy to include the people who need previews.
-4. **Create the agent service token.** In Zero Trust > Access > Service credentials, create a token named `relayrunner-agents`. Save the Client ID and Client Secret right away, because the secret is shown only once. Add a second policy to the preview application with the action **Service Auth** that includes this token.
-5. **Deploy** `api`, `webhooks` and `web` so that the `preview_urls` settings apply.
+- **Application** `relayrunner-app previews`: self-hosted, with the domain `*-relayrunner-app.relayrun.workers.dev` and 24-hour sessions. Its AUD tag is in `previews.vars.ACCESS_AUD` in `apps/web/wrangler.jsonc`.
+- **Login methods**: Cloudflare login, limited to members of the RelayRunner account, and One-time PIN.
+- **Policy** `RelayRunner team` (Allow): the team's email addresses. To give someone access, add them here.
+- **Policy** `RelayRunner agents` (Service Auth): the `relayrunner-agents` service token. The token expires after one year.
+
+To rebuild the setup, create the application with the same domain and attach both policies, then copy the new AUD into `wrangler.jsonc`. Deploy `api`, `webhooks` and `web` so that the `preview_urls` settings apply.
 
 ## Agent access
 
