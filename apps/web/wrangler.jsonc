@@ -1,21 +1,24 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  // Gateway dashboard: a React SPA served as Worker static assets.
-  // No `main` yet, so no Worker script runs; add one (or move to TanStack
-  // Start) when the dashboard needs server code of its own.
+  // Gateway dashboard: a React SPA served as Worker static assets, plus a tiny
+  // Worker (worker/index.ts) that forwards /api/* to the API Worker.
   "name": "relayrunner-app",
+  "main": "worker/index.ts",
   "compatibility_date": "2026-11-03",
-  // account_id is intentionally omitted: RelayRunner is moving to its own
-  // Cloudflare account. Set CLOUDFLARE_ACCOUNT_ID in the environment (or add
-  // "account_id" here once the account move is done).
+  // The RelayRunner Cloudflare account (separate from Atticus's personal account).
+  "account_id": "b233b6d6fd9eae9e093651bfb043c119",
   "assets": {
+    "binding": "ASSETS",
     // Unknown paths fall back to index.html so client-side routes deep-link.
-    "not_found_handling": "single-page-application"
+    "not_found_handling": "single-page-application",
+    // /api/* must reach the Worker, not the SPA fallback.
+    "run_worker_first": ["/api/*"]
   },
-  "workers_dev": true
+  // Same-origin API: the dashboard forwards /api/* to apps/api over this binding,
+  // so auth cookies stay first-party on workers.dev and on the custom domain.
+  "services": [{ "binding": "API", "service": "relayrunner-api" }],
+  "workers_dev": true,
+  "observability": { "enabled": true }
   // Production routing (enable once DNS lives in the new account):
-  // app.relayrunner.dev       -> this Worker (custom domain)
-  // app.relayrunner.dev/api/* -> the apps/api Worker (route on that Worker),
-  // so the dashboard and API share an origin and auth cookies.
   // "routes": [{ "pattern": "app.relayrunner.dev", "custom_domain": true }]
 }
