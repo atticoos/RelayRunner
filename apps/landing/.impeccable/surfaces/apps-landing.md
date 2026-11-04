@@ -1,11 +1,11 @@
 ---
 version: 1
-slug: "apps-web"
-primary_target: "apps/web"
+slug: "apps-landing"
+primary_target: "apps/landing"
 related_targets: []
 ---
 
-# Landing page (apps/web)
+# Landing page (apps/landing)
 
 Mode: Persuade. Audience: individual developers whose coding agents burn a private repo's GitHub Actions minutes. Action: copy the agent setup instruction (CLI install is the secondary path). Proof: the real `runs-on` patch, real CLI commands and output, GitHub check rows. Constraints: dark theme; honest caveats (private repos, trusted workflow authors, jobs run as your local user, a relief valve rather than infrastructure); demo data labelled as a simulation.
 
