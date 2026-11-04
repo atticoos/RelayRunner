@@ -62,7 +62,7 @@ export const githubRoutes = new Hono<AppEnv>()
   })
 
   .get("/setup", async (c) => {
-    const done = (outcome: SetupOutcome) => c.redirect(`/workspace?github=${outcome}`);
+    const done = (outcome: SetupOutcome) => c.redirect(`/settings/github?github=${outcome}`);
     // An org member without admin asked an owner to approve the install. Nothing to link yet; the
     // installation webhook records it once approved.
     if (c.req.query("setup_action") === "request") return done("requested");
@@ -71,7 +71,9 @@ export const githubRoutes = new Hono<AppEnv>()
     // Signed out (or the session expired on the way): the installation is recorded by webhook and
     // shows up to claim after sign-in.
     if (!user)
-      return c.redirect(`/login?redirect=${encodeURIComponent("/workspace?github=unclaimed")}`);
+      return c.redirect(
+        `/login?redirect=${encodeURIComponent("/settings/github?github=unclaimed")}`,
+      );
 
     const installationId = Number(c.req.query("installation_id"));
     if (!Number.isSafeInteger(installationId) || installationId <= 0) return done("invalid");
