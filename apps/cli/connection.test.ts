@@ -9,8 +9,9 @@ import type { JobUpdate } from "./job.ts";
 const TOKEN = "rrm_test";
 const hello = { machineId: "m1", os: "linux", arch: "x64", runnerVersion: "2.329.0" } as const;
 
-// A stand-in for the gateway's /api/machines/connect: answers a plain GET with 426, rejects a
-// wrong token with 401 before the upgrade, and records what each connection sends.
+// A stand-in for the gateway's /api/machines/connect behind Cloudflare: rejects a wrong token
+// with 401, answers a plain GET with a good one with 426, answers an upgrade without a WebSocket
+// key with 400 as the edge does, and records what each connection sends.
 interface Gateway {
   server: string;
   connections: Connection[];
@@ -34,8 +35,8 @@ async function startGateway(): Promise<Gateway> {
   const tokens = { valid: true };
   const authorized = (request: IncomingMessage) =>
     tokens.valid && request.headers.authorization === `Bearer ${TOKEN}`;
-  const http: Server = createServer((_request, response) => {
-    response.statusCode = 426;
+  const http: Server = createServer((request, response) => {
+    response.statusCode = authorized(request) ? 426 : 401;
     response.end();
   });
   const wss = new WebSocketServer({ noServer: true });
@@ -43,6 +44,10 @@ async function startGateway(): Promise<Gateway> {
   const waiting: ((connection: Connection) => void)[] = [];
 
   http.on("upgrade", (request, socket, head) => {
+    if (!request.headers["sec-websocket-key"]) {
+      socket.end("HTTP/1.1 400 Bad Request\r\ncontent-length: 0\r\n\r\n");
+      return;
+    }
     if (request.url !== "/api/machines/connect" || !authorized(request)) {
       socket.end("HTTP/1.1 401 Unauthorized\r\ncontent-length: 0\r\n\r\n");
       return;

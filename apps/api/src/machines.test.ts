@@ -371,6 +371,8 @@ describe("the machine WebSocket", () => {
       env,
     );
     expect((await connect({ ...upgrade, authorization: `Bearer ${token}` })).status).toBe(401);
+    // The CLI's check after a failed upgrade: a plain GET, which Cloudflare passes through.
+    expect((await connect({ authorization: `Bearer ${token}` })).status).toBe(401);
     expect(link(machine.id).fetch).not.toHaveBeenCalled();
   });
 
