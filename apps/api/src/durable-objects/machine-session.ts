@@ -7,6 +7,7 @@ import {
   parseMachineMessage,
   PROTOCOL_VERSION,
   type HelloMessage,
+  type JobMessage,
 } from "@relayrunner/machine-protocol";
 
 // The header GET /api/machines/connect uses to tell MachineLink which machine authenticated.
@@ -40,7 +41,8 @@ export interface SessionState {
 }
 
 export type FrameOutcome =
-  | { state: SessionState }
+  // `job` is set when the frame was a job update, for MachineLink to act on.
+  | { state: SessionState; job?: JobMessage }
   | { state: SessionState; reply: string; close: { code: number; reason: string } };
 
 export function newSession(machineId: string, now: number): SessionState {
@@ -76,8 +78,8 @@ export function handleFrame(
 
   if (!session.hello) return reject(session, "invalid_message", "send hello first");
   if (message.type === "status") return { state: { ...heard, state: message.state } };
-  // `job` progress: routing (#67) acts on it. Hearing it still counts as a heartbeat.
-  return { state: heard };
+  // Job progress for a route. Hearing it still counts as a heartbeat.
+  return { state: heard, job: message };
 }
 
 export interface MachineStatus {

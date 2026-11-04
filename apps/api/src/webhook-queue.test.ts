@@ -1,6 +1,7 @@
-import { describe, expect, test, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import { WEBHOOK_DLQ, WEBHOOK_QUEUE, type WebhookMessage } from "@relayrunner/github-webhooks";
 import type { Env } from "./env.ts";
+import { startD1 } from "./testing.ts";
 import * as consumer from "./webhook-queue.ts";
 
 const start = vi.fn();
@@ -122,6 +123,67 @@ describe("webhook queue consumer", () => {
     await consumer.processWebhook(env, workflowJob(["relayrunner"], "in_progress"));
     expect(start).toHaveBeenCalledOnce();
     log.mockRestore();
+  });
+
+  describe("route jobs", () => {
+    let stop: () => Promise<void>;
+    let db: D1Database;
+    const claim = vi.fn();
+    const run = vi.fn(async () => "sent");
+    const routeEnv = () =>
+      ({
+        DB: db,
+        ROUTER: { getByName: vi.fn(() => ({ claim })) },
+        MACHINE_LINK: { getByName: vi.fn(() => ({ run })) },
+      }) as unknown as Env;
+
+    beforeAll(async () => {
+      const { proxy, env } = await startD1();
+      stop = () => proxy.dispose();
+      db = env.DB;
+      const now = Date.now();
+      await db
+        .prepare("insert into workspace (id, name, slug, created_at) values ('w1', 'W', 'w', ?)")
+        .bind(now)
+        .run();
+      await db
+        .prepare(
+          "insert into github_installation (id, workspace_id, account_id, account_login, account_type, created_at, updated_at) values (7, 'w1', 10, 'relayrunner', 'Organization', ?, ?)",
+        )
+        .bind(now, now)
+        .run();
+    });
+    afterAll(() => stop());
+
+    test("a queued rr-<id> job claims its route and goes to the route's machine", async () => {
+      const log = vi.spyOn(console, "log").mockImplementation(() => {});
+      const route = { id: "0123456789ab", machineId: "m1" };
+      claim.mockResolvedValueOnce(route);
+      const env = routeEnv();
+      await consumer.processWebhook(env, workflowJob(["rr-0123456789ab"]));
+      expect(env.ROUTER.getByName).toHaveBeenCalledWith("w1");
+      expect(claim).toHaveBeenCalledWith("0123456789ab", { jobId: 42, repositoryId: 1, runId: 9 });
+      expect(env.MACHINE_LINK.getByName).toHaveBeenCalledWith("m1");
+      expect(run).toHaveBeenCalledWith({ route, workspaceId: "w1" });
+      expect(JSON.parse(log.mock.calls.at(-1)![0])).toMatchObject({ result: "sent" });
+      log.mockRestore();
+    });
+
+    test("an unknown or mismatched route gets nothing, and only queued jobs claim", async () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const log = vi.spyOn(console, "log").mockImplementation(() => {});
+      claim.mockReset().mockResolvedValue(null);
+      run.mockClear();
+      const env = routeEnv();
+      await consumer.processWebhook(env, workflowJob(["rr-0123456789ab"]));
+      expect(JSON.parse(warn.mock.calls[0][0])).toMatchObject({ result: "no_route" });
+      claim.mockClear();
+      await consumer.processWebhook(env, workflowJob(["rr-0123456789ab"], "in_progress"));
+      expect(claim).not.toHaveBeenCalled();
+      expect(run).not.toHaveBeenCalled();
+      warn.mockRestore();
+      log.mockRestore();
+    });
   });
 
   test("backs off from 30 seconds up to 15 minutes", () => {

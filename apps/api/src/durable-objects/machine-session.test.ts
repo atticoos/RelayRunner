@@ -71,6 +71,12 @@ describe("machine session", () => {
     expect(statusOf(session, 2001 + HEARTBEAT_TIMEOUT_MS).online).toBe(false);
   });
 
+  test("hands job updates back to MachineLink", () => {
+    const update = frame({ type: "job", routeId: "r1", state: "failed", message: "busy" });
+    const outcome = handleFrame(said([hello]), update, 3000);
+    expect("job" in outcome && outcome.job).toMatchObject({ routeId: "r1", state: "failed" });
+  });
+
   test("hello must come first, once, and match the token's machine", () => {
     const fresh = newSession("m1", 0);
     expect(rejected(fresh, frame({ type: "status", state: "idle" })).error.code).toBe(

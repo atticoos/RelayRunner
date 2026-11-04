@@ -2,6 +2,15 @@ import { DurableObject } from "cloudflare:workers";
 import { eq } from "drizzle-orm";
 import { createDb, schema } from "../db/index.ts";
 import type { Env } from "../env.ts";
+import { encodeMessage, PROTOCOL_VERSION, type JobMessage } from "@relayrunner/machine-protocol";
+import {
+  appJwt,
+  DEFAULT_RUNNER_GROUP_ID,
+  generateOrgJitConfig,
+  importAppPrivateKey,
+  installationToken,
+} from "../github-app.ts";
+import { machineRunnerName, routeLabel, type Route } from "../routing.ts";
 import {
   CLOSE,
   handleFrame,
@@ -14,6 +23,18 @@ import {
   type MachineStatus,
   type SessionState,
 } from "./machine-session.ts";
+
+export type RunResult = "sent" | "already_sent" | "offline";
+
+// What MachineLink keeps for a route it handed to the machine, until the machine says the job is
+// over. Its presence stops a redelivered webhook from minting a second runner.
+interface SentRoute {
+  workspaceId: string;
+  // Unset while the JIT config is being minted.
+  sentAt?: number;
+}
+
+const SENT_KEY = "sent:";
 
 // One per enrolled machine, addressed by machine id. Holds the machine's `relayrunner connect`
 // WebSocket, so a live socket that has said hello means the machine is online. Uses the
@@ -44,6 +65,7 @@ export class MachineLink extends DurableObject<Env> {
     if (!session) return close(ws, CLOSE.policy, "unknown socket");
     const outcome = handleFrame(session, frame, Date.now());
     ws.serializeAttachment(outcome.state);
+    if ("job" in outcome && outcome.job) await this.onJob(session.machineId, outcome.job);
     if ("reply" in outcome) {
       ws.send(outcome.reply);
       close(ws, outcome.close.code, outcome.close.reason);
@@ -81,18 +103,101 @@ export class MachineLink extends DurableObject<Env> {
 
   /** Online (said hello, heard from within the heartbeat timeout), idle or busy. */
   async status(): Promise<MachineStatus> {
-    const now = Date.now();
-    for (const ws of this.ctx.getWebSockets()) {
-      if (ws.readyState !== WebSocket.OPEN) continue;
-      const status = statusOf(attachment(ws), now);
-      if (status.online) return status;
+    const ws = this.onlineSocket();
+    return ws ? statusOf(attachment(ws), Date.now()) : OFFLINE;
+  }
+
+  /**
+   * Hands a claimed route's job to the machine: mints a one-job org runner on the route's label,
+   * named after the machine, and sends it in a `run` message. Safe to call again for the same
+   * route (a redelivered webhook): only the first call mints. "offline" means the machine has no
+   * live socket, and the job stays queued (offline recovery is #71).
+   */
+  async run(work: { route: Route; workspaceId: string }): Promise<RunResult> {
+    const { route, workspaceId } = work;
+    const key = SENT_KEY + route.id;
+    if (await this.ctx.storage.get(key)) return "already_sent";
+    const socket = this.onlineSocket();
+    if (!socket) return "offline";
+    await this.ctx.storage.put<SentRoute>(key, { workspaceId });
+
+    const org = route.repo.split("/")[0];
+    let jit;
+    try {
+      const appKey = await importAppPrivateKey(await this.env.GITHUB_APP_PRIVATE_KEY.get());
+      const token = await installationToken(
+        await appJwt(this.env.GITHUB_APP_ID, appKey),
+        route.installationId,
+      );
+      jit = await generateOrgJitConfig(token, org, {
+        name: machineRunnerName(route.machineName, route.id),
+        labels: [routeLabel(route.id)],
+        runnerGroupId: DEFAULT_RUNNER_GROUP_ID,
+      });
+    } catch (error) {
+      // Let a retry of the webhook try again.
+      await this.ctx.storage.delete(key);
+      throw error;
     }
-    return OFFLINE;
+    // The socket may have closed while minting; the runner then expires unused.
+    const live = this.onlineSocket() ?? socket;
+    live.send(
+      encodeMessage({
+        v: PROTOCOL_VERSION,
+        type: "run",
+        routeId: route.id,
+        jitConfig: jit.encodedJitConfig,
+      }),
+    );
+    await this.ctx.storage.put<SentRoute>(key, { workspaceId, sentAt: Date.now() });
+    console.log(
+      JSON.stringify({
+        msg: "relayrunner run sent",
+        routeId: route.id,
+        machineId: route.machineId,
+        repo: route.repo,
+        runId: route.runId,
+        jobId: route.jobId,
+        installationId: route.installationId,
+        runnerId: jit.runnerId,
+      }),
+    );
+    return "sent";
   }
 
   /** Closes the machine's socket for good. DELETE /api/machines/:id calls this on revoke. */
   async revoke(): Promise<void> {
     for (const ws of this.ctx.getWebSockets()) close(ws, CLOSE.revoked, "revoked");
+  }
+
+  // The machine's progress on a route. Once the job has started (the machine now says busy) or
+  // the runner failed, the route stops holding the machine in the Router.
+  private async onJob(machineId: string, job: JobMessage) {
+    const key = SENT_KEY + job.routeId;
+    const sent = await this.ctx.storage.get<SentRoute>(key);
+    console.log(
+      JSON.stringify({
+        msg: "relayrunner machine job",
+        machineId,
+        routeId: job.routeId,
+        state: job.state,
+        message: job.message,
+        known: Boolean(sent),
+      }),
+    );
+    if (!sent) return;
+    await this.env.ROUTER.getByName(sent.workspaceId).release(job.routeId);
+    if (job.state !== "started") await this.ctx.storage.delete(key);
+  }
+
+  private onlineSocket() {
+    const now = Date.now();
+    return (
+      this.ctx
+        .getWebSockets()
+        .find((ws) => ws.readyState === WebSocket.OPEN && statusOf(attachment(ws), now).online) ??
+      null
+    );
   }
 
   // last_seen_at is written when a connection opens or ends, not on every heartbeat. While the

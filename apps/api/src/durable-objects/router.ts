@@ -1,10 +1,114 @@
 import { DurableObject } from "cloudflare:workers";
+import { and, eq, isNotNull, isNull } from "drizzle-orm";
+import { createDb, schema } from "../db/index.ts";
 import type { Env } from "../env.ts";
+import {
+  canClaim,
+  chooseMachine,
+  FALLBACK_RUNNER,
+  holdsMachine,
+  newRouteId,
+  routeLabel,
+  ROUTE_TTL_MS,
+  type Candidate,
+  type QueuedJob,
+  type Route,
+} from "../routing.ts";
 
-// One per repository, addressed by `owner/repo`. Holds the repo's ordered runner list and decides
-// where each job goes: pinned, autopilot (idle laptop, then Blacksmith, then hosted), or off.
+export interface PickedJob {
+  workspaceId: string;
+  installationId: number;
+  repositoryId: number;
+  repo: string;
+  runId: number;
+  // Public repos never go to a machine: anyone could run code on it with a pull request.
+  private: boolean;
+}
+
+const ROUTE_KEY = "route:";
+
+// One per workspace, addressed by workspace id. Decides where each picked job's run goes and
+// keeps the routes it hands out (src/routing.ts), so the job queued on a route's label can find
+// its machine.
 export class Router extends DurableObject<Env> {
-  async route(_job: { jobId: number; name: string }): Promise<string> {
-    return "ubuntu-latest";
+  /** The runs-on label the run's next job should use: a route's `rr-<id>`, or ubuntu-latest. */
+  async route(job: PickedJob): Promise<string> {
+    if (!job.private) return FALLBACK_RUNNER;
+    // One decision at a time, so two picks can't both see the same machine as free.
+    return this.ctx.blockConcurrencyWhile(async () => {
+      const now = Date.now();
+      const routes = await this.routes(now);
+      const held = new Set(routes.filter((r) => holdsMachine(r, now)).map((r) => r.machineId));
+
+      const machines = await createDb(this.env.DB)
+        .select({ id: schema.machine.id, name: schema.machine.name })
+        .from(schema.machine)
+        .where(
+          and(
+            eq(schema.machine.workspaceId, job.workspaceId),
+            isNotNull(schema.machine.tokenHash),
+            isNull(schema.machine.revokedAt),
+          ),
+        );
+      const candidates: Candidate[] = await Promise.all(
+        machines
+          .filter((machine) => !held.has(machine.id))
+          .map(async (machine) => ({
+            ...machine,
+            ...(await this.env.MACHINE_LINK.getByName(machine.id).status()),
+          })),
+      );
+      const machine = chooseMachine(candidates, held);
+      if (!machine) return FALLBACK_RUNNER;
+
+      const route: Route = {
+        id: newRouteId(),
+        machineId: machine.id,
+        machineName: machine.name,
+        installationId: job.installationId,
+        repo: job.repo,
+        repositoryId: job.repositoryId,
+        runId: job.runId,
+        createdAt: now,
+        state: "reserved",
+      };
+      await this.ctx.storage.put(ROUTE_KEY + route.id, route);
+      return routeLabel(route.id);
+    });
+  }
+
+  /**
+   * The route a queued `rr-<id>` job may run on, or null when the label is unknown, expired, or
+   * belongs to another repo, run or job, or once the machine has taken the job. Claiming again with the same job returns the route again,
+   * so a redelivered webhook can retry the hand-off.
+   */
+  async claim(routeId: string, job: QueuedJob): Promise<Route | null> {
+    const route = await this.ctx.storage.get<Route>(ROUTE_KEY + routeId);
+    if (!route || route.state === "done" || Date.now() - route.createdAt > ROUTE_TTL_MS)
+      return null;
+    if (!canClaim(route, job)) return null;
+    const claimed: Route = {
+      ...route,
+      jobId: job.jobId,
+      state: route.state === "reserved" ? "dispatched" : route.state,
+    };
+    await this.ctx.storage.put(ROUTE_KEY + routeId, claimed);
+    return claimed;
+  }
+
+  /** Stops a route holding its machine. MachineLink calls this when the machine reports in. */
+  async release(routeId: string): Promise<void> {
+    const route = await this.ctx.storage.get<Route>(ROUTE_KEY + routeId);
+    if (route && route.state !== "done")
+      await this.ctx.storage.put(ROUTE_KEY + routeId, { ...route, state: "done" });
+  }
+
+  // Every route still kept, after dropping the expired ones.
+  private async routes(now: number) {
+    const stored = await this.ctx.storage.list<Route>({ prefix: ROUTE_KEY });
+    const expired = [...stored].filter(([, r]) => now - r.createdAt > ROUTE_TTL_MS).map(([k]) => k);
+    // delete() takes at most 128 keys at a time.
+    if (expired.length) await this.ctx.storage.delete(expired.slice(0, 128));
+    return [...stored.values()].filter((r) => now - r.createdAt <= ROUTE_TTL_MS);
   }
 }
