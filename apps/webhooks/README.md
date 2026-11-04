@@ -43,9 +43,9 @@ wrangler queues create relayrunner-github-webhooks-dlq
 `GITHUB_WEBHOOK_SECRET` already lives in the account's Secrets Store, so there's nothing to set. Then deploy in this order, since each step binds to the one before it:
 
 ```sh
-pnpm --filter @relayrunner/webhooks run deploy
-pnpm --filter @relayrunner/api run deploy    # attaches the queue consumers
-pnpm --filter @relayrunner/web run deploy    # forwards /api/webhooks/* here
+pnpm run deploy:webhooks
+pnpm run deploy:api    # applies D1 migrations, attaches the queue consumers
+pnpm run deploy:web    # forwards /api/webhooks/* here
 ```
 
 The GitHub App's webhook URL doesn't change. It can also point straight at `https://relayrunner-webhooks.relayrun.workers.dev/api/webhooks/github`, which takes the dashboard Worker out of the path.
