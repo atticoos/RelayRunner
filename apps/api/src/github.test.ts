@@ -354,3 +354,119 @@ describe('installation webhooks (queue consumer)', () => {
     expect(await row(github.id)).toMatchObject({ workspace_id: workspace.id, repository_selection: 'selected' });
   });
 });
+
+describe('repository webhooks (queue consumer)', () => {
+  let nextRepoId = 9000;
+
+  function repo(owner: string, overrides: Partial<{ id: number; full_name: string; private: boolean }> = {}) {
+    nextRepoId += 1;
+    return { id: nextRepoId, name: `repo-${nextRepoId}`, full_name: `${owner}/repo-${nextRepoId}`, private: true, ...overrides };
+  }
+
+  // The repos stored for an installation, current ones first-class and removed ones flagged.
+  async function repos(installationId: number) {
+    const { results } = await env.DB.prepare('select id, full_name, private, removed_at from github_repository where installation_id = ? order by id')
+      .bind(installationId)
+      .all<{ id: number; full_name: string; private: number; removed_at: number | null }>();
+    return results.map(row => ({ id: row.id, fullName: row.full_name, private: row.private === 1, removed: row.removed_at !== null }));
+  }
+
+  const later = (seconds: number) => new Date(Date.now() + seconds * 1000).toISOString();
+
+  test('created saves every repo the installation can see, beyond one statement\'s worth', async () => {
+    const github = installation();
+    const list = Array.from({ length: 30 }, () => repo(github.account!.login));
+    await webhook('installation', { action: 'created', installation: github, repositories: list });
+    expect(await repos(github.id)).toEqual(list.map(r => ({ id: r.id, fullName: r.full_name, private: true, removed: false })));
+  });
+
+  test('installation_repositories adds and removes repos', async () => {
+    const github = installation();
+    const [a, b, c] = [repo(github.account!.login), repo(github.account!.login), repo(github.account!.login, { private: false })];
+    await webhook('installation', { action: 'created', installation: { ...github, repository_selection: 'selected' }, repositories: [a, b] }, later(1));
+    await webhook('installation_repositories', { action: 'added', repository_selection: 'selected', installation: github, repositories_added: [c], repositories_removed: [] }, later(2));
+    await webhook('installation_repositories', { action: 'removed', repository_selection: 'selected', installation: github, repositories_added: [], repositories_removed: [a] }, later(3));
+    expect(await repos(github.id)).toEqual([
+      { id: a.id, fullName: a.full_name, private: true, removed: true },
+      { id: b.id, fullName: b.full_name, private: true, removed: false },
+      { id: c.id, fullName: c.full_name, private: false, removed: false },
+    ]);
+  });
+
+  test('a retried "added" that lands after a newer "removed" does not bring the repo back', async () => {
+    const github = installation();
+    const a = repo(github.account!.login);
+    await webhook('installation', { action: 'created', installation: github, repositories: [] }, later(1));
+    await webhook('installation_repositories', { action: 'removed', installation: github, repositories_added: [], repositories_removed: [a] }, later(3));
+    await webhook('installation_repositories', { action: 'added', installation: github, repositories_added: [a], repositories_removed: [] }, later(2));
+    // The removal leaves a tombstone even for a repo we never stored, so the stale add can't win.
+    expect(await repos(github.id)).toEqual([{ id: a.id, fullName: a.full_name, private: true, removed: true }]);
+
+    await webhook('installation_repositories', { action: 'added', installation: github, repositories_added: [a], repositories_removed: [] }, later(4));
+    await webhook('installation_repositories', { action: 'removed', installation: github, repositories_added: [], repositories_removed: [a] }, later(6));
+    await webhook('installation_repositories', { action: 'added', installation: github, repositories_added: [a], repositories_removed: [] }, later(5));
+    expect(await repos(github.id)).toEqual([{ id: a.id, fullName: a.full_name, private: true, removed: true }]);
+  });
+
+  test('repository events add new repos and keep name and visibility current', async () => {
+    const github = installation();
+    const owner = github.account!.login;
+    await webhook('installation', { action: 'created', installation: github, repositories: [] }, later(1));
+    const a = repo(owner);
+
+    await webhook('repository', { action: 'created', installation: { id: github.id }, repository: a }, later(2));
+    await webhook('repository', { action: 'renamed', installation: { id: github.id }, repository: { ...a, full_name: `${owner}/renamed` } }, later(3));
+    await webhook('repository', { action: 'publicized', installation: { id: github.id }, repository: { ...a, full_name: `${owner}/renamed`, private: false } }, later(4));
+    // An older rename retried late changes nothing.
+    await webhook('repository', { action: 'renamed', installation: { id: github.id }, repository: { ...a, full_name: `${owner}/stale` } }, later(3.5));
+    expect(await repos(github.id)).toEqual([{ id: a.id, fullName: `${owner}/renamed`, private: false, removed: false }]);
+
+    await webhook('repository', { action: 'deleted', installation: { id: github.id }, repository: a }, later(5));
+    expect(await repos(github.id)).toEqual([expect.objectContaining({ id: a.id, removed: true })]);
+  });
+
+  test('a repo transferred to another account is removed; one transferred in is added', async () => {
+    const github = installation();
+    const owner = github.account!.login;
+    const out = repo(owner);
+    await webhook('installation', { action: 'created', installation: github, repositories: [out] }, later(1));
+
+    await webhook('repository', { action: 'transferred', installation: { id: github.id }, repository: { ...out, full_name: 'someone-else/moved' } }, later(2));
+    const incoming = repo(owner);
+    await webhook('repository', { action: 'transferred', installation: { id: github.id }, repository: incoming }, later(3));
+
+    expect(await repos(github.id)).toEqual([
+      expect.objectContaining({ id: out.id, removed: true }),
+      { id: incoming.id, fullName: incoming.full_name, private: true, removed: false },
+    ]);
+  });
+
+  test('a repo moving between two connected accounts ends up with the new one, whichever event lands first', async () => {
+    const from = installation();
+    const to = installation();
+    const a = repo(from.account!.login);
+    await webhook('installation', { action: 'created', installation: from, repositories: [a] }, later(1));
+    await webhook('installation', { action: 'created', installation: to, repositories: [] }, later(1));
+    const moved = { ...a, full_name: `${to.account!.login}/${a.name}` };
+
+    await webhook('repository', { action: 'transferred', installation: { id: to.id }, repository: moved }, later(2));
+    await webhook('repository', { action: 'transferred', installation: { id: from.id }, repository: moved }, later(2));
+
+    expect(await repos(from.id)).toEqual([]);
+    expect(await repos(to.id)).toEqual([{ id: a.id, fullName: moved.full_name, private: true, removed: false }]);
+  });
+
+  test('a repository event for an installation we have no row for is skipped', async () => {
+    const a = repo('nobody');
+    await webhook('repository', { action: 'created', installation: { id: 424242 }, repository: a });
+    const stored = await env.DB.prepare('select id from github_repository where id = ?').bind(a.id).first();
+    expect(stored).toBeNull();
+  });
+
+  test('uninstalling removes the installation\'s repos', async () => {
+    const github = installation();
+    await webhook('installation', { action: 'created', installation: github, repositories: [repo(github.account!.login)] }, later(1));
+    await webhook('installation', { action: 'deleted', installation: github }, later(2));
+    expect(await repos(github.id)).toEqual([]);
+  });
+});

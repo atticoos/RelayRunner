@@ -47,7 +47,10 @@ interface Base {
 export type WebhookMessage =
   | (Base & { event: 'workflow_job'; repository: { id: number; fullName: string }; job: WorkflowJob })
   | (Base & { event: 'installation'; installation: InstallationSummary | null; repositories: InstallationRepo[] })
-  | (Base & { event: 'installation_repositories'; installation: InstallationSummary | null; added: InstallationRepo[]; removed: InstallationRepo[] });
+  | (Base & { event: 'installation_repositories'; installation: InstallationSummary | null; added: InstallationRepo[]; removed: InstallationRepo[] })
+  // A repo the installation can see was created, renamed, made public or private, transferred,
+  // deleted, and so on. For "All repositories" installs it is the only event that reports new repos.
+  | (Base & { event: 'repository'; repository: InstallationRepo });
 
 // Delivery → queue message, or null when RelayRunner doesn't act on this event (or the payload is
 // missing what it needs). Never throws.
@@ -101,6 +104,11 @@ export function toWebhookMessage(
         added: repos(payload.repositories_added),
         removed: repos(payload.repositories_removed),
       };
+    case 'repository': {
+      const repo = payload.repository;
+      if (!isRecord(repo) || typeof repo.id !== 'number' || typeof repo.full_name !== 'string') return null;
+      return { ...base, event, repository: { id: repo.id, fullName: repo.full_name, private: repo.private === true } };
+    }
     default:
       return null;
   }
