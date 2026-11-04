@@ -17,8 +17,19 @@
     // the oAuthProxy plugin. Only this account's Workers live under relayrun.workers.dev.
     "PREVIEW_ORIGINS": "https://*-relayrunner-app.relayrun.workers.dev",
     // The GitHub App's slug, as in https://github.com/apps/<slug>.
-    "GITHUB_APP_SLUG": "relayrunner"
+    "GITHUB_APP_SLUG": "relayrunner",
+    // The GitHub App's numeric ID, the `iss` of the App JWTs that mint installation tokens.
+    "GITHUB_APP_ID": "5605512"
   },
+  // From the account's Secrets Store (default_secrets_store), not `wrangler secret put`.
+  // GITHUB_APP_PRIVATE_KEY is the App's private key converted to PKCS#8 PEM, which is what
+  // WebCrypto imports (GitHub downloads PKCS#1):
+  //   openssl pkcs8 -topk8 -nocrypt -in relayrunner.*.private-key.pem
+  // Locally, `wrangler dev` reads a local store: seed it once with
+  //   wrangler secrets-store secret create eac3493b9fef4234a832f5f3fdcc8a41 --name GITHUB_APP_PRIVATE_KEY --scopes workers
+  "secrets_store_secrets": [
+    { "binding": "GITHUB_APP_PRIVATE_KEY", "store_id": "eac3493b9fef4234a832f5f3fdcc8a41", "secret_name": "GITHUB_APP_PRIVATE_KEY" }
+  ],
   "d1_databases": [
     {
       "binding": "DB",
