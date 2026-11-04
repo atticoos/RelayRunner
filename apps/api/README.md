@@ -28,7 +28,6 @@ pnpm dev                          # http://localhost:8787/api/health
 `wrangler.jsonc` pins the RelayRunner Cloudflare account (`account_id`), so wrangler targets it even if your login can see other accounts. Then:
 
 ```sh
-wrangler d1 create relayrunner    # paste the id into wrangler.jsonc
 pnpm db:migrate:remote
 wrangler secret put BETTER_AUTH_SECRET   # and GITHUB_APP_CLIENT_ID, GITHUB_APP_CLIENT_SECRET, GITHUB_WEBHOOK_SECRET
 pnpm deploy --var BETTER_AUTH_URL:https://app.relayrunner.dev

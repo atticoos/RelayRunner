@@ -15,8 +15,7 @@
     {
       "binding": "DB",
       "database_name": "relayrunner",
-      // Placeholder. Run `wrangler d1 create relayrunner` in the target account and paste the id.
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "e6f4f176-aa75-45fe-83f7-64e468cc23f6",
       "migrations_dir": "migrations"
     }
   ],
