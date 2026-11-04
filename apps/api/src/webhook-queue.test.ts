@@ -13,7 +13,7 @@ function batch(queue: string, messages: ReturnType<typeof message>[]) {
   return { queue, messages } as unknown as MessageBatch<WebhookMessage>;
 }
 
-const installation: WebhookMessage = { event: 'installation', deliveryId: 'd-1', action: 'created', installationId: 7, receivedAt: new Date().toISOString(), repositories: [] };
+const installation: WebhookMessage = { event: 'installation', deliveryId: 'd-1', action: 'created', installationId: 7, receivedAt: new Date().toISOString(), installation: null, repositories: [] };
 const malformed = { ...installation, event: 'workflow_job', deliveryId: 'd-2' } as unknown as WebhookMessage; // no repository/job
 
 describe('webhook queue consumer', () => {

@@ -1,0 +1,1 @@
+ALTER TABLE `github_installation` ADD `github_state_at` integer;
