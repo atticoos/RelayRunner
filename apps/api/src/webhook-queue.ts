@@ -14,25 +14,35 @@
  * `workflow_job` `queued` can arrive after `in_progress`, so processing must be idempotent and
  * keyed on the job's state, not on arrival order.
  */
-import { WEBHOOK_DLQ, type WebhookMessage } from '@relayrunner/github-webhooks';
-import { eq } from 'drizzle-orm';
-import { createDb, schema } from './db/index.ts';
-import type { Env } from './env.ts';
-import { upsertInstallation } from './installations.ts';
-import { recordRepositoryEvent, removeRepositories, upsertRepositories } from './repositories.ts';
+import { WEBHOOK_DLQ, type WebhookMessage } from "@relayrunner/github-webhooks";
+import { eq } from "drizzle-orm";
+import { createDb, schema } from "./db/index.ts";
+import type { Env } from "./env.ts";
+import { upsertInstallation } from "./installations.ts";
+import { recordRepositoryEvent, removeRepositories, upsertRepositories } from "./repositories.ts";
 
 // The `runs-on` label that routes a job through RelayRunner.
-export const RELAYRUNNER_LABEL = 'relayrunner';
+export const RELAYRUNNER_LABEL = "relayrunner";
 
 const BASE_RETRY_DELAY_SECONDS = 30;
 const MAX_RETRY_DELAY_SECONDS = 15 * 60;
 
 /** Handle one batch from the webhook queue or its DLQ. Never throws. */
-export async function handleWebhookBatch(batch: MessageBatch<WebhookMessage>, env: Env): Promise<void> {
+export async function handleWebhookBatch(
+  batch: MessageBatch<WebhookMessage>,
+  env: Env,
+): Promise<void> {
   const isDlq = batch.queue === WEBHOOK_DLQ;
   for (const msg of batch.messages) {
     if (isDlq) {
-      console.error(JSON.stringify({ msg: 'github webhook dead-lettered', deliveryId: msg.body.deliveryId, attempts: msg.attempts, message: msg.body }));
+      console.error(
+        JSON.stringify({
+          msg: "github webhook dead-lettered",
+          deliveryId: msg.body.deliveryId,
+          attempts: msg.attempts,
+          message: msg.body,
+        }),
+      );
       msg.ack();
       continue;
     }
@@ -41,14 +51,16 @@ export async function handleWebhookBatch(batch: MessageBatch<WebhookMessage>, en
       msg.ack();
     } catch (error) {
       const delaySeconds = retryDelaySeconds(msg.attempts);
-      console.warn(JSON.stringify({
-        msg: 'github webhook processing failed; retrying',
-        event: msg.body.event,
-        deliveryId: msg.body.deliveryId,
-        attempts: msg.attempts,
-        delaySeconds,
-        error: error instanceof Error ? error.message : String(error),
-      }));
+      console.warn(
+        JSON.stringify({
+          msg: "github webhook processing failed; retrying",
+          event: msg.body.event,
+          deliveryId: msg.body.deliveryId,
+          attempts: msg.attempts,
+          delaySeconds,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      );
       msg.retry({ delaySeconds });
     }
   }
@@ -61,35 +73,40 @@ export function usesRelayRunner(labels: string[]) {
 
 // 30s, 60s, 120s, ... capped at 15 minutes. `attempts` starts at 1.
 export function retryDelaySeconds(attempts: number) {
-  return Math.min(BASE_RETRY_DELAY_SECONDS * 2 ** Math.max(0, attempts - 1), MAX_RETRY_DELAY_SECONDS);
+  return Math.min(
+    BASE_RETRY_DELAY_SECONDS * 2 ** Math.max(0, attempts - 1),
+    MAX_RETRY_DELAY_SECONDS,
+  );
 }
 
 /** Do the work for one delivery. Throw to retry. */
 export async function processWebhook(env: Env, message: WebhookMessage): Promise<void> {
   const lagMs = Date.now() - Date.parse(message.receivedAt);
   switch (message.event) {
-    case 'workflow_job':
+    case "workflow_job":
       // Only jobs that ask for RelayRunner (`runs-on: relayrunner`) are ours. Everything else the
       // App sees is some other runner's job, so drop it quietly.
       if (!usesRelayRunner(message.job.labels)) return;
       // On `queued`, wake a PickRunner for the job, which answers it with the Router's route. Other
       // actions are only logged. Nothing is stored yet (#48).
-      console.log(JSON.stringify({
-        msg: 'relayrunner job received',
-        action: message.action,
-        deliveryId: message.deliveryId,
-        installationId: message.installationId,
-        repository: message.repository.fullName,
-        jobId: message.job.id,
-        runId: message.job.runId,
-        runAttempt: message.job.runAttempt,
-        job: message.job.name,
-        workflow: message.job.workflowName,
-        labels: message.job.labels,
-        runnerName: message.job.runnerName,
-        lagMs,
-      }));
-      if (message.action === 'queued' && message.installationId) {
+      console.log(
+        JSON.stringify({
+          msg: "relayrunner job received",
+          action: message.action,
+          deliveryId: message.deliveryId,
+          installationId: message.installationId,
+          repository: message.repository.fullName,
+          jobId: message.job.id,
+          runId: message.job.runId,
+          runAttempt: message.job.runAttempt,
+          job: message.job.name,
+          workflow: message.job.workflowName,
+          labels: message.job.labels,
+          runnerName: message.job.runnerName,
+          lagMs,
+        }),
+      );
+      if (message.action === "queued" && message.installationId) {
         await env.PICK_RUNNER.getByName(String(message.job.id)).start({
           jobId: message.job.id,
           installationId: message.installationId,
@@ -97,16 +114,41 @@ export async function processWebhook(env: Env, message: WebhookMessage): Promise
         });
       }
       return;
-    case 'installation':
-    case 'installation_repositories':
+    case "installation":
+    case "installation_repositories":
       await recordInstallation(env, message);
-      console.log(JSON.stringify({ msg: 'github webhook processed', event: message.event, action: message.action, deliveryId: message.deliveryId, installationId: message.installationId, lagMs }));
+      console.log(
+        JSON.stringify({
+          msg: "github webhook processed",
+          event: message.event,
+          action: message.action,
+          deliveryId: message.deliveryId,
+          installationId: message.installationId,
+          lagMs,
+        }),
+      );
       return;
-    case 'repository':
+    case "repository":
       if (message.installationId) {
-        await recordRepositoryEvent(createDb(env.DB), message.installationId, message.action, message.repository, new Date(message.receivedAt));
+        await recordRepositoryEvent(
+          createDb(env.DB),
+          message.installationId,
+          message.action,
+          message.repository,
+          new Date(message.receivedAt),
+        );
       }
-      console.log(JSON.stringify({ msg: 'github webhook processed', event: message.event, action: message.action, deliveryId: message.deliveryId, installationId: message.installationId, repository: message.repository.fullName, lagMs }));
+      console.log(
+        JSON.stringify({
+          msg: "github webhook processed",
+          event: message.event,
+          action: message.action,
+          deliveryId: message.deliveryId,
+          installationId: message.installationId,
+          repository: message.repository.fullName,
+          lagMs,
+        }),
+      );
       return;
   }
 }
@@ -119,25 +161,35 @@ export async function processWebhook(env: Env, message: WebhookMessage): Promise
 // stale event landing after that can recreate it unclaimed, which is harmless: it is listed or
 // claimable only while GitHub still shows the install to the user. Its repos go with the row
 // (ON DELETE CASCADE). Never sets workspace_id: linking takes a signed-in user (routes/github.ts).
-async function recordInstallation(env: Env, message: Extract<WebhookMessage, { event: 'installation' | 'installation_repositories' }>) {
+async function recordInstallation(
+  env: Env,
+  message: Extract<WebhookMessage, { event: "installation" | "installation_repositories" }>,
+) {
   const db = createDb(env.DB);
   // Uses installationId, not the summary, so a message from an ingress that predates the summary
   // still removes the org.
-  if (message.event === 'installation' && message.action === 'deleted') {
-    if (message.installationId) await db.delete(schema.githubInstallation).where(eq(schema.githubInstallation.id, message.installationId));
+  if (message.event === "installation" && message.action === "deleted") {
+    if (message.installationId)
+      await db
+        .delete(schema.githubInstallation)
+        .where(eq(schema.githubInstallation.id, message.installationId));
     return;
   }
   const installation = message.installation;
   if (!installation) return;
   const observedAt = new Date(message.receivedAt);
-  await upsertInstallation(db, {
-    id: installation.id,
-    account: installation.account,
-    repository_selection: installation.repositorySelection,
-    suspended_at: installation.suspendedAt,
-  }, observedAt);
+  await upsertInstallation(
+    db,
+    {
+      id: installation.id,
+      account: installation.account,
+      repository_selection: installation.repositorySelection,
+      suspended_at: installation.suspendedAt,
+    },
+    observedAt,
+  );
   // `created` lists every repo the installation can see; other actions carry none.
-  if (message.event === 'installation') {
+  if (message.event === "installation") {
     await upsertRepositories(db, installation.id, message.repositories, observedAt);
     return;
   }

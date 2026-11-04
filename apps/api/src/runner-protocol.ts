@@ -2,7 +2,7 @@
 // fetch and WebCrypto so it runs in a Durable Object. Ported from the PR #21 spike (apps/gateway),
 // which tested it against github.com in November 2026; see that README for what it found.
 
-const userAgent = 'relayrunner-gateway/0.1';
+const userAgent = "relayrunner-gateway/0.1";
 
 interface RsaParameters {
   d: string;
@@ -34,7 +34,11 @@ interface JobMessage {
   billingOwnerId?: string;
   plan: { planId: string };
   resources: {
-    endpoints: { name: string; url: string; authorization: { parameters: { AccessToken: string } } }[];
+    endpoints: {
+      name: string;
+      url: string;
+      authorization: { parameters: { AccessToken: string } };
+    }[];
   };
 }
 
@@ -44,38 +48,48 @@ export interface ClaimedJob {
   serviceUrl: string;
 }
 
-export type Conclusion = 'succeeded' | 'failed';
+export type Conclusion = "succeeded" | "failed";
 
-const decodeText = (bytes: ArrayBuffer | Uint8Array) => new TextDecoder().decode(bytes).replace(/^﻿/, '');
-const base64Bytes = (value: string) => Uint8Array.from(atob(value), character => character.charCodeAt(0));
-const toBase64Url = (value: string) => value.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const decodeText = (bytes: ArrayBuffer | Uint8Array) =>
+  new TextDecoder().decode(bytes).replace(/^﻿/, "");
+const base64Bytes = (value: string) =>
+  Uint8Array.from(atob(value), (character) => character.charCodeAt(0));
+const toBase64Url = (value: string) =>
+  value.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 const bytesToBase64Url = (bytes: ArrayBuffer | Uint8Array) =>
   toBase64Url(btoa(String.fromCharCode(...new Uint8Array(bytes))));
-const jsonToBase64Url = (value: unknown) => bytesToBase64Url(new TextEncoder().encode(JSON.stringify(value)));
-const join = (base: string, path: string) => `${base.replace(/\/+$/, '')}/${path}`;
+const jsonToBase64Url = (value: unknown) =>
+  bytesToBase64Url(new TextEncoder().encode(JSON.stringify(value)));
+const join = (base: string, path: string) => `${base.replace(/\/+$/, "")}/${path}`;
 
 export function decodeJitConfig(encoded: string): JitConfig {
   const files = JSON.parse(decodeText(base64Bytes(encoded))) as Record<string, string>;
   const read = <T>(name: string) => JSON.parse(decodeText(base64Bytes(files[name]))) as T;
   return {
-    runner: read<JitConfig['runner']>('.runner'),
-    credentials: read<JitConfig['credentials']>('.credentials'),
-    rsa: read<RsaParameters>('.credentials_rsaparams'),
+    runner: read<JitConfig["runner"]>(".runner"),
+    credentials: read<JitConfig["credentials"]>(".credentials"),
+    rsa: read<RsaParameters>(".credentials_rsaparams"),
   };
 }
 
 function signingKey(rsa: RsaParameters) {
-  return crypto.subtle.importKey('jwk', {
-    kty: 'RSA',
-    n: toBase64Url(rsa.modulus),
-    e: toBase64Url(rsa.exponent),
-    d: toBase64Url(rsa.d),
-    p: toBase64Url(rsa.p),
-    q: toBase64Url(rsa.q),
-    dp: toBase64Url(rsa.dp),
-    dq: toBase64Url(rsa.dq),
-    qi: toBase64Url(rsa.inverseQ),
-  }, { name: 'RSA-PSS', hash: 'SHA-256' }, false, ['sign']);
+  return crypto.subtle.importKey(
+    "jwk",
+    {
+      kty: "RSA",
+      n: toBase64Url(rsa.modulus),
+      e: toBase64Url(rsa.exponent),
+      d: toBase64Url(rsa.d),
+      p: toBase64Url(rsa.p),
+      q: toBase64Url(rsa.q),
+      dp: toBase64Url(rsa.dp),
+      dq: toBase64Url(rsa.dq),
+      qi: toBase64Url(rsa.inverseQ),
+    },
+    { name: "RSA-PSS", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
 }
 
 export class RunnerClient {
@@ -96,7 +110,7 @@ export class RunnerClient {
     if (this.accessToken && this.accessTokenExpires > Date.now() + 60_000) return this.accessToken;
     const { ClientId: clientId, AuthorizationUrl: authorizationUrl } = this.jit.credentials.Data;
     const issuedAt = Math.floor(Date.now() / 1000) - 30;
-    const unsigned = `${jsonToBase64Url({ alg: 'PS256', typ: 'JWT' })}.${jsonToBase64Url({
+    const unsigned = `${jsonToBase64Url({ alg: "PS256", typ: "JWT" })}.${jsonToBase64Url({
       sub: clientId,
       iss: clientId,
       aud: authorizationUrl,
@@ -106,95 +120,142 @@ export class RunnerClient {
       exp: issuedAt + 300,
     })}`;
     const signature = await crypto.subtle.sign(
-      { name: 'RSA-PSS', saltLength: 32 },
+      { name: "RSA-PSS", saltLength: 32 },
       await signingKey(this.jit.rsa),
       new TextEncoder().encode(unsigned),
     );
     const response = await fetch(authorizationUrl, {
-      method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded; charset=utf-8', accept: 'application/json', 'user-agent': userAgent },
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded; charset=utf-8",
+        accept: "application/json",
+        "user-agent": userAgent,
+      },
       body: new URLSearchParams({
-        client_assertion_type: 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer',
+        client_assertion_type: "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
         client_assertion: `${unsigned}.${bytesToBase64Url(signature)}`,
-        grant_type: 'client_credentials',
+        grant_type: "client_credentials",
       }),
     });
     if (!response.ok) throw new Error(`Token request failed with status ${response.status}.`);
-    const { access_token: token, expires_in: expiresIn = 300 } = await response.json() as { access_token: string; expires_in?: number };
+    const { access_token: token, expires_in: expiresIn = 300 } = (await response.json()) as {
+      access_token: string;
+      expires_in?: number;
+    };
     this.accessToken = token;
     this.accessTokenExpires = Date.now() + expiresIn * 1000;
     return token;
   }
 
-  private async request<T>(method: string, url: string, options: { body?: unknown; token?: string; signal?: AbortSignal } = {}) {
+  private async request<T>(
+    method: string,
+    url: string,
+    options: { body?: unknown; token?: string; signal?: AbortSignal } = {},
+  ) {
     const { body, token = await this.token(), signal } = options;
     const response = await fetch(url, {
       method,
       signal,
       headers: {
         authorization: `Bearer ${token}`,
-        accept: 'application/json',
-        'user-agent': userAgent,
-        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+        accept: "application/json",
+        "user-agent": userAgent,
+        ...(body === undefined ? {} : { "content-type": "application/json" }),
       },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     const text = await response.text();
-    if (!response.ok) throw new Error(`${method} ${new URL(url).pathname} failed with status ${response.status}: ${text.slice(0, 300)}`);
-    return (text ? JSON.parse(text.replace(/^﻿/, '')) : null) as T;
+    if (!response.ok)
+      throw new Error(
+        `${method} ${new URL(url).pathname} failed with status ${response.status}: ${text.slice(0, 300)}`,
+      );
+    return (text ? JSON.parse(text.replace(/^﻿/, "")) : null) as T;
   }
 
   private query() {
-    if (!this.sessionId) throw new Error('Open a session first.');
-    return new URLSearchParams({ sessionId: this.sessionId, status: 'Online', runnerVersion: this.version, os: 'Linux', architecture: 'X64' });
+    if (!this.sessionId) throw new Error("Open a session first.");
+    return new URLSearchParams({
+      sessionId: this.sessionId,
+      status: "Online",
+      runnerVersion: this.version,
+      os: "Linux",
+      architecture: "X64",
+    });
   }
 
   async openSession() {
     const { AgentId: id, AgentName: name } = this.jit.runner;
-    const session = await this.request<{ sessionId: string }>('POST', join(this.jit.runner.ServerUrlV2, 'session'), {
-      body: {
-        ownerName: userAgent,
-        agent: { id: Number(id), name, version: this.version, osDescription: 'Cloudflare Workers' },
-        useFipsEncryption: false,
+    const session = await this.request<{ sessionId: string }>(
+      "POST",
+      join(this.jit.runner.ServerUrlV2, "session"),
+      {
+        body: {
+          ownerName: userAgent,
+          agent: {
+            id: Number(id),
+            name,
+            version: this.version,
+            osDescription: "Cloudflare Workers",
+          },
+          useFipsEncryption: false,
+        },
       },
-    });
+    );
     this.sessionId = session.sessionId;
   }
 
   // Long-polls once. Returns null when the poll ends without a job.
   async poll(signal?: AbortSignal) {
     const query = this.query();
-    query.set('disableUpdate', 'true');
+    query.set("disableUpdate", "true");
     const message = await this.request<{ messageType: string; body: string; iv?: string } | null>(
-      'GET', join(this.jit.runner.ServerUrlV2, `message?${query}`), { signal },
+      "GET",
+      join(this.jit.runner.ServerUrlV2, `message?${query}`),
+      { signal },
     );
-    if (message?.messageType !== 'RunnerJobRequest') return null;
-    if (message.iv) throw new Error('Encrypted job messages are not supported.');
+    if (message?.messageType !== "RunnerJobRequest") return null;
+    if (message.iv) throw new Error("Encrypted job messages are not supported.");
     return JSON.parse(message.body) as JobRequest;
   }
 
   async claim(request: JobRequest): Promise<ClaimedJob> {
     if (request.should_acknowledge !== false) {
-      await this.request('POST', join(this.jit.runner.ServerUrlV2, `acknowledge?${this.query()}`), {
+      await this.request("POST", join(this.jit.runner.ServerUrlV2, `acknowledge?${this.query()}`), {
         body: { runnerRequestId: request.runner_request_id },
       });
     }
-    const message = await this.request<JobMessage>('POST', join(request.run_service_url, 'acquirejob'), {
-      body: { jobMessageId: request.runner_request_id, runnerOS: 'Linux', billingOwnerId: request.billing_owner_id },
-    });
-    const connection = message.resources.endpoints.find(endpoint => endpoint.name === 'SystemVssConnection');
-    if (!connection) throw new Error('The job message has no system connection.');
-    return { message, token: connection.authorization.parameters.AccessToken, serviceUrl: connection.url };
+    const message = await this.request<JobMessage>(
+      "POST",
+      join(request.run_service_url, "acquirejob"),
+      {
+        body: {
+          jobMessageId: request.runner_request_id,
+          runnerOS: "Linux",
+          billingOwnerId: request.billing_owner_id,
+        },
+      },
+    );
+    const connection = message.resources.endpoints.find(
+      (endpoint) => endpoint.name === "SystemVssConnection",
+    );
+    if (!connection) throw new Error("The job message has no system connection.");
+    return {
+      message,
+      token: connection.authorization.parameters.AccessToken,
+      serviceUrl: connection.url,
+    };
   }
 
   async complete(job: ClaimedJob, conclusion: Conclusion, outputs: Record<string, string> = {}) {
-    await this.request('POST', join(job.serviceUrl, 'completejob'), {
+    await this.request("POST", join(job.serviceUrl, "completejob"), {
       token: job.token,
       body: {
         planId: job.message.plan.planId,
         jobId: job.message.jobId,
         conclusion,
-        outputs: Object.fromEntries(Object.entries(outputs).map(([name, value]) => [name, { value, isSecret: false }])),
+        outputs: Object.fromEntries(
+          Object.entries(outputs).map(([name, value]) => [name, { value, isSecret: false }]),
+        ),
         billingOwnerId: job.message.billingOwnerId,
       },
     });
@@ -203,17 +264,21 @@ export class RunnerClient {
   // A session left open makes the next attempt with this runner fail with a 409.
   async closeSession() {
     if (!this.sessionId) return;
-    await this.request('DELETE', join(this.jit.runner.ServerUrlV2, `session?sessionId=${this.sessionId}`));
+    await this.request(
+      "DELETE",
+      join(this.jit.runner.ServerUrlV2, `session?sessionId=${this.sessionId}`),
+    );
     this.sessionId = undefined;
   }
 }
 
 export async function latestRunnerVersion() {
-  const response = await fetch('https://github.com/actions/runner/releases/latest', {
-    redirect: 'manual',
-    headers: { 'user-agent': userAgent },
+  const response = await fetch("https://github.com/actions/runner/releases/latest", {
+    redirect: "manual",
+    headers: { "user-agent": userAgent },
   });
-  const version = response.headers.get('location')?.match(/\/tag\/v([\d.]+)$/)?.[1];
-  if (!version) throw new Error(`Could not find the latest runner version. Status ${response.status}.`);
+  const version = response.headers.get("location")?.match(/\/tag\/v([\d.]+)$/)?.[1];
+  if (!version)
+    throw new Error(`Could not find the latest runner version. Status ${response.status}.`);
   return version;
 }

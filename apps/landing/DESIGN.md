@@ -203,6 +203,7 @@ RunnerDuty's world is a working routing diagram drawn on near-black. Line, state
 The density is that of a developer tool, not a brochure. Check rows, diffs, command lists and terminal cards are real content and sit at working sizes, with generous section spacing around them. A heavy grotesque speaks in short declarative headings, and a monospace carries the things a developer would actually type or read back. Depth comes from tone first. Motion is reserved for the route itself: pulses travel, lines draw, status marks resolve.
 
 **Key Characteristics:**
+
 - Near-black ground with tonal panels and 1px hairlines; no gradients, no blur.
 - Route lines (3px, solid when live, dashed when idle) are the connective motif.
 - Colour is signal: nearly everything off the route is neutral.
@@ -216,6 +217,7 @@ A neutral blue-black field with two signal hues and one reserved coral, all tune
 > **Pending confirmation.** The colour semantics, green for your machine, the live route, passed states and the primary action, and amber for minutes being spent or a running job, are pending the user's confirmation. Treat the assignments in this section as provisional until then. Two cases to settle with that decision: a job running on your machine shows the amber spinner while the same panel reports 0 minutes billed, and queued jobs are also amber although they are neither running nor spending.
 
 ### Primary
+
 - **Signal Green** (#3fb950): your machine, the live route, passed checks, the primary action. Also positive marks such as the "Built for" list, the brand mark, text selection, focus rings and skip link.
 - **Bright Green** (#4fcc61): the primary action's hover fill, nothing else.
 - **Green Ink** (#03140a): text and glyphs set on a green fill, such as the button label and the check inside a passed status mark.
@@ -225,14 +227,17 @@ A neutral blue-black field with two signal hues and one reserved coral, all tune
 - **Added Line Green** (#7ee391): text of added diff lines, over a 12% Signal Green tint.
 
 ### Secondary
+
 - **Meter Amber** (#d29922): the hosted route when active, quota ticks, the minutes meter and counter, running and queued status marks.
 - **Amber Ink** (#1b1303): text set on an amber fill, such as the toggle label on the hosted route.
 - **Amber Edge** (rgba(210, 153, 34, 0.5)): 1px edge of a surface lit by the hosted route.
 
 ### Tertiary
+
 - **Removal Coral** (#f0817a): removed diff lines, over a 9% coral tint, and the "Not for" list heading.
 
 ### Neutral
+
 - **Ground** (#0b0d10): the page, and the fill behind floating labels.
 - **Well** (#07080a): recessed surfaces that hold code, terminals and the toggle track, plus the "Not for" column.
 - **Dormant Slab** (#101317): a panel or destination the route is not on.
@@ -268,6 +273,7 @@ Shipped drift, not a rule: the step nodes on the spine stay green on the hosted 
 **Character:** A compact, tightly tracked grotesque that sounds certain at large sizes, paired with a plain monospace that reads as the machine talking back.
 
 ### Hierarchy
+
 - **Display** (700, up to 64px, 1.02, -0.035em): the one page headline, balanced, one sentence per line. Below 1080px it moves to Display Compact; on short desktop viewports min(56px, 4.2vw).
 - **Display Compact** (700, clamp(36px, 10vw, 64px), 1.02, -0.035em): the same headline once the page is a single column.
 - **Headline** (700, clamp(32px, 3.6vw, 48px), 1.08, -0.03em): section headings, balanced, capped at 22ch.
@@ -307,6 +313,7 @@ Responsive behaviour is staged. At 1240px wide, the route status drops its "CI r
 A tonal system with a small amount of state-driven shadow. Depth steps run Well, Ground, Dormant Slab, Raised Slab, Raised Slab 2, each separated by a hairline; most surfaces carry no shadow at all. Code recedes into the Well, and working surfaces rise onto the Raised Slab. A panel the route is not on drops to Dormant Slab and a Soft Hairline.
 
 ### Shadow Vocabulary
+
 - **Terminal Lift** (`box-shadow: 0 24px 48px -28px rgba(0, 0, 0, 0.8)`): neutral lift under the floating terminal where a route begins. The only shadow present at rest.
 - **Route Lift** (`box-shadow: 0 24px 60px -28px color-mix(in srgb, <route colour> 45%, transparent)`): under the active check panel, in either route colour.
 - **Local Lift** (`box-shadow: 0 20px 50px -30px rgba(63, 185, 80, 0.45)`, and `0 20px 50px -24px rgba(63, 185, 80, 0.5)` on closing destinations): under a surface lit by the local route. The hosted equivalents ship with an amber edge and no lift.
@@ -326,7 +333,9 @@ Gently rounded rectangles, stepped by the size of the thing: 3px for meter bars 
 ## Components
 
 ### Buttons
+
 Decisive and plain: one solid action per view, everything else recedes.
+
 - **Shape:** gently rounded (8px); small demo controls 6px.
 - **Primary:** Signal Green fill, Green Ink label at 700 and 17px, 15px by 18px padding, drawn copy icon at 19px. Fills its panel when stacked, and sizes to content inside the wide instruction panel.
 - **Hover / Focus:** fill moves to Bright Green over 0.2s; press scales to 0.985 on the ease-out curve; focus shows the global 2px Signal Green ring at a 3px offset.
@@ -335,10 +344,12 @@ Decisive and plain: one solid action per view, everything else recedes.
 - **Demo control:** Raised Slab, Hairline border, 600 at 13px. When its route is current it disables, loses its border and fill, and takes the route colour as text.
 
 ### Chips
+
 - **Style:** pill outline with Hairline border, Mute text, mono 500 at 13px, used for job names.
 - **State:** selected chips take Green Wash, Green Edge and Ink text.
 
 ### Cards / Containers
+
 - **Corner Style:** 10px for panels and code cards, 12px for composite surfaces such as the instruction panel, chat and comparison blocks.
 - **Background:** Raised Slab for working surfaces, Well for code, Dormant Slab for inactive panels.
 - **Shadow Strategy:** flat at rest; see Elevation & Depth.
@@ -346,23 +357,29 @@ Decisive and plain: one solid action per view, everything else recedes.
 - **Internal Padding:** 14 to 18px; panel heads and check rows 11px by 14px.
 
 ### Navigation
+
 Text links in Mute at 15px that rise to Ink on hover over 0.2s, with 32px between items. The route status sits inline as a coloured 8px dot and an Ink route name, so the header always reports the route. A single outline button closes the row.
 
 ### Route Toggle (signature)
+
 A pill track in the Well with a sliding thumb in the route colour, two equal options, 600 at 15px. The thumb moves over 0.5s on the ease-out curve, its colour crossfades over 0.4s and the selected label takes the matching ink. It is a radio group, so arrow keys switch the route. A small command badge below it (mono 500 at 13px, Raised Slab, 6px) shows the equivalent command.
 
 ### Route Line (signature)
+
 Three stacked strokes on the page spine (a base, a live stroke drawn by scroll position, and a travelling pulse), and a trunk with two béziers around each junction. Pulses are 5.5px dots with an 11px halo at 18% opacity for a real job, and 3px dots for ambient traffic, taking 1.5s from origin to destination with an eased arrival. Route colour transitions take 0.5s. With reduced motion, the page holds a static local route: the spine is drawn in full, nothing travels and checks show as passed.
 
 ### Check Panel
+
 A GitHub-style run list: head with title and runner label, check rows of a status mark, name and timing, and a foot with the meter or billing state. Status marks are 16px circles: an Idle Ring when empty, an amber ring when queued, a spinning amber arc at 0.9s when running, and a solid green disc with a drawn check when passed. The meter is a 6px bar on Meter Track. Panels transition between lit and dormant over 0.6s.
 
 ### Code Card
+
 A Well surface with a Soft Hairline head. Terminals show a Mute `$` prompt, Ink commands and Ink 2 output. Diffs show context in Mute, removals in coral and additions in Added Line Green, each on a faint tint that runs the full line width with a 3px radius. Long lines scroll sideways until phone widths, where they wrap.
 
 ## Do's and Don'ts
 
 ### Do:
+
 - **Do** use the frontmatter tokens, which map one-to-one to the custom properties in the stylesheet where those exist.
 - **Do** draw every route as a 3px round-capped line that is solid when live and dashed 6 on, 8 off when idle.
 - **Do** repaint every route-reporting element together when the route changes.
@@ -374,6 +391,7 @@ A Well surface with a Soft Hairline head. Terminals show a Mute `$` prompt, Ink 
 - **Do** draw icons as SVG with round caps and a consistent 2.2 to 2.4 stroke.
 
 ### Don't:
+
 - **Don't** use coral for the hosted route, for general warnings or for decoration.
 - **Don't** set sentences or interface labels in JetBrains Mono.
 - **Don't** use Idle Ring or Idle Route for text; neither reaches a readable contrast.

@@ -7,9 +7,7 @@
     "erasableSyntaxOnly": true,
     "rewriteRelativeImportExtensions": true,
     "verbatimModuleSyntax": true,
-    "types": [
-      "node"
-    ]
+    "types": ["node"]
   },
   "include": [
     "apps/**/*.ts",
@@ -21,12 +19,5 @@
     "tests/**/*.ts",
     "tests/**/*.mts"
   ],
-  "exclude": [
-    "**/node_modules",
-    "**/dist",
-    "**/coverage",
-    "apps/api",
-    "apps/web",
-    "apps/webhooks"
-  ]
+  "exclude": ["**/node_modules", "**/dist", "**/coverage", "apps/api", "apps/web", "apps/webhooks"]
 }

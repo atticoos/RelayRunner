@@ -31,7 +31,7 @@ export interface InstallationRepo {
 export interface InstallationSummary {
   id: number;
   account: { id: number; login: string; type: string } | null;
-  repositorySelection: 'all' | 'selected';
+  repositorySelection: "all" | "selected";
   suspendedAt: string | null;
 }
 
@@ -45,12 +45,25 @@ interface Base {
 }
 
 export type WebhookMessage =
-  | (Base & { event: 'workflow_job'; repository: { id: number; fullName: string }; job: WorkflowJob })
-  | (Base & { event: 'installation'; installation: InstallationSummary | null; repositories: InstallationRepo[] })
-  | (Base & { event: 'installation_repositories'; installation: InstallationSummary | null; added: InstallationRepo[]; removed: InstallationRepo[] })
+  | (Base & {
+      event: "workflow_job";
+      repository: { id: number; fullName: string };
+      job: WorkflowJob;
+    })
+  | (Base & {
+      event: "installation";
+      installation: InstallationSummary | null;
+      repositories: InstallationRepo[];
+    })
+  | (Base & {
+      event: "installation_repositories";
+      installation: InstallationSummary | null;
+      added: InstallationRepo[];
+      removed: InstallationRepo[];
+    })
   // A repo the installation can see was created, renamed, made public or private, transferred,
   // deleted, and so on. For "All repositories" installs it is the only event that reports new repos.
-  | (Base & { event: 'repository'; repository: InstallationRepo });
+  | (Base & { event: "repository"; repository: InstallationRepo });
 
 // Delivery → queue message, or null when RelayRunner doesn't act on this event (or the payload is
 // missing what it needs). Never throws.
@@ -63,16 +76,25 @@ export function toWebhookMessage(
   if (!isRecord(payload)) return null;
   const base: Base = {
     deliveryId,
-    action: typeof payload.action === 'string' ? payload.action : null,
-    installationId: isRecord(payload.installation) && typeof payload.installation.id === 'number' ? payload.installation.id : null,
+    action: typeof payload.action === "string" ? payload.action : null,
+    installationId:
+      isRecord(payload.installation) && typeof payload.installation.id === "number"
+        ? payload.installation.id
+        : null,
     receivedAt,
   };
 
   switch (event) {
-    case 'workflow_job': {
+    case "workflow_job": {
       const job = payload.workflow_job;
       const repo = payload.repository;
-      if (!isRecord(job) || !isRecord(repo) || typeof job.id !== 'number' || typeof repo.full_name !== 'string') return null;
+      if (
+        !isRecord(job) ||
+        !isRecord(repo) ||
+        typeof job.id !== "number" ||
+        typeof repo.full_name !== "string"
+      )
+        return null;
       return {
         ...base,
         event,
@@ -81,21 +103,28 @@ export function toWebhookMessage(
           id: job.id,
           runId: Number(job.run_id),
           runAttempt: Number(job.run_attempt ?? 1),
-          name: String(job.name ?? ''),
+          name: String(job.name ?? ""),
           workflowName: stringOrNull(job.workflow_name),
-          status: String(job.status ?? ''),
+          status: String(job.status ?? ""),
           conclusion: stringOrNull(job.conclusion),
-          labels: Array.isArray(job.labels) ? job.labels.filter((label): label is string => typeof label === 'string') : [],
+          labels: Array.isArray(job.labels)
+            ? job.labels.filter((label): label is string => typeof label === "string")
+            : [],
           headBranch: stringOrNull(job.head_branch),
-          headSha: String(job.head_sha ?? ''),
+          headSha: String(job.head_sha ?? ""),
           runnerName: stringOrNull(job.runner_name),
-          createdAt: String(job.created_at ?? ''),
+          createdAt: String(job.created_at ?? ""),
         },
       };
     }
-    case 'installation':
-      return { ...base, event, installation: installationSummary(payload.installation), repositories: repos(payload.repositories) };
-    case 'installation_repositories':
+    case "installation":
+      return {
+        ...base,
+        event,
+        installation: installationSummary(payload.installation),
+        repositories: repos(payload.repositories),
+      };
+    case "installation_repositories":
       return {
         ...base,
         event,
@@ -104,10 +133,15 @@ export function toWebhookMessage(
         added: repos(payload.repositories_added),
         removed: repos(payload.repositories_removed),
       };
-    case 'repository': {
+    case "repository": {
       const repo = payload.repository;
-      if (!isRecord(repo) || typeof repo.id !== 'number' || typeof repo.full_name !== 'string') return null;
-      return { ...base, event, repository: { id: repo.id, fullName: repo.full_name, private: repo.private === true } };
+      if (!isRecord(repo) || typeof repo.id !== "number" || typeof repo.full_name !== "string")
+        return null;
+      return {
+        ...base,
+        event,
+        repository: { id: repo.id, fullName: repo.full_name, private: repo.private === true },
+      };
     }
     default:
       return null;
@@ -115,28 +149,37 @@ export function toWebhookMessage(
 }
 
 function installationSummary(value: unknown, selection?: unknown): InstallationSummary | null {
-  if (!isRecord(value) || typeof value.id !== 'number') return null;
-  const account = isRecord(value.account) && typeof value.account.login === 'string'
-    ? { id: Number(value.account.id), login: value.account.login, type: String(value.account.type ?? 'User') }
-    : null;
+  if (!isRecord(value) || typeof value.id !== "number") return null;
+  const account =
+    isRecord(value.account) && typeof value.account.login === "string"
+      ? {
+          id: Number(value.account.id),
+          login: value.account.login,
+          type: String(value.account.type ?? "User"),
+        }
+      : null;
   const picked = selection ?? value.repository_selection;
   return {
     id: value.id,
     account,
-    repositorySelection: picked === 'selected' ? 'selected' : 'all',
+    repositorySelection: picked === "selected" ? "selected" : "all",
     suspendedAt: stringOrNull(value.suspended_at),
   };
 }
 
 function repos(value: unknown): InstallationRepo[] {
   if (!Array.isArray(value)) return [];
-  return value.filter(isRecord).map(repo => ({ id: Number(repo.id), fullName: String(repo.full_name), private: repo.private === true }));
+  return value.filter(isRecord).map((repo) => ({
+    id: Number(repo.id),
+    fullName: String(repo.full_name),
+    private: repo.private === true,
+  }));
 }
 
 function stringOrNull(value: unknown) {
-  return typeof value === 'string' ? value : null;
+  return typeof value === "string" ? value : null;
 }
 
 function isRecord(value: unknown): value is Record<string, any> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

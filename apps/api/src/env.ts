@@ -1,6 +1,6 @@
-import type { MachineLink } from './durable-objects/machine-link.ts';
-import type { PickRunner } from './durable-objects/pick-runner.ts';
-import type { Router } from './durable-objects/router.ts';
+import type { MachineLink } from "./durable-objects/machine-link.ts";
+import type { PickRunner } from "./durable-objects/pick-runner.ts";
+import type { Router } from "./durable-objects/router.ts";
 
 // Bindings from wrangler.jsonc, plus secrets set with `wrangler secret put` (or .dev.vars locally).
 export interface Env {
