@@ -272,7 +272,8 @@ function JobIcon({ job }: { job: ActivityJob }) {
   return <CircleMinus aria-label="Finished" className={`${base} text-muted-foreground`} />;
 }
 
-// A row in the same shape as EventRow: "test in RelayRunner dev passed on Atticus's MacBook ·
+// A row in the same shape as EventRow, naming the job the way GitHub does ("workflow / job"):
+// "RelayRunner dev / test passed on Atticus's MacBook ·
 // relayrunner-ci-tests · main · 1m 30s", then the time. The job name opens the job on
 // GitHub, the workflow name opens its run.
 function JobRow({ job, now }: { job: ActivityJob; now: number }) {
@@ -284,6 +285,16 @@ function JobRow({ job, now }: { job: ActivityJob; now: number }) {
   return (
     <Row icon={<JobIcon job={job} />} at={job.createdAt} now={now}>
       <a
+        href={job.runUrl}
+        target="_blank"
+        rel="noreferrer"
+        className="text-muted-foreground hover:text-foreground hover:underline"
+        title="Open the run on GitHub"
+      >
+        {job.workflow ?? "Workflow"}
+      </a>
+      <span className="text-muted-foreground"> / </span>
+      <a
         href={job.url}
         target="_blank"
         rel="noreferrer"
@@ -291,16 +302,6 @@ function JobRow({ job, now }: { job: ActivityJob; now: number }) {
         title="Open the job on GitHub"
       >
         {job.name}
-      </a>{" "}
-      <span className="text-muted-foreground">in</span>{" "}
-      <a
-        href={job.runUrl}
-        target="_blank"
-        rel="noreferrer"
-        className="hover:underline"
-        title="Open the run on GitHub"
-      >
-        {job.workflow ?? "a workflow"}
       </a>{" "}
       <span className="text-muted-foreground">{jobVerb(job)}</span>{" "}
       <span
@@ -368,6 +369,8 @@ function samplePage(filter: ActivityFilter | undefined): ActivityPage {
       actor: null,
       machine: null,
       job: job(3, 0.2, {
+        workflow: "RelayRunner machine test",
+        name: "machine",
         runner: { type: "machine", machineId: "m1", name: mac.name },
         runnerName: "Atticus-s-MacBook-0123456789ab",
         status: "in_progress",
