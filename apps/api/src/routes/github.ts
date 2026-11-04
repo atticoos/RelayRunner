@@ -1,12 +1,25 @@
-import { and, inArray, isNull } from 'drizzle-orm';
-import { Hono } from 'hono';
-import type { Context } from 'hono';
-import type { AppEnv } from '../app.ts';
-import { createDb, schema } from '../db/index.ts';
-import { GitHubError, installUrl, installationSettingsUrl, listUserInstallations, signInstallState, verifyInstallState } from '../github.ts';
-import { findInstallation, isWorkspaceMember, linkInstallation, upsertInstallation, userGitHubToken } from '../installations.ts';
-import { requireUser } from '../middleware/session.ts';
-import { requireWorkspace } from '../middleware/workspace.ts';
+import { and, inArray, isNull } from "drizzle-orm";
+import { Hono } from "hono";
+import type { Context } from "hono";
+import type { AppEnv } from "../app.ts";
+import { createDb, schema } from "../db/index.ts";
+import {
+  GitHubError,
+  installUrl,
+  installationSettingsUrl,
+  listUserInstallations,
+  signInstallState,
+  verifyInstallState,
+} from "../github.ts";
+import {
+  findInstallation,
+  isWorkspaceMember,
+  linkInstallation,
+  upsertInstallation,
+  userGitHubToken,
+} from "../installations.ts";
+import { requireUser } from "../middleware/session.ts";
+import { requireWorkspace } from "../middleware/workspace.ts";
 
 // Connecting GitHub orgs (GitHub App installations) to workspaces.
 //
@@ -23,62 +36,76 @@ import { requireWorkspace } from '../middleware/workspace.ts';
 // refused.
 
 // Where /setup sends the browser, with ?github=<outcome> for the dashboard to explain.
-type SetupOutcome = 'connected' | 'updated' | 'unclaimed' | 'requested' | 'taken' | 'not_found' | 'expired' | 'reauth' | 'invalid';
+type SetupOutcome =
+  | "connected"
+  | "updated"
+  | "unclaimed"
+  | "requested"
+  | "taken"
+  | "not_found"
+  | "expired"
+  | "reauth"
+  | "invalid";
 
-const MANAGER_ROLES = new Set(['owner', 'admin']);
+const MANAGER_ROLES = new Set(["owner", "admin"]);
 
 export const githubRoutes = new Hono<AppEnv>()
-  .get('/install', requireUser, requireWorkspace, async c => {
-    if (!MANAGER_ROLES.has(c.var.role)) return c.json({ error: 'forbidden' }, 403);
-    if (!c.env.GITHUB_APP_SLUG) return c.json({ error: 'github_app_slug_not_configured' }, 500);
-    const state = await signInstallState(c.env.BETTER_AUTH_SECRET, c.var.workspace.id, c.var.user!.id);
+  .get("/install", requireUser, requireWorkspace, async (c) => {
+    if (!MANAGER_ROLES.has(c.var.role)) return c.json({ error: "forbidden" }, 403);
+    if (!c.env.GITHUB_APP_SLUG) return c.json({ error: "github_app_slug_not_configured" }, 500);
+    const state = await signInstallState(
+      c.env.BETTER_AUTH_SECRET,
+      c.var.workspace.id,
+      c.var.user!.id,
+    );
     return c.redirect(installUrl(c.env.GITHUB_APP_SLUG, state));
   })
 
-  .get('/setup', async c => {
+  .get("/setup", async (c) => {
     const done = (outcome: SetupOutcome) => c.redirect(`/workspace?github=${outcome}`);
     // An org member without admin asked an owner to approve the install. Nothing to link yet; the
     // installation webhook records it once approved.
-    if (c.req.query('setup_action') === 'request') return done('requested');
+    if (c.req.query("setup_action") === "request") return done("requested");
 
     const user = c.var.user;
     // Signed out (or the session expired on the way): the installation is recorded by webhook and
     // shows up to claim after sign-in.
-    if (!user) return c.redirect(`/login?redirect=${encodeURIComponent('/workspace?github=unclaimed')}`);
+    if (!user)
+      return c.redirect(`/login?redirect=${encodeURIComponent("/workspace?github=unclaimed")}`);
 
-    const installationId = Number(c.req.query('installation_id'));
-    if (!Number.isSafeInteger(installationId) || installationId <= 0) return done('invalid');
+    const installationId = Number(c.req.query("installation_id"));
+    if (!Number.isSafeInteger(installationId) || installationId <= 0) return done("invalid");
 
     const db = createDb(c.env.DB);
     const verified = await verifiedInstallation(c, installationId);
-    if (verified === 'reauth') return done('reauth');
-    if (!verified) return done('not_found');
+    if (verified === "reauth") return done("reauth");
+    if (!verified) return done("not_found");
     await upsertInstallation(db, verified);
 
-    const stateParam = c.req.query('state');
+    const stateParam = c.req.query("state");
     if (stateParam) {
       const state = await verifyInstallState(c.env.BETTER_AUTH_SECRET, stateParam);
       // A stale or someone else's link: keep the installation, unclaimed, for the user to claim.
-      if (!state || state.userId !== user.id) return done('expired');
+      if (!state || state.userId !== user.id) return done("expired");
       const membership = await isWorkspaceMember(db, state.workspaceId, user.id);
-      if (!membership || !MANAGER_ROLES.has(membership.role)) return done('expired');
+      if (!membership || !MANAGER_ROLES.has(membership.role)) return done("expired");
       const result = await linkInstallation(db, installationId, state.workspaceId);
-      return done(result === 'taken' ? 'taken' : 'connected');
+      return done(result === "taken" ? "taken" : "connected");
     }
 
     // No state: installed straight from GitHub, or "Redirect on update" after changing the
     // installation's repos or permissions.
     const row = await findInstallation(db, installationId);
-    if (!row?.workspaceId) return done('unclaimed');
-    return done((await isWorkspaceMember(db, row.workspaceId, user.id)) ? 'updated' : 'taken');
+    if (!row?.workspaceId) return done("unclaimed");
+    return done((await isWorkspaceMember(db, row.workspaceId, user.id)) ? "updated" : "taken");
   })
 
-  .get('/installations/unclaimed', requireUser, async c => {
+  .get("/installations/unclaimed", requireUser, async (c) => {
     const db = createDb(c.env.DB);
     const token = await userGitHubToken(c.var.auth, db, c.var.user!.id);
-    if (!token) return c.json({ error: 'github_reauth' }, 409);
+    if (!token) return c.json({ error: "github_reauth" }, 409);
     const visible = await listOrReauth(token);
-    if (visible === 'reauth') return c.json({ error: 'github_reauth' }, 409);
+    if (visible === "reauth") return c.json({ error: "github_reauth" }, 409);
     // Catch up on installs whose webhook we missed (or that predate the webhook handler).
     for (const installation of visible) await upsertInstallation(db, installation);
     if (!visible.length) return c.json({ installations: [] });
@@ -90,7 +117,7 @@ export const githubRoutes = new Hono<AppEnv>()
         and(
           inArray(
             schema.githubInstallation.id,
-            visible.map(installation => installation.id),
+            visible.map((installation) => installation.id),
           ),
           isNull(schema.githubInstallation.workspaceId),
         ),
@@ -99,18 +126,19 @@ export const githubRoutes = new Hono<AppEnv>()
     return c.json({ installations: rows.map(present) });
   })
 
-  .post('/installations/:id/claim', requireUser, requireWorkspace, async c => {
-    if (!MANAGER_ROLES.has(c.var.role)) return c.json({ error: 'forbidden' }, 403);
-    const installationId = Number(c.req.param('id'));
-    if (!Number.isSafeInteger(installationId) || installationId <= 0) return c.json({ error: 'not_found' }, 404);
+  .post("/installations/:id/claim", requireUser, requireWorkspace, async (c) => {
+    if (!MANAGER_ROLES.has(c.var.role)) return c.json({ error: "forbidden" }, 403);
+    const installationId = Number(c.req.param("id"));
+    if (!Number.isSafeInteger(installationId) || installationId <= 0)
+      return c.json({ error: "not_found" }, 404);
 
     const verified = await verifiedInstallation(c, installationId);
-    if (verified === 'reauth') return c.json({ error: 'github_reauth' }, 409);
-    if (!verified) return c.json({ error: 'not_found' }, 404);
+    if (verified === "reauth") return c.json({ error: "github_reauth" }, 409);
+    if (!verified) return c.json({ error: "not_found" }, 404);
     await upsertInstallation(c.var.db, verified);
 
-    if ((await linkInstallation(c.var.db, installationId, c.var.workspace.id)) === 'taken') {
-      return c.json({ error: 'installation_in_another_workspace' }, 409);
+    if ((await linkInstallation(c.var.db, installationId, c.var.workspace.id)) === "taken") {
+      return c.json({ error: "installation_in_another_workspace" }, 409);
     }
     return c.json({ ok: true });
   });
@@ -119,10 +147,10 @@ export const githubRoutes = new Hono<AppEnv>()
 // if we have no usable token.
 async function verifiedInstallation(c: Context<AppEnv>, installationId: number) {
   const token = await userGitHubToken(c.var.auth, createDb(c.env.DB), c.var.user!.id);
-  if (!token) return 'reauth' as const;
+  if (!token) return "reauth" as const;
   const visible = await listOrReauth(token);
-  if (visible === 'reauth') return visible;
-  return visible.find(installation => installation.id === installationId) ?? null;
+  if (visible === "reauth") return visible;
+  return visible.find((installation) => installation.id === installationId) ?? null;
 }
 
 async function listOrReauth(token: string) {
@@ -130,7 +158,7 @@ async function listOrReauth(token: string) {
     return await listUserInstallations(token);
   } catch (error) {
     // A revoked or expired token. Anything else (GitHub down) should surface as a 500.
-    if (error instanceof GitHubError && error.status === 401) return 'reauth' as const;
+    if (error instanceof GitHubError && error.status === 401) return "reauth" as const;
     throw error;
   }
 }

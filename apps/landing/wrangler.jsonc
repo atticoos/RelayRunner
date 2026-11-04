@@ -4,13 +4,13 @@
   "name": "relayrunner-web",
   "compatibility_date": "2026-11-03",
   "assets": {
-    "directory": "./dist"
+    "directory": "./dist",
   },
   "workers_dev": false,
   "routes": [
     {
       "pattern": "relayrunner.dev",
-      "custom_domain": true
-    }
-  ]
+      "custom_domain": true,
+    },
+  ],
 }

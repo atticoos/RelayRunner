@@ -1,6 +1,6 @@
 packages:
-  - 'apps/*'
-  - 'packages/*'
+  - "apps/*"
+  - "packages/*"
 # Versions shared by more than one package. Reference them as "catalog:".
 catalog:
   "typescript": ^7.0.2

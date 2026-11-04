@@ -1,16 +1,16 @@
-import { betterAuth } from 'better-auth';
-import { drizzleAdapter } from 'better-auth/adapters/drizzle';
-import { oAuthProxy, organization } from 'better-auth/plugins';
-import { createDb, schema } from './db/index.ts';
-import type { Env } from './env.ts';
+import { betterAuth } from "better-auth";
+import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { oAuthProxy, organization } from "better-auth/plugins";
+import { createDb, schema } from "./db/index.ts";
+import type { Env } from "./env.ts";
 
 // Preview dashboards (Workers Builds `wrangler preview`) reach this Worker through their own API
 // service binding, so requests arrive with the preview host. PREVIEW_ORIGINS lists their origin
 // patterns, comma-separated, e.g. https://*-relayrunner-app.relayrun.workers.dev.
-export function previewOrigins(env: Pick<Env, 'PREVIEW_ORIGINS'>) {
-  return (env.PREVIEW_ORIGINS ?? '')
-    .split(',')
-    .map(origin => origin.trim())
+export function previewOrigins(env: Pick<Env, "PREVIEW_ORIGINS">) {
+  return (env.PREVIEW_ORIGINS ?? "")
+    .split(",")
+    .map((origin) => origin.trim())
     .filter(Boolean);
 }
 
@@ -20,11 +20,11 @@ export function createAuth(env: Env) {
   return betterAuth({
     // Always the production dashboard origin, so GitHub only ever sees one OAuth callback URL.
     baseURL: env.BETTER_AUTH_URL,
-    basePath: '/api/auth',
+    basePath: "/api/auth",
     secret: env.BETTER_AUTH_SECRET,
     // Lets preview origins call /api/auth/* (origin check) and be redirect targets.
     trustedOrigins: previewOrigins(env),
-    database: drizzleAdapter(createDb(env.DB), { provider: 'sqlite', schema }),
+    database: drizzleAdapter(createDb(env.DB), { provider: "sqlite", schema }),
     socialProviders: {
       github: {
         clientId: env.GITHUB_APP_CLIENT_ID,
@@ -53,7 +53,7 @@ export function createAuth(env: Env) {
 }
 
 export type Auth = ReturnType<typeof createAuth>;
-export type Session = Auth['$Infer']['Session'];
+export type Session = Auth["$Infer"]["Session"];
 
 // Workspaces are Better Auth organizations, stored under gateway names (workspace,
 // workspace_member, workspace_invitation, session.active_workspace_id). The dashboard uses the
@@ -62,15 +62,15 @@ export function workspaces() {
   return organization({
     // Any signed-in user can create a workspace and becomes its owner.
     allowUserToCreateOrganization: true,
-    creatorRole: 'owner',
+    creatorRole: "owner",
     // MVP: one owner per workspace, no invites yet. The member and invitation tables are shaped
     // for teams; raise this (and add sendInvitationEmail) when teams land.
     membershipLimit: 1,
     schema: {
-      organization: { modelName: 'workspace' },
-      member: { modelName: 'workspaceMember', fields: { organizationId: 'workspaceId' } },
-      invitation: { modelName: 'workspaceInvitation', fields: { organizationId: 'workspaceId' } },
-      session: { fields: { activeOrganizationId: 'activeWorkspaceId' } },
+      organization: { modelName: "workspace" },
+      member: { modelName: "workspaceMember", fields: { organizationId: "workspaceId" } },
+      invitation: { modelName: "workspaceInvitation", fields: { organizationId: "workspaceId" } },
+      session: { fields: { activeOrganizationId: "activeWorkspaceId" } },
     },
   });
 }

@@ -17,11 +17,15 @@ TypeScript and place Vitest tests next to the code they cover, using
 `*.test.ts` or `*.test.mts`.
 
 - `pnpm lint` runs Oxlint.
+- `pnpm format` formats the repo with oxfmt; `pnpm format:check` verifies it.
 - `pnpm typecheck` checks types without emitting JavaScript.
 - `pnpm test` runs the test suite once.
 - `pnpm test:watch` reruns affected tests as files change.
 
-GitHub Actions runs all three checks on pushes and pull requests.
+GitHub Actions runs lint, format, type, and test checks on pushes and pull
+requests.
 
-`pnpm check` runs all three checks locally. `pnpm install` sets up the Husky
-pre-commit hook, which runs lint and type checking before each commit.
+`pnpm check` runs the same checks locally. `pnpm install` sets up the Husky
+pre-commit hook, which runs Oxlint and oxfmt on staged files (via lint-staged)
+and then type checking before each commit. In VS Code or Cursor, install the
+recommended Oxc extension to format on save.

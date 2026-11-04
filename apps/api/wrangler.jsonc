@@ -7,7 +7,16 @@
   // The RelayRunner Cloudflare account (separate from Atticus's personal account).
   "account_id": "b233b6d6fd9eae9e093651bfb043c119",
   "workers_dev": true,
-  "observability": { "enabled": true },
+  // Workers Logs, traces and Issues (errors grouped per Worker). Wrangler deploys overwrite
+  // dashboard settings, so these must stay on here. Source maps make Issues' stacks point at
+  // the TypeScript source.
+  "observability": {
+    "enabled": true,
+    "logs": { "enabled": true, "invocation_logs": true },
+    "traces": { "enabled": true },
+    "issues": { "enabled": true },
+  },
+  "upload_source_maps": true,
   "vars": {
     // The dashboard origin (apps/web forwards /api/* here over a service binding).
     // Switch to https://app.relayrunner.dev once the domain moves to this account.
@@ -19,7 +28,7 @@
     // The GitHub App's slug, as in https://github.com/apps/<slug>.
     "GITHUB_APP_SLUG": "relayrunner",
     // The GitHub App's numeric ID, the `iss` of the App JWTs that mint installation tokens.
-    "GITHUB_APP_ID": "5605512"
+    "GITHUB_APP_ID": "5605512",
   },
   // From the account's Secrets Store (default_secrets_store), not `wrangler secret put`.
   // GITHUB_APP_PRIVATE_KEY is the App's private key converted to PKCS#8 PEM, which is what
@@ -28,22 +37,26 @@
   // Locally, `wrangler dev` reads a local store: seed it once with
   //   wrangler secrets-store secret create eac3493b9fef4234a832f5f3fdcc8a41 --name GITHUB_APP_PRIVATE_KEY --scopes workers
   "secrets_store_secrets": [
-    { "binding": "GITHUB_APP_PRIVATE_KEY", "store_id": "eac3493b9fef4234a832f5f3fdcc8a41", "secret_name": "GITHUB_APP_PRIVATE_KEY" }
+    {
+      "binding": "GITHUB_APP_PRIVATE_KEY",
+      "store_id": "eac3493b9fef4234a832f5f3fdcc8a41",
+      "secret_name": "GITHUB_APP_PRIVATE_KEY",
+    },
   ],
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "relayrunner",
       "database_id": "e6f4f176-aa75-45fe-83f7-64e468cc23f6",
-      "migrations_dir": "migrations"
-    }
+      "migrations_dir": "migrations",
+    },
   ],
   "durable_objects": {
     "bindings": [
       { "name": "PICK_RUNNER", "class_name": "PickRunner" },
       { "name": "ROUTER", "class_name": "Router" },
-      { "name": "MACHINE_LINK", "class_name": "MachineLink" }
-    ]
+      { "name": "MACHINE_LINK", "class_name": "MachineLink" },
+    ],
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["PickRunner", "Router", "MachineLink"] }],
   // GitHub webhooks: apps/webhooks verifies each delivery and enqueues it; this Worker's `queue()`
@@ -58,14 +71,14 @@
         "max_batch_size": 10,
         "max_batch_timeout": 5,
         "max_retries": 6,
-        "dead_letter_queue": "relayrunner-github-webhooks-dlq"
+        "dead_letter_queue": "relayrunner-github-webhooks-dlq",
       },
       {
         "queue": "relayrunner-github-webhooks-dlq",
         "max_batch_size": 10,
         "max_batch_timeout": 5,
-        "max_retries": 0
-      }
-    ]
-  }
+        "max_retries": 0,
+      },
+    ],
+  },
 }

@@ -43,7 +43,8 @@ function NewWorkspacePage() {
           <CardHeader>
             <CardTitle>Create a workspace</CardTitle>
             <CardDescription>
-              A workspace holds your GitHub orgs, your machines and how jobs are routed between them. You'll be its owner.
+              A workspace holds your GitHub orgs, your machines and how jobs are routed between
+              them. You'll be its owner.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -60,7 +61,12 @@ function NewWorkspacePage() {
                 />
               </label>
               {slug && <p className="font-mono text-xs text-muted-foreground">{slug}</p>}
-              <Button type="submit" size="lg" className="w-full font-bold" disabled={pending || !name.trim()}>
+              <Button
+                type="submit"
+                size="lg"
+                className="w-full font-bold"
+                disabled={pending || !name.trim()}
+              >
                 {pending ? "Creating…" : "Create workspace"}
               </Button>
               {error && <p className="text-sm text-destructive">{error}</p>}

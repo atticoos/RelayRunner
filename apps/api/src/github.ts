@@ -1,14 +1,14 @@
 // Talking to GitHub on behalf of a signed-in user, and the signed `state` that carries a
 // workspace through the GitHub App install page.
 
-const API = 'https://api.github.com';
+const API = "https://api.github.com";
 
 // The slice of a GitHub App installation the gateway stores. Both GET /user/installations and
 // installation webhooks send this shape.
 export interface GitHubInstallation {
   id: number;
   account: { id: number; login: string; type: string } | null;
-  repository_selection: 'all' | 'selected';
+  repository_selection: "all" | "selected";
   suspended_at: string | null;
 }
 
@@ -20,16 +20,24 @@ export async function listUserInstallations(token: string): Promise<GitHubInstal
   for (let page = 1; ; page += 1) {
     const response = await fetch(`${API}/user/installations?per_page=100&page=${page}`, {
       headers: {
-        accept: 'application/vnd.github+json',
+        accept: "application/vnd.github+json",
         authorization: `Bearer ${token}`,
-        'user-agent': 'relayrunner-gateway',
-        'x-github-api-version': '2022-11-28',
+        "user-agent": "relayrunner-gateway",
+        "x-github-api-version": "2022-11-28",
       },
     });
-    if (!response.ok) throw new GitHubError(response.status, `GET /user/installations failed with ${response.status}`);
-    const body = (await response.json()) as { total_count: number; installations: GitHubInstallation[] };
+    if (!response.ok)
+      throw new GitHubError(
+        response.status,
+        `GET /user/installations failed with ${response.status}`,
+      );
+    const body = (await response.json()) as {
+      total_count: number;
+      installations: GitHubInstallation[];
+    };
     installations.push(...body.installations);
-    if (body.installations.length < 100 || installations.length >= body.total_count) return installations;
+    if (body.installations.length < 100 || installations.length >= body.total_count)
+      return installations;
   }
 }
 
@@ -47,8 +55,12 @@ export function installUrl(appSlug: string, state: string) {
 }
 
 // Where an owner changes which repos the App sees, accepts new permissions, or unsuspends it.
-export function installationSettingsUrl(installation: { id: number; accountLogin: string; accountType: string }) {
-  return installation.accountType === 'Organization'
+export function installationSettingsUrl(installation: {
+  id: number;
+  accountLogin: string;
+  accountType: string;
+}) {
+  return installation.accountType === "Organization"
     ? `https://github.com/organizations/${encodeURIComponent(installation.accountLogin)}/settings/installations/${installation.id}`
     : `https://github.com/settings/installations/${installation.id}`;
 }
@@ -64,19 +76,31 @@ export interface InstallState {
 
 const STATE_TTL_MS = 60 * 60 * 1000;
 
-export async function signInstallState(secret: string, workspaceId: string, userId: string, now = Date.now()) {
-  const payload = base64url(new TextEncoder().encode(JSON.stringify({ w: workspaceId, u: userId, e: now + STATE_TTL_MS })));
+export async function signInstallState(
+  secret: string,
+  workspaceId: string,
+  userId: string,
+  now = Date.now(),
+) {
+  const payload = base64url(
+    new TextEncoder().encode(JSON.stringify({ w: workspaceId, u: userId, e: now + STATE_TTL_MS })),
+  );
   return `${payload}.${base64url(await hmac(secret, payload))}`;
 }
 
-export async function verifyInstallState(secret: string, state: string, now = Date.now()): Promise<InstallState | null> {
-  const [payload, signature, extra] = state.split('.');
+export async function verifyInstallState(
+  secret: string,
+  state: string,
+  now = Date.now(),
+): Promise<InstallState | null> {
+  const [payload, signature, extra] = state.split(".");
   if (!payload || !signature || extra !== undefined) return null;
   const expected = base64url(await hmac(secret, payload));
   if (!timingSafeEqual(expected, signature)) return null;
   try {
     const { w, u, e } = JSON.parse(new TextDecoder().decode(fromBase64url(payload)));
-    if (typeof w !== 'string' || typeof u !== 'string' || typeof e !== 'number' || e < now) return null;
+    if (typeof w !== "string" || typeof u !== "string" || typeof e !== "number" || e < now)
+      return null;
     return { workspaceId: w, userId: u, expiresAt: e };
   } catch {
     return null;
@@ -85,17 +109,28 @@ export async function verifyInstallState(secret: string, state: string, now = Da
 
 async function hmac(secret: string, data: string) {
   const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey('raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-  return new Uint8Array(await crypto.subtle.sign('HMAC', key, encoder.encode(`github-install-state:${data}`)));
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  return new Uint8Array(
+    await crypto.subtle.sign("HMAC", key, encoder.encode(`github-install-state:${data}`)),
+  );
 }
 
 function base64url(bytes: Uint8Array) {
-  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return btoa(String.fromCharCode(...bytes))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
 }
 
 function fromBase64url(text: string) {
-  const binary = atob(text.replace(/-/g, '+').replace(/_/g, '/'));
-  return Uint8Array.from(binary, char => char.charCodeAt(0));
+  const binary = atob(text.replace(/-/g, "+").replace(/_/g, "/"));
+  return Uint8Array.from(binary, (char) => char.charCodeAt(0));
 }
 
 function timingSafeEqual(a: string, b: string) {
