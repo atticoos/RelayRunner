@@ -1,0 +1,20 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "relayrunner-gateway",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": true,
+  "observability": { "enabled": true },
+  "vars": {
+    // Override these at deploy time with --var.
+    "GITHUB_REPOSITORY": "owner/repo",
+    "RUNNER_LABEL": "relayrunner"
+  },
+  "durable_objects": {
+    "bindings": [
+      { "name": "PICK_RUNNER", "class_name": "PickRunner" },
+      { "name": "ROUTER", "class_name": "Router" }
+    ]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["PickRunner", "Router"] }]
+}
