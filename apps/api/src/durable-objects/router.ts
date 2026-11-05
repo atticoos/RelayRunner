@@ -1,3 +1,4 @@
+import { readRunnerOrder } from "@relayrunner/runner-order";
 import { DurableObject } from "cloudflare:workers";
 import { and, eq, isNotNull, isNull } from "drizzle-orm";
 import { createDb, schema } from "../db/index.ts";
@@ -5,7 +6,7 @@ import type { Env } from "../env.ts";
 import {
   canClaim,
   chooseMachine,
-  FALLBACK_RUNNER,
+  decideRoute,
   holdsMachine,
   machineLabels,
   lastPicked,
@@ -15,6 +16,7 @@ import {
   type Candidate,
   type QueuedJob,
   type Route,
+  type RouteDecision,
 } from "../routing.ts";
 
 export interface PickedJob {
@@ -25,6 +27,8 @@ export interface PickedJob {
   runId: number;
   // Labels a machine must all have (the relay's `machine` input). Empty: don't use machines.
   machine: string[];
+  // The GitHub-hosted label(s) (the relay's `github` input). Empty: don't use GitHub-hosted.
+  github: string[];
   // Public repos never go to a machine: anyone could run code on it with a pull request.
   private: boolean;
 }
@@ -35,9 +39,22 @@ const ROUTE_KEY = "route:";
 // keeps the routes it hands out (src/routing.ts), so the job queued on a route's label can find
 // its machine.
 export class Router extends DurableObject<Env> {
-  /** The runs-on label the run's next job should use: a route's `rr-<id>`, or ubuntu-latest. */
-  async route(job: PickedJob): Promise<string> {
-    if (!job.private || job.machine.length === 0) return FALLBACK_RUNNER;
+  /**
+   * Where the run's next job goes, walking the workspace's runner order: a machine route's
+   * `rr-<id>`, the job's own `github` label, or no runner and the reason.
+   */
+  async route(job: PickedJob): Promise<RouteDecision> {
+    const db = createDb(this.env.DB);
+    const [workspace] = await db
+      .select({ runnerOrder: schema.workspace.runnerOrder })
+      .from(schema.workspace)
+      .where(eq(schema.workspace.id, job.workspaceId))
+      .limit(1);
+    return decideRoute(readRunnerOrder(workspace?.runnerOrder), job, () => this.pickMachine(job));
+  }
+
+  // A route to a free machine with the job's labels, or null.
+  private pickMachine(job: PickedJob): Promise<string | null> {
     // One decision at a time, so two picks can't both see the same machine as free.
     return this.ctx.blockConcurrencyWhile(async () => {
       const now = Date.now();
@@ -70,7 +87,7 @@ export class Router extends DurableObject<Env> {
           })),
       );
       const machine = chooseMachine(candidates, held, lastPicked(routes), job.machine);
-      if (!machine) return FALLBACK_RUNNER;
+      if (!machine) return null;
 
       const route: Route = {
         id: newRouteId(),

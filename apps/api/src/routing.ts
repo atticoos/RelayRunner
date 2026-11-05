@@ -1,13 +1,20 @@
 // Routing a job to a machine, kept free of Durable Object APIs so it can be tested on its own.
 //
 // 1. A `runs-on: relayrunner` pick job is claimed by a PickRunner, which asks the workspace's
-//    Router where the job's run should go. For a private repo with a free machine, the Router
-//    records a route and answers its one-time label `rr-<route id>`; otherwise `ubuntu-latest`.
+//    Router where the job's run should go. The Router walks the workspace's runner order
+//    (decideRoute). A machine step records a route and answers its one-time label
+//    `rr-<route id>`; a github step answers the job's own `github` label. When nothing fits, the
+//    pick fails the relay job with the reason.
 // 2. The workflow's next job runs on that label, so GitHub queues it as `runs-on: rr-<route id>`.
 // 3. The `queued` webhook for that job claims the route (same repo, same run) and the machine's
 //    MachineLink mints an org JIT runner on the label and sends the machine a `run` message.
 
-export const FALLBACK_RUNNER = "ubuntu-latest";
+import {
+  RUNNER_KEYS,
+  RUNNER_LABELS,
+  type RunnerKey,
+  type RunnerOrder,
+} from "@relayrunner/runner-order";
 
 export const ROUTE_LABEL_PREFIX = "rr-";
 // 12 lowercase hex characters.
@@ -209,3 +216,91 @@ function scalar(value: unknown): string | number | undefined {
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
+
+// Why a step of the order didn't answer.
+export type SkipReason =
+  // The job left the provider's relay input empty.
+  | "not_configured"
+  // Machines never run a public repo's jobs.
+  | "public_repo"
+  // No online, idle machine has every wanted label.
+  | "no_machine"
+  // `github` names more than one label; a runs-on from an output holds one.
+  | "too_many_labels";
+
+export interface SkippedStep {
+  key: RunnerKey;
+  reason: SkipReason;
+}
+
+export type RouteDecision =
+  // `step` answered with `runner`, after skipping `skipped` (in order).
+  | { runner: string; step: RunnerKey; skipped: SkippedStep[] }
+  // Nothing fits: fail the relay with `reason`. `notInOrder` lists providers the job configured
+  // that the order leaves out.
+  | { runner: null; reason: string; skipped: SkippedStep[]; notInOrder: RunnerKey[] };
+
+export interface RouteRequest {
+  machine: string[];
+  github: string[];
+  private: boolean;
+}
+
+/**
+ * Walks the order top to bottom. A step whose provider the job didn't configure is skipped, and a
+ * provider the job configures but the order leaves out is never tried. `pickMachine` is only
+ * called when the machine step is reached and may run; it returns the route label or null.
+ */
+export async function decideRoute(
+  order: RunnerOrder,
+  job: RouteRequest,
+  pickMachine: () => Promise<string | null>,
+): Promise<RouteDecision> {
+  const skipped: SkippedStep[] = [];
+  for (const { key } of order.steps) {
+    if (key === "machine") {
+      if (job.machine.length === 0) skipped.push({ key, reason: "not_configured" });
+      else if (!job.private) skipped.push({ key, reason: "public_repo" });
+      else {
+        const label = await pickMachine();
+        if (label) return { runner: label, step: key, skipped };
+        skipped.push({ key, reason: "no_machine" });
+      }
+    } else if (key === "github") {
+      if (job.github.length === 0) skipped.push({ key, reason: "not_configured" });
+      else if (job.github.length > 1) skipped.push({ key, reason: "too_many_labels" });
+      else return { runner: job.github[0], step: key, skipped };
+    }
+  }
+  const inOrder = new Set(order.steps.map((step) => step.key));
+  const notInOrder = RUNNER_KEYS.filter((key) => !inOrder.has(key) && job[key].length > 0);
+  return { runner: null, reason: noRunnerReason(job, skipped, notInOrder), skipped, notInOrder };
+}
+
+/** The message a relay fails with when nothing fits, naming why each provider couldn't take it. */
+export function noRunnerReason(
+  job: RouteRequest,
+  skipped: SkippedStep[],
+  notInOrder: RunnerKey[],
+): string {
+  if (job.machine.length === 0 && job.github.length === 0)
+    return `${NO_RUNNER}: the relay sets neither \`machine\` nor \`github\`.`;
+  const parts = skipped.map(({ key, reason }) => {
+    switch (reason) {
+      case "not_configured":
+        return `\`${key}\` isn't set on this relay`;
+      case "public_repo":
+        return "public repos never run on local machines";
+      case "no_machine":
+        return job.machine.length === 1 && job.machine[0].toLowerCase() === "self-hosted"
+          ? "no local machine is online and idle"
+          : `no local machine with ${job.machine.join(", ")} is online and idle`;
+      case "too_many_labels":
+        return `\`github\` takes one label, not ${job.github.join(", ")}`;
+    }
+  });
+  for (const key of notInOrder) parts.push(`${RUNNER_LABELS[key]} isn't in your runner order`);
+  return `${NO_RUNNER}: ${parts.join("; ")}.`;
+}
+
+export const NO_RUNNER = "No runner available";

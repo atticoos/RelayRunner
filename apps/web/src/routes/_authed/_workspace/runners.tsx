@@ -23,14 +23,7 @@ import {
   type RunnerStep,
 } from "@relayrunner/runner-order";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
-import {
-  ArrowDownIcon,
-  ArrowUpIcon,
-  GripVerticalIcon,
-  InfoIcon,
-  PlusIcon,
-  XIcon,
-} from "lucide-react";
+import { ArrowDownIcon, ArrowUpIcon, GripVerticalIcon, PlusIcon, XIcon } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { AddRunner } from "@/components/add-runner";
 import { PageHeader } from "@/components/page-header";
@@ -136,14 +129,6 @@ function RunnersPage() {
         Jobs try these providers from top to bottom. Move a section to change the order.
       </PageHeader>
       <div className="grid max-w-3xl gap-3">
-        <div className="flex items-start gap-2.5 rounded-lg border border-run-edge bg-run/10 px-3.5 py-2.5 text-sm">
-          <InfoIcon aria-hidden className="mt-0.5 size-4 shrink-0 text-run" />
-          <p>
-            Routing doesn't use this order yet. Until it does, jobs go to a free local machine
-            first, then GitHub-hosted.
-          </p>
-        </div>
-
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
           <SortableContext
             items={steps.map((step) => step.key)}

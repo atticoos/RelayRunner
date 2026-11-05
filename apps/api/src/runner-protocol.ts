@@ -248,7 +248,15 @@ export class RunnerClient {
     };
   }
 
-  async complete(job: ClaimedJob, conclusion: Conclusion, outputs: Record<string, string> = {}) {
+  /**
+   * Finishes the job. `error` becomes a failure annotation on the run, as a step's `::error::`
+   * would, so the reason shows on the run's summary page.
+   */
+  async complete(
+    job: ClaimedJob,
+    conclusion: Conclusion,
+    { outputs = {}, error }: { outputs?: Record<string, string>; error?: string } = {},
+  ) {
     await this.request("POST", join(job.serviceUrl, "completejob"), {
       token: job.token,
       body: {
@@ -258,6 +266,7 @@ export class RunnerClient {
         outputs: Object.fromEntries(
           Object.entries(outputs).map(([name, value]) => [name, { value, isSecret: false }]),
         ),
+        ...(error ? { annotations: [failureAnnotation(error)] } : {}),
         billingOwnerId: job.message.billingOwnerId,
       },
     });
@@ -283,4 +292,9 @@ export async function latestRunnerVersion() {
   if (!version)
     throw new Error(`Could not find the latest runner version. Status ${response.status}.`);
   return version;
+}
+
+// The runner's Annotation contract (level is the AnnotationLevel enum by name).
+export function failureAnnotation(message: string) {
+  return { level: "FAILURE", message, isInfrastructureIssue: false };
 }
