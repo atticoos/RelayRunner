@@ -192,7 +192,9 @@ describe("claim and complete", () => {
     const { client, calls } = await openedClient((call) =>
       call.url.endsWith("/acquirejob") ? Response.json(job) : new Response(null, { status: 204 }),
     );
-    await client.complete(await client.claim(request), "succeeded", { runner: '"ubuntu-24.04"' });
+    await client.complete(await client.claim(request), "succeeded", {
+      outputs: { runner: '"ubuntu-24.04"' },
+    });
     const completed = calls.at(-1)!;
     expect(completed.url).toBe(`${service}/job/completejob`);
     expect(completed.headers.authorization).toBe("Bearer job-token");
@@ -201,6 +203,19 @@ describe("claim and complete", () => {
       jobId: "job-1",
       conclusion: "succeeded",
       outputs: { runner: { value: '"ubuntu-24.04"', isSecret: false } },
+    });
+  });
+
+  test("fails the job with the reason as a failure annotation", async () => {
+    const { client, calls } = await openedClient((call) =>
+      call.url.endsWith("/acquirejob") ? Response.json(job) : new Response(null, { status: 204 }),
+    );
+    await client.complete(await client.claim(request), "failed", { error: "No runner available." });
+    const body = JSON.parse(calls.at(-1)!.body);
+    expect(body).toMatchObject({
+      conclusion: "failed",
+      outputs: {},
+      annotations: [{ level: "FAILURE", message: "No runner available." }],
     });
   });
 });

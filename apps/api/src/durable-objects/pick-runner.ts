@@ -12,7 +12,7 @@ import { latestRunnerVersion, RunnerClient, decodeJitConfig } from "../runner-pr
 import { RELAYRUNNER_LABEL } from "../webhook-queue.ts";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { createDb, schema } from "../db/index.ts";
-import { FALLBACK_RUNNER, jobContext } from "../routing.ts";
+import { jobContext, NO_RUNNER } from "../routing.ts";
 
 export interface PickWork {
   jobId: number;
@@ -66,9 +66,18 @@ export class PickRunner extends DurableObject<Env> {
       if (request) {
         const job = await client.claim(request);
         const pick = await pickRunner(this.env, work.installationId, job.message.contextData);
-        await client.complete(job, "succeeded", { runner: pick.runner });
+        if (pick.runner) {
+          await client.complete(job, "succeeded", { outputs: { runner: pick.runner } });
+        } else {
+          // Fail fast: the job that needs the relay doesn't start. If GitHub turns the annotation
+          // down, fail without it rather than leave the relay running.
+          const failed = client;
+          await failed
+            .complete(job, "failed", { error: pick.reason })
+            .catch(() => failed.complete(job, "failed"));
+        }
         outcome = {
-          result: "routed",
+          result: pick.runner ? "routed" : "no_runner",
           ...pick,
           claimedJob: job.message.jobDisplayName,
           runnerLabels: jit.labels,
@@ -110,10 +119,15 @@ async function waitForJob(client: RunnerClient) {
 }
 
 // Where the claimed pick job's run goes. Only a repo of a workspace's installation reaches the
-// workspace's Router; anything we can't place gets ubuntu-latest.
+// workspace's Router, which walks the runner order. Anything we can't place gets no runner and a
+// reason, and the relay fails.
 async function pickRunner(env: Env, installationId: number, contextData: unknown) {
   const context = jobContext(contextData);
-  if (!context) return { runner: FALLBACK_RUNNER, reason: "no_job_context" };
+  if (!context)
+    return {
+      runner: null,
+      reason: `${NO_RUNNER}: RelayRunner couldn't read this job's repository and run.`,
+    };
   const db = createDb(env.DB);
   const [installation] = await db
     .select({ workspaceId: schema.githubInstallation.workspaceId })
@@ -121,7 +135,11 @@ async function pickRunner(env: Env, installationId: number, contextData: unknown
     .where(eq(schema.githubInstallation.id, installationId))
     .limit(1);
   if (!installation?.workspaceId)
-    return { runner: FALLBACK_RUNNER, reason: "no_workspace", repo: context.repo };
+    return {
+      runner: null,
+      reason: `${NO_RUNNER}: this GitHub App installation isn't connected to a RelayRunner workspace.`,
+      repo: context.repo,
+    };
   const [repo] = await db
     .select({ id: schema.githubRepository.id, private: schema.githubRepository.private })
     .from(schema.githubRepository)
@@ -133,21 +151,28 @@ async function pickRunner(env: Env, installationId: number, contextData: unknown
       ),
     )
     .limit(1);
-  if (!repo) return { runner: FALLBACK_RUNNER, reason: "unknown_repo", repo: context.repo };
-  const runner = await env.ROUTER.getByName(installation.workspaceId).route({
+  if (!repo)
+    return {
+      runner: null,
+      reason: `${NO_RUNNER}: RelayRunner doesn't have access to ${context.repo}.`,
+      repo: context.repo,
+    };
+  const decision = await env.ROUTER.getByName(installation.workspaceId).route({
     workspaceId: installation.workspaceId,
     installationId,
     repositoryId: repo.id,
     repo: context.repo,
     runId: context.runId,
     machine: context.machine,
+    github: context.github,
     private: repo.private,
   });
   return {
-    runner,
+    ...decision,
     repo: context.repo,
     runId: context.runId,
     private: repo.private,
     machine: context.machine,
+    github: context.github,
   };
 }

@@ -1,7 +1,9 @@
-import { describe, expect, test } from "vitest";
+import type { RunnerOrder } from "@relayrunner/runner-order";
+import { describe, expect, test, vi } from "vitest";
 import {
   canClaim,
   chooseMachine,
+  decideRoute,
   holdsMachine,
   jobContext,
   hasLabels,
@@ -288,5 +290,113 @@ describe("jobContext", () => {
     expect(jobContext({})).toBeNull();
     expect(jobContext(github([["repository", "a/b"]]))).toBeNull();
     expect(jobContext(github([["run_id", "5"]]))).toBeNull();
+  });
+});
+
+describe("decideRoute", () => {
+  const machineFirst: RunnerOrder = { steps: [{ key: "machine" }, { key: "github" }] };
+  const githubFirst: RunnerOrder = { steps: [{ key: "github" }, { key: "machine" }] };
+  const both = { machine: ["self-hosted"], github: ["ubuntu-latest"], private: true };
+  const free = async () => "rr-0123456789ab";
+  const none = async () => null;
+
+  test("machine first: a free machine answers", async () => {
+    expect(await decideRoute(machineFirst, both, free)).toEqual({
+      runner: "rr-0123456789ab",
+      step: "machine",
+      skipped: [],
+    });
+  });
+
+  test("machine first: no free machine falls to github", async () => {
+    expect(await decideRoute(machineFirst, both, none)).toEqual({
+      runner: "ubuntu-latest",
+      step: "github",
+      skipped: [{ key: "machine", reason: "no_machine" }],
+    });
+  });
+
+  test("github first: github answers without looking at machines", async () => {
+    const pick = vi.fn(free);
+    expect(await decideRoute(githubFirst, both, pick)).toMatchObject({
+      runner: "ubuntu-latest",
+      step: "github",
+    });
+    expect(pick).not.toHaveBeenCalled();
+  });
+
+  test("a step the job didn't configure is skipped", async () => {
+    expect(await decideRoute(githubFirst, { ...both, github: [] }, free)).toEqual({
+      runner: "rr-0123456789ab",
+      step: "machine",
+      skipped: [{ key: "github", reason: "not_configured" }],
+    });
+  });
+
+  test("a provider the order leaves out is never picked", async () => {
+    const pick = vi.fn(free);
+    const decision = await decideRoute(
+      { steps: [{ key: "github" }] },
+      { ...both, github: [] },
+      pick,
+    );
+    expect(pick).not.toHaveBeenCalled();
+    expect(decision).toMatchObject({ runner: null, notInOrder: ["machine"] });
+    expect(decision.runner === null && decision.reason).toBe(
+      "No runner available: `github` isn't set on this relay; Local machines isn't in your runner order.",
+    );
+  });
+
+  test("nothing fits: fails with the reason for each provider", async () => {
+    const decision = await decideRoute(
+      { steps: [{ key: "machine" }] },
+      { ...both, machine: ["macOS", "ARM64"] },
+      none,
+    );
+    expect(decision).toMatchObject({
+      runner: null,
+      skipped: [{ key: "machine", reason: "no_machine" }],
+      notInOrder: ["github"],
+    });
+    expect(decision.runner === null && decision.reason).toBe(
+      "No runner available: no local machine with macOS, ARM64 is online and idle; GitHub-hosted isn't in your runner order.",
+    );
+  });
+
+  test("a public repo never gets a machine", async () => {
+    const pick = vi.fn(free);
+    expect(await decideRoute(machineFirst, { ...both, private: false }, pick)).toEqual({
+      runner: "ubuntu-latest",
+      step: "github",
+      skipped: [{ key: "machine", reason: "public_repo" }],
+    });
+    expect(pick).not.toHaveBeenCalled();
+    const decision = await decideRoute(machineFirst, { ...both, github: [], private: false }, pick);
+    expect(decision.runner === null && decision.reason).toBe(
+      "No runner available: public repos never run on local machines; `github` isn't set on this relay.",
+    );
+  });
+
+  test("github takes one label", async () => {
+    const decision = await decideRoute(
+      { steps: [{ key: "github" }] },
+      { machine: [], github: ["ubuntu-latest", "macos-latest"], private: true },
+      none,
+    );
+    expect(decision).toMatchObject({
+      runner: null,
+      skipped: [{ key: "github", reason: "too_many_labels" }],
+    });
+  });
+
+  test("a relay with neither input fails", async () => {
+    const decision = await decideRoute(
+      machineFirst,
+      { machine: [], github: [], private: true },
+      free,
+    );
+    expect(decision.runner === null && decision.reason).toBe(
+      "No runner available: the relay sets neither `machine` nor `github`.",
+    );
   });
 });
