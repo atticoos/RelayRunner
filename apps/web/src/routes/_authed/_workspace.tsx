@@ -92,9 +92,6 @@ function SettingsNav({ workspaceName }: { workspaceName: string }) {
           <Link to="/settings/github" className={navLink} activeProps={navActive}>
             GitHub orgs
           </Link>
-          <Link to="/settings/runner-order" className={navLink} activeProps={navActive}>
-            Runner order
-          </Link>
           <span
             aria-disabled
             className="flex items-center gap-2 px-2.5 py-1.5 text-[15px] text-sidebar-foreground/60"
