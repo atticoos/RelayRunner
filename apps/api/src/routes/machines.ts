@@ -16,7 +16,8 @@ import {
   sha256Hex,
   verifyMachineToken,
 } from "../machines.ts";
-import { requireUser } from "../middleware/session.ts";
+import { sendEmail } from "../email.ts";
+import { requireUser, waitUntil } from "../middleware/session.ts";
 import { requireWorkspace } from "../middleware/workspace.ts";
 
 // Enrolling a machine (`relayrunner connect`) with Better Auth's device authorization plugin:
@@ -138,6 +139,22 @@ export const machineRoutes = new Hono<AppEnv>()
       .from(schema.workspace)
       .where(eq(schema.workspace.id, machine.workspaceId))
       .limit(1);
+
+    // Security notice to whoever approved the machine: its token can run the workspace's jobs.
+    const notice = sendEmail(c.env, {
+      to: c.var.user!.email,
+      template: "machine-connected",
+      context: {
+        machineName: machine.name,
+        os: machine.os,
+        arch: machine.arch,
+        workspaceName: workspace?.name ?? "your workspace",
+        connectedAt: new Date(),
+      },
+    });
+    const defer = waitUntil(c);
+    if (defer) defer(notice);
+    else await notice;
     return c.json({ machine: presentMachine(machine), workspace, token });
   })
   // The machine's WebSocket: `Upgrade: websocket` with `Authorization: Bearer rrm_…`. A missing,

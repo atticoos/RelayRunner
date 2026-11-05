@@ -18,6 +18,15 @@ export interface Env extends AccessEnv {
   ROUTER: DurableObjectNamespace<Router>;
   MACHINE_LINK: DurableObjectNamespace<MachineLink>;
 
+  // Cloudflare Email Sending (src/email.ts). Optional so local dev and tests run without it.
+  EMAIL?: SendEmail;
+  // Sender address on send.relayrunner.app; must be in the binding's allowed_sender_addresses.
+  EMAIL_FROM?: string;
+  // Optional: where operator alerts (webhook dead letters) are emailed. Unset skips them.
+  OPERATOR_ALERT_EMAIL?: string;
+  // The dashboard origin links in emails point at. Falls back to BETTER_AUTH_URL.
+  DASHBOARD_URL?: string;
+
   BETTER_AUTH_URL: string;
   BETTER_AUTH_SECRET: string;
   // Comma-separated origin patterns of dashboard previews allowed to sign in (see auth.ts).
