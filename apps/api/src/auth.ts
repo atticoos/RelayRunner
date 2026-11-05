@@ -55,7 +55,7 @@ export function createAuth(env: Env) {
       deviceAuthorization({
         verificationUri: new URL("/device", env.BETTER_AUTH_URL).toString(),
         validateClient: (clientId) => clientId === MACHINE_CLIENT_ID,
-        expiresIn: "10m",
+        expiresIn: "30m",
         interval: "5s",
       }),
       // Lets that claim call send the device-flow session as `Authorization: Bearer <token>`.

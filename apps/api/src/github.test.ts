@@ -2,7 +2,7 @@ import { toWebhookMessage } from "@relayrunner/github-webhooks";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import { app } from "./app.ts";
 import type { Env } from "./env.ts";
-import { type GitHubInstallation, verifyInstallState } from "./github.ts";
+import { dashboardPath, type GitHubInstallation, verifyInstallState } from "./github.ts";
 import * as testing from "./testing.ts";
 import { processWebhook } from "./webhook-queue.ts";
 
@@ -72,8 +72,11 @@ const call = (path: string, cookie: string, body?: unknown) =>
   testing.call(env, path, cookie, body);
 
 // The `state` the install link would carry for this user's active workspace.
-async function installState(cookie: string) {
-  const response = await call("/github/install", cookie);
+async function installState(cookie: string, next?: string) {
+  const response = await call(
+    `/github/install${next ? `?next=${encodeURIComponent(next)}` : ""}`,
+    cookie,
+  );
   expect(response.status).toBe(302);
   return new URL(response.headers.get("location")!).searchParams.get("state")!;
 }
@@ -309,6 +312,68 @@ describe("connecting a GitHub org", () => {
     expect(signedOut.headers.get("location")).toBe(
       `/login?redirect=${encodeURIComponent("/settings/github?github=unclaimed")}`,
     );
+  });
+});
+
+describe("coming back to a dashboard page after the install (next)", () => {
+  const device = "/device?user_code=ABCDEFGH&name=my-laptop";
+
+  test("/install carries next in the signed state", async () => {
+    const { cookie } = await owner();
+    const state = await verifyInstallState(
+      env.BETTER_AUTH_SECRET,
+      await installState(cookie, device),
+    );
+    expect(state?.next).toBe(device);
+  });
+
+  test("setup links the installation and returns to next with the outcome", async () => {
+    const { githubToken, workspace, cookie } = await owner();
+    const github = installation();
+    visibleTo.set(githubToken, [github]);
+
+    expect(await setup(cookie, github.id, await installState(cookie, device))).toBe(
+      `${device}&github=connected`,
+    );
+    expect(await row(github.id)).toMatchObject({ workspace_id: workspace.id });
+  });
+
+  test("an install request from a non-admin also returns to next", async () => {
+    const { cookie } = await owner();
+    const state = await installState(cookie, device);
+    const response = await call(
+      `/github/setup?setup_action=request&state=${encodeURIComponent(state)}`,
+      cookie,
+    );
+    expect(response.headers.get("location")).toBe(`${device}&github=requested`);
+  });
+
+  test("signed out on the way back, sign-in returns to next", async () => {
+    const { cookie } = await owner();
+    const state = await installState(cookie, device);
+    const response = await app.request(
+      `/api/github/setup?installation_id=1&state=${encodeURIComponent(state)}`,
+      {},
+      env,
+    );
+    expect(response.headers.get("location")).toBe(`/login?redirect=${encodeURIComponent(device)}`);
+  });
+
+  test("next only ever points inside the dashboard", async () => {
+    const { cookie } = await owner();
+    for (const next of [
+      "https://evil.example/x",
+      "//evil.example/x",
+      "/\\evil.example",
+      "device",
+    ]) {
+      const state = await verifyInstallState(
+        env.BETTER_AUTH_SECRET,
+        await installState(cookie, next),
+      );
+      expect(state?.next).toBeUndefined();
+    }
+    expect(dashboardPath("/device?user_code=A#frag")).toBe("/device?user_code=A");
   });
 });
 

@@ -4,6 +4,7 @@ import type { Context } from "hono";
 import type { AppEnv } from "../app.ts";
 import { createDb, schema } from "../db/index.ts";
 import {
+  dashboardPath,
   GitHubError,
   installUrl,
   installationSettingsUrl,
@@ -28,6 +29,9 @@ import { requireWorkspace } from "../middleware/workspace.ts";
 // 2. GitHub sends them back to the App's Setup URL, GET /setup, with `installation_id`. That id
 //    comes from a query string, so it only counts if the user's own GitHub token can see it in
 //    GET /user/installations. Then the installation is linked to the workspace from `state`.
+//    /install takes an optional `?next=<dashboard path>` that rides in the signed state, so /setup
+//    can send the browser back there (the /device page while `relayrunner connect` onboards a new
+//    user) instead of /settings/github.
 // 3. Installs made straight on GitHub arrive with no `state` (or by webhook only) and stay
 //    unclaimed. The dashboard lists the user's unclaimed ones (GET /installations/unclaimed) and
 //    claims one into the active workspace (POST /installations/:id/claim), with the same check.
@@ -57,12 +61,24 @@ export const githubRoutes = new Hono<AppEnv>()
       c.env.BETTER_AUTH_SECRET,
       c.var.workspace.id,
       c.var.user!.id,
+      { next: dashboardPath(c.req.query("next")) },
     );
     return c.redirect(installUrl(c.env.GITHUB_APP_SLUG, state));
   })
 
   .get("/setup", async (c) => {
-    const done = (outcome: SetupOutcome) => c.redirect(`/settings/github?github=${outcome}`);
+    // The state is read up front only for where to land afterwards; whether it may link anything
+    // is checked against the signed-in user below.
+    const stateParam = c.req.query("state");
+    const state = stateParam
+      ? await verifyInstallState(c.env.BETTER_AUTH_SECRET, stateParam)
+      : null;
+    const landing = state?.next ?? "/settings/github";
+    const done = (outcome: SetupOutcome) => {
+      const url = new URL(landing, "https://dashboard.invalid");
+      url.searchParams.set("github", outcome);
+      return c.redirect(`${url.pathname}${url.search}`);
+    };
     // An org member without admin asked an owner to approve the install. Nothing to link yet; the
     // installation webhook records it once approved.
     if (c.req.query("setup_action") === "request") return done("requested");
@@ -72,7 +88,7 @@ export const githubRoutes = new Hono<AppEnv>()
     // shows up to claim after sign-in.
     if (!user)
       return c.redirect(
-        `/login?redirect=${encodeURIComponent("/settings/github?github=unclaimed")}`,
+        `/login?redirect=${encodeURIComponent(state?.next ?? "/settings/github?github=unclaimed")}`,
       );
 
     const installationId = Number(c.req.query("installation_id"));
@@ -84,9 +100,7 @@ export const githubRoutes = new Hono<AppEnv>()
     if (!verified) return done("not_found");
     await upsertInstallation(db, verified);
 
-    const stateParam = c.req.query("state");
     if (stateParam) {
-      const state = await verifyInstallState(c.env.BETTER_AUTH_SECRET, stateParam);
       // A stale or someone else's link: keep the installation, unclaimed, for the user to claim.
       if (!state || state.userId !== user.id) return done("expired");
       const membership = await isWorkspaceMember(db, state.workspaceId, user.id);

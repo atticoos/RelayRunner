@@ -65,13 +65,30 @@ export function installationSettingsUrl(installation: {
     : `https://github.com/settings/installations/${installation.id}`;
 }
 
-// The install link's `state`: which workspace to link the installation to, who started it, and
-// when it stops being valid. HMAC-signed with BETTER_AUTH_SECRET so it can't be forged. It only
-// picks the workspace: the installation itself is still checked against the user's token.
+// The install link's `state`: which workspace to link the installation to, who started it, when
+// it stops being valid, and optionally where in the dashboard to land afterwards (the /device page
+// during `relayrunner connect` onboarding). HMAC-signed with BETTER_AUTH_SECRET so it can't be
+// forged. It only picks the workspace: the installation itself is still checked against the user's
+// token.
 export interface InstallState {
   workspaceId: string;
   userId: string;
   expiresAt: number;
+  next?: string;
+}
+
+// A dashboard path to send the browser back to: same-origin and path-absolute only, so `next`
+// can't become an open redirect. Returns null for anything else.
+export function dashboardPath(value: unknown): string | null {
+  if (typeof value !== "string" || value.length > 512) return null;
+  if (!value.startsWith("/") || value.startsWith("//") || value.startsWith("/\\")) return null;
+  const base = "https://dashboard.invalid";
+  try {
+    const url = new URL(value, base);
+    return url.origin === base ? `${url.pathname}${url.search}` : null;
+  } catch {
+    return null;
+  }
 }
 
 const STATE_TTL_MS = 60 * 60 * 1000;
@@ -80,11 +97,11 @@ export async function signInstallState(
   secret: string,
   workspaceId: string,
   userId: string,
-  now = Date.now(),
+  { next, now = Date.now() }: { next?: string | null; now?: number } = {},
 ) {
-  const payload = base64url(
-    new TextEncoder().encode(JSON.stringify({ w: workspaceId, u: userId, e: now + STATE_TTL_MS })),
-  );
+  const fields: Record<string, unknown> = { w: workspaceId, u: userId, e: now + STATE_TTL_MS };
+  if (next) fields.n = next;
+  const payload = base64url(new TextEncoder().encode(JSON.stringify(fields)));
   return `${payload}.${base64url(await hmac(secret, payload))}`;
 }
 
@@ -98,10 +115,11 @@ export async function verifyInstallState(
   const expected = base64url(await hmac(secret, payload));
   if (!timingSafeEqual(expected, signature)) return null;
   try {
-    const { w, u, e } = JSON.parse(new TextDecoder().decode(fromBase64url(payload)));
+    const { w, u, e, n } = JSON.parse(new TextDecoder().decode(fromBase64url(payload)));
     if (typeof w !== "string" || typeof u !== "string" || typeof e !== "number" || e < now)
       return null;
-    return { workspaceId: w, userId: u, expiresAt: e };
+    const next = dashboardPath(n);
+    return { workspaceId: w, userId: u, expiresAt: e, ...(next ? { next } : {}) };
   } catch {
     return null;
   }
