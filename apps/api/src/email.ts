@@ -6,6 +6,7 @@
  */
 import {
   renderDeadLetterAlertEmail,
+  renderInviteEmail,
   renderMachineConnectedEmail,
   renderWelcomeEmail,
   type RenderedEmail,
@@ -29,7 +30,18 @@ export type EmailArgs =
         connectedAt: Date;
       };
     }
-  | { to: string; template: "dead-letter-alert"; context: { count: number; threshold: number } };
+  | { to: string; template: "dead-letter-alert"; context: { count: number; threshold: number } }
+  | {
+      to: string;
+      template: "invite";
+      context: {
+        invitationId: string;
+        inviterName: string;
+        workspaceName: string;
+        role: string;
+        expiresAt: Date;
+      };
+    };
 
 /** Where links in emails point: the dashboard people actually use, not the OAuth callback host. */
 export function dashboardUrl(env: Pick<Env, "DASHBOARD_URL" | "BETTER_AUTH_URL">) {
@@ -48,6 +60,13 @@ function render(env: Env, args: EmailArgs): RenderedEmail {
         ...args.context,
         inspectorUrl: `${dashboard}/dev/webhooks`,
       });
+    case "invite": {
+      const { invitationId, ...context } = args.context;
+      return renderInviteEmail({
+        ...context,
+        acceptUrl: `${dashboard}/invite/${encodeURIComponent(invitationId)}`,
+      });
+    }
   }
 }
 

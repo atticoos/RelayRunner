@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   renderDeadLetterAlertEmail,
+  renderInviteEmail,
   renderMachineConnectedEmail,
   renderWelcomeEmail,
 } from "./index.ts";
@@ -39,5 +40,20 @@ describe("templates", () => {
     });
     expect(email.subject).toBe("[webhooks] 12 deliveries dead-lettered in the past hour");
     expect(email.text).toContain("https://app.example/dev/webhooks");
+  });
+
+  it("invite links the accept page and escapes names", () => {
+    const email = renderInviteEmail({
+      inviterName: "Ada <ada>",
+      workspaceName: "Acme & Co",
+      role: "admin",
+      acceptUrl: "https://app.example/invite/inv_1",
+      expiresAt: new Date("2026-11-07T00:00:00Z"),
+    });
+    expect(email.subject).toBe("Ada <ada> invited you to Acme & Co on RelayRunner");
+    expect(email.html).toContain("Ada &lt;ada&gt;");
+    expect(email.html).toContain('href="https://app.example/invite/inv_1"');
+    expect(email.text).toContain("as an admin");
+    expect(email.text).toContain("Accept: https://app.example/invite/inv_1");
   });
 });
