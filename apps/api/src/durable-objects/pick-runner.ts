@@ -67,7 +67,15 @@ export class PickRunner extends DurableObject<Env> {
         const job = await client.claim(request);
         const pick = await pickRunner(this.env, work.installationId, job.message.contextData);
         await client.complete(job, "succeeded", { runner: pick.runner });
-        outcome = { result: "routed", ...pick, claimedJob: job.message.jobDisplayName };
+        outcome = {
+          result: "routed",
+          ...pick,
+          claimedJob: job.message.jobDisplayName,
+          runnerLabels: jit.labels,
+          // Temporary (#119): what the claimed job carries, to confirm the relay's inputs reach
+          // us. Only context names and the `inputs` entry: `github` holds the job's token.
+          ...jobInputs(job.message.contextData),
+        };
         runnerId = undefined; // GitHub removes a JIT runner once its job is done.
       }
     } catch (error) {
@@ -89,6 +97,12 @@ export class PickRunner extends DurableObject<Env> {
       }),
     );
   }
+}
+
+function jobInputs(contextData: unknown) {
+  if (typeof contextData !== "object" || contextData === null) return { contextNames: null };
+  const contexts = contextData as Record<string, unknown>;
+  return { contextNames: Object.keys(contexts), inputs: contexts.inputs ?? null };
 }
 
 async function waitForJob(client: RunnerClient) {
