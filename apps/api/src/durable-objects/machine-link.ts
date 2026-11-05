@@ -176,6 +176,7 @@ export class MachineLink extends DurableObject<Env> {
         jobId: route.jobId,
         installationId: route.installationId,
         runnerId: jit.runnerId,
+        runnerLabels: jit.labels,
       }),
     );
     return "sent";

@@ -106,8 +106,16 @@ export async function generateOrgJitConfig(
     throw new Error(
       `POST /orgs/${org}/actions/runners/generate-jitconfig failed with ${response.status}: ${(await response.text()).slice(0, 300)}`,
     );
-  const body = (await response.json()) as { runner: { id: number }; encoded_jit_config: string };
-  return { runnerId: body.runner.id, encodedJitConfig: body.encoded_jit_config };
+  const body = (await response.json()) as {
+    runner: { id: number; labels?: { name: string }[] };
+    encoded_jit_config: string;
+  };
+  return {
+    runnerId: body.runner.id,
+    // The labels GitHub gave the runner, which may include defaults beyond the ones we asked for.
+    labels: (body.runner.labels ?? []).map((label) => label.name),
+    encodedJitConfig: body.encoded_jit_config,
+  };
 }
 
 /** Remove a runner that never got a job. A JIT runner that ran one removes itself. */
