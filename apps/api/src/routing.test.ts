@@ -12,6 +12,7 @@ import {
   machineRunnerName,
   newRouteId,
   parseLabels,
+  pausedMatches,
   ROUTE_HOLD_MS,
   routeIdFromLabels,
   routeLabel,
@@ -50,6 +51,12 @@ describe("chooseMachine", () => {
     state: "idle" | "busy" | null,
     labels = ["self-hosted", "macOS", "ARM64"],
   ) => ({ id, name: id, online, state, labels });
+
+  test("never picks a paused machine", () => {
+    const paused = { ...machine("paused", true, "idle"), paused: true };
+    expect(chooseMachine([paused], new Set())).toBeNull();
+    expect(chooseMachine([paused, machine("free", true, "idle")], new Set())?.id).toBe("free");
+  });
 
   test("picks an online, idle machine no route holds", () => {
     const picked = chooseMachine(
@@ -408,6 +415,26 @@ describe("decideRoute", () => {
     });
   });
 
+  test("every machine that fits is paused: says so, and falls to github", async () => {
+    const paused = async () => ({ paused: ["atticus-mbp"] });
+    expect(await decideRoute(machineFirst, both, paused)).toEqual({
+      runner: "ubuntu-latest",
+      step: "github",
+      skipped: [{ key: "machine", reason: "machine_paused", paused: ["atticus-mbp"] }],
+      notInOrder: [],
+    });
+    const one = await decideRoute(machineFirst, { ...both, github: [] }, paused);
+    expect(one.runner === null && one.reason).toBe(
+      "No runner available: the only machine that fits, atticus-mbp, is paused; `github` isn't set on this relay.",
+    );
+    const two = await decideRoute(machineFirst, { ...both, github: [] }, async () => ({
+      paused: ["a", "b"],
+    }));
+    expect(two.runner === null && two.reason).toBe(
+      "No runner available: every machine that fits is paused (a, b); `github` isn't set on this relay.",
+    );
+  });
+
   test("a relay with neither input fails", async () => {
     const decision = await decideRoute(
       machineFirst,
@@ -417,5 +444,35 @@ describe("decideRoute", () => {
     expect(decision.runner === null && decision.reason).toBe(
       "No runner available: the relay sets neither `machine` nor `github`.",
     );
+  });
+});
+
+describe("pausedMatches", () => {
+  const mac = ["self-hosted", "macOS", "ARM64"];
+  const linux = ["self-hosted", "Linux", "X64"];
+
+  test("names the machines when every one with the labels is paused", () => {
+    const machines = [
+      { name: "mbp", labels: mac, paused: true },
+      { name: "box", labels: linux, paused: false },
+    ];
+    expect(pausedMatches(machines, ["macOS"])).toEqual(["mbp"]);
+    expect(pausedMatches(machines, ["linux"])).toEqual([]);
+    // Any machine: one isn't paused.
+    expect(pausedMatches(machines, ["self-hosted"])).toEqual([]);
+  });
+
+  test("a mix of paused and other machines, or none that fit, isn't paused", () => {
+    expect(
+      pausedMatches(
+        [
+          { name: "a", labels: mac, paused: true },
+          { name: "b", labels: mac },
+        ],
+        ["macOS"],
+      ),
+    ).toEqual([]);
+    expect(pausedMatches([{ name: "a", labels: mac, paused: true }], ["Windows"])).toEqual([]);
+    expect(pausedMatches([], [])).toEqual([]);
   });
 });

@@ -198,7 +198,7 @@ export const deviceCode = sqliteTable("device_code", {
 // with its own token, not a user session. Enrollment runs in two steps (src/machines.ts):
 // approving the device code in the dashboard creates the row with enrollment_hash set, and the
 // CLI's claim fills in os/arch and token_hash and clears enrollment_hash. Revoking keeps the row
-// so past routes can still name the machine.
+// so past routes can still name the machine. Pausing (paused_at) keeps it out of routing only.
 export const machine = sqliteTable(
   "machine",
   {
@@ -218,6 +218,10 @@ export const machine = sqliteTable(
     createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
     lastSeenAt: integer("last_seen_at", { mode: "timestamp_ms" }),
     revokedAt: integer("revoked_at", { mode: "timestamp_ms" }),
+    // Set while the machine is paused: it stays connected and enrolled, but routing skips it.
+    // pausedBy is the user who paused it, or null when the machine paused itself from its CLI.
+    pausedAt: integer("paused_at", { mode: "timestamp_ms" }),
+    pausedBy: text("paused_by").references(() => user.id, { onDelete: "set null" }),
     ...timestamps,
   },
   (table) => [index("machine_workspace_idx").on(table.workspaceId)],
@@ -321,7 +325,9 @@ export const routeDecision = sqliteTable(
     // What the pick answered: a route's `rr-<id>` or a GitHub label. Null when nothing fit.
     runner: text("runner"),
     // The earlier steps, in order, as [{key, reason}].
-    skipped: text("skipped", { mode: "json" }).$type<{ key: string; reason: string }[]>().notNull(),
+    skipped: text("skipped", { mode: "json" })
+      .$type<{ key: string; reason: string; paused?: string[] }[]>()
+      .notNull(),
     // Providers the relay set that the order leaves out.
     notInOrder: text("not_in_order", { mode: "json" }).$type<string[]>().notNull(),
     // The relay's `machine` and `github` inputs.

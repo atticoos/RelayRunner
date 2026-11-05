@@ -44,7 +44,9 @@ export type ConnectionEvent =
   | { type: "gateway-error"; code: string; message: string }
   | { type: "run"; routeId: string }
   | { type: "run-refused"; routeId: string }
-  | { type: "job"; update: JobUpdate };
+  | { type: "job"; update: JobUpdate }
+  // Someone paused or resumed this machine. `by` is their name, or null for this machine's CLI.
+  | { type: "paused"; paused: boolean; by: string | null };
 
 export interface ConnectOptions {
   server: string;
@@ -166,6 +168,8 @@ export async function connect(options: ConnectOptions): Promise<ConnectionEnd> {
         }
         const message = parsed.message;
         if (message.type === "run") startJob(message);
+        else if (message.type === "paused")
+          emit({ type: "paused", paused: message.paused, by: message.by });
         else {
           gatewayError = message.message;
           emit({ type: "gateway-error", code: message.code, message: message.message });

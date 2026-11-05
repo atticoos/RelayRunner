@@ -10,6 +10,8 @@ import {
   Laptop,
   LoaderCircle,
   Lock,
+  Pause,
+  Play,
   Plug,
   Plus,
   Unplug,
@@ -180,6 +182,10 @@ function sentence(item: ActivityItem) {
       return "connected";
     case "machine.disconnected":
       return `disconnected because ${DISCONNECT_REASONS[item.data.reason]}`;
+    case "machine.paused":
+      return item.data.via === "cli" ? "was paused from its CLI" : "was paused";
+    case "machine.resumed":
+      return item.data.via === "cli" ? "was resumed from its CLI" : "was resumed";
     case "machine.revoked":
       return "was revoked";
     case "job.routed":
@@ -193,6 +199,8 @@ const EVENT_ICONS = {
   "machine.enrolled": Plus,
   "machine.connected": Plug,
   "machine.disconnected": Unplug,
+  "machine.paused": Pause,
+  "machine.resumed": Play,
   "machine.revoked": Ban,
   "job.routed": Laptop,
   "job.unroutable": Ban,
@@ -524,6 +532,45 @@ function samplePage(filter: ActivityFilter | undefined): ActivityPage {
   const mac = { id: "m1", name: "Atticuss-MacBook-Pro.local" };
   const relay = { machine: ["self-hosted"], github: ["ubuntu-latest"] };
   const items: ActivityItem[] = [
+    {
+      id: 13,
+      type: "job.routed",
+      data: {},
+      occurredAt: at(0.05),
+      actor: null,
+      machine: null,
+      job: job(6, 0.05, {
+        name: "test (macos)",
+        runnerName: "GitHub Actions 14",
+        status: "in_progress",
+        startedAt: at(0.04),
+        walk: {
+          step: "github",
+          skipped: [{ key: "machine", reason: "machine_paused", paused: [mac.name] }],
+          notInOrder: [],
+          machine: ["macOS", "ARM64"],
+          github: ["macos-latest"],
+        },
+      }),
+    },
+    {
+      id: 12,
+      type: "machine.paused",
+      data: { machineName: mac.name, via: "dashboard" },
+      occurredAt: at(0.15),
+      actor: { id: "u1", name: "Atticus White" },
+      machine: mac,
+      job: null,
+    },
+    {
+      id: 11,
+      type: "machine.resumed",
+      data: { machineName: mac.name, via: "cli" },
+      occurredAt: at(20),
+      actor: null,
+      machine: mac,
+      job: null,
+    },
     {
       id: 10,
       type: "job.unroutable",

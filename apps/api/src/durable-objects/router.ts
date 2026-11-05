@@ -11,9 +11,11 @@ import {
   machineLabels,
   lastPicked,
   newRouteId,
+  pausedMatches,
   routeLabel,
   ROUTE_TTL_MS,
   type Candidate,
+  type MachinePick,
   type QueuedJob,
   type Route,
   type RouteDecision,
@@ -53,8 +55,9 @@ export class Router extends DurableObject<Env> {
     return decideRoute(readRunnerOrder(workspace?.runnerOrder), job, () => this.pickMachine(job));
   }
 
-  // A route to a free machine with the job's labels, or null.
-  private pickMachine(job: PickedJob): Promise<string | null> {
+  // A route to a free machine with the job's labels, the paused machines when every one with the
+  // labels is paused, or null.
+  private pickMachine(job: PickedJob): Promise<MachinePick> {
     // One decision at a time, so two picks can't both see the same machine as free.
     return this.ctx.blockConcurrencyWhile(async () => {
       const now = Date.now();
@@ -67,6 +70,7 @@ export class Router extends DurableObject<Env> {
           name: schema.machine.name,
           os: schema.machine.os,
           arch: schema.machine.arch,
+          pausedAt: schema.machine.pausedAt,
         })
         .from(schema.machine)
         .where(
@@ -76,18 +80,26 @@ export class Router extends DurableObject<Env> {
             isNull(schema.machine.revokedAt),
           ),
         );
+      const pool = machines.map((machine) => ({
+        id: machine.id,
+        name: machine.name,
+        labels: machineLabels(machine),
+        paused: machine.pausedAt !== null,
+      }));
+      // Paused machines can't be picked, so there's no need to ask for their live status.
       const candidates: Candidate[] = await Promise.all(
-        machines
-          .filter((machine) => !held.has(machine.id))
+        pool
+          .filter((machine) => !held.has(machine.id) && !machine.paused)
           .map(async (machine) => ({
-            id: machine.id,
-            name: machine.name,
-            labels: machineLabels(machine),
+            ...machine,
             ...(await this.env.MACHINE_LINK.getByName(machine.id).status()),
           })),
       );
       const machine = chooseMachine(candidates, held, lastPicked(routes), job.machine);
-      if (!machine) return null;
+      if (!machine) {
+        const paused = pausedMatches(pool, job.machine);
+        return paused.length > 0 ? { paused } : null;
+      }
 
       const route: Route = {
         id: newRouteId(),

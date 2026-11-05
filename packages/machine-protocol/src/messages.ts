@@ -75,7 +75,21 @@ export const ErrorMessage = z.object({
   message: z.string(),
 });
 
-export const GatewayMessage = z.discriminatedUnion("type", [RunMessage, ErrorMessage]);
+// The machine was paused or resumed. Sent when it happens and, for a paused machine, after hello.
+// A paused machine stays connected but gets no new jobs; one already running carries on. `by` is
+// the name of the user who did it, or null when this machine's own CLI did.
+export const PausedMessage = z.object({
+  v: version,
+  type: z.literal("paused"),
+  paused: z.boolean(),
+  by: z.string().nullable(),
+});
+
+export const GatewayMessage = z.discriminatedUnion("type", [
+  RunMessage,
+  ErrorMessage,
+  PausedMessage,
+]);
 
 export type HelloMessage = z.infer<typeof HelloMessage>;
 export type StatusMessage = z.infer<typeof StatusMessage>;
@@ -83,6 +97,7 @@ export type JobMessage = z.infer<typeof JobMessage>;
 export type MachineMessage = z.infer<typeof MachineMessage>;
 export type RunMessage = z.infer<typeof RunMessage>;
 export type ErrorMessage = z.infer<typeof ErrorMessage>;
+export type PausedMessage = z.infer<typeof PausedMessage>;
 export type GatewayMessage = z.infer<typeof GatewayMessage>;
 
 export type ParseResult<T> =

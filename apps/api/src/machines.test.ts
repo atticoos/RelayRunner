@@ -16,6 +16,7 @@ function fakeLink() {
   return {
     status: vi.fn(async () => ({ online: false, state: null, connectedAt: null })),
     revoke: vi.fn(async () => {}),
+    notifyPaused: vi.fn(async (_paused: boolean, _by: string | null) => {}),
     fetch: vi.fn(async (_request: Request) => new Response("upgraded")),
   };
 }
@@ -446,6 +447,110 @@ describe("the machine WebSocket", () => {
     const forwarded = link(machine.id).fetch.mock.calls[0]![0];
     expect(forwarded.headers.get("x-relayrunner-machine-id")).toBe(machine.id);
     expect(forwarded.headers.get("authorization")).toBeNull();
+  });
+});
+
+describe("pausing a machine", () => {
+  const fromCli = (token: string, action: "pause" | "resume") =>
+    app.request(
+      `/api/machines/me/${action}`,
+      { method: "POST", headers: { authorization: `Bearer ${token}` } },
+      env,
+    );
+
+  test("pausing from the dashboard keeps the machine listed, marked paused by its user", async () => {
+    const { cookie, machine, token } = await enroll("pause-ok", "studio");
+    const response = await call(`/machines/${machine.id}/pause`, cookie, {});
+    expect(response.status).toBe(200);
+    const { machine: paused } = (await response.json()) as {
+      machine: { paused: { at: string; by: string | null } | null };
+    };
+    expect(paused.paused).toEqual({ at: expect.any(String), by: expect.any(String) });
+    // Still enrolled: the token works and the machine is listed.
+    expect(await verifyMachineToken(createDb(env.DB), token)).not.toBeNull();
+    const { machines } = (await (await call("/machines", cookie)).json()) as {
+      machines: { id: string; paused: unknown }[];
+    };
+    expect(machines).toEqual([expect.objectContaining({ id: machine.id, paused: paused.paused })]);
+    // Its open connection hears about it, with who did it.
+    expect(link(machine.id).notifyPaused).toHaveBeenCalledWith(true, paused.paused!.by);
+  });
+
+  test("resume clears it, and both are logged in Activity once", async () => {
+    const { cookie, machine } = await enroll("pause-log", "studio");
+    await call(`/machines/${machine.id}/pause`, cookie, {});
+    // Pausing a paused machine changes nothing and logs nothing.
+    await call(`/machines/${machine.id}/pause`, cookie, {});
+    const resumed = await call(`/machines/${machine.id}/resume`, cookie, {});
+    expect(resumed.status).toBe(200);
+    expect(((await resumed.json()) as { machine: { paused: unknown } }).machine.paused).toBeNull();
+    expect(link(machine.id).notifyPaused.mock.calls).toEqual([
+      [true, expect.any(String)],
+      [false, null],
+    ]);
+
+    const { items } = (await (await call("/activity", cookie)).json()) as ActivityPage;
+    expect(items.slice(0, 2)).toMatchObject([
+      { type: "machine.resumed", data: { machineName: "studio", via: "dashboard" }, actor: {} },
+      { type: "machine.paused", data: { machineName: "studio", via: "dashboard" }, actor: {} },
+    ]);
+    expect(items[0].actor).not.toBeNull();
+    expect(items.filter((item) => item.type === "machine.paused")).toHaveLength(1);
+  });
+
+  test("the machine's own CLI can pause and resume it, logged without a user", async () => {
+    const { cookie, machine, token } = await enroll("pause-cli");
+    const paused = await fromCli(token, "pause");
+    expect(paused.status).toBe(200);
+    expect(
+      ((await paused.json()) as { machine: { paused: { by: string | null } } }).machine.paused.by,
+    ).toBeNull();
+    expect(link(machine.id).notifyPaused).toHaveBeenCalledWith(true, null);
+    expect((await fromCli(token, "resume")).status).toBe(200);
+
+    const { items } = (await (await call("/activity", cookie)).json()) as ActivityPage;
+    expect(items.slice(0, 2)).toMatchObject([
+      { type: "machine.resumed", data: { via: "cli" }, actor: null },
+      { type: "machine.paused", data: { via: "cli" }, actor: null },
+    ]);
+  });
+
+  test("the CLI needs a valid machine token", async () => {
+    const { cookie } = await enroll("pause-cli-auth");
+    expect((await fromCli("rrm_nope", "pause")).status).toBe(401);
+    const asUser = await app.request(
+      "/api/machines/me/pause",
+      { method: "POST", headers: { cookie, origin: env.BETTER_AUTH_URL } },
+      env,
+    );
+    expect(asUser.status).toBe(401);
+  });
+
+  test("any member can pause and resume someone else's machine", async () => {
+    const { machine, workspaceId } = await enroll("pause-member");
+    const member = await testing.joinWorkspace(env, workspaceId, "member");
+    expect((await call(`/machines/${machine.id}/pause`, member.cookie, {})).status).toBe(200);
+    expect((await call(`/machines/${machine.id}/resume`, member.cookie, {})).status).toBe(200);
+  });
+
+  test("another workspace can't pause the machine", async () => {
+    const { machine } = await enroll("pause-mine");
+    const other = await owner("pause-other");
+    const response = await call(`/machines/${machine.id}/pause`, other.cookie, {});
+    expect(response.status).toBe(404);
+    expect(link(machine.id).notifyPaused).not.toHaveBeenCalled();
+  });
+
+  test("whoami shows that the machine is paused", async () => {
+    const { token } = await enroll("pause-me");
+    await fromCli(token, "pause");
+    const response = await app.request(
+      "/api/machines/me",
+      { headers: { authorization: `Bearer ${token}` } },
+      env,
+    );
+    const body = (await response.json()) as { machine: { paused: unknown } };
+    expect(body.machine.paused).toEqual({ at: expect.any(String), by: null });
   });
 });
 
