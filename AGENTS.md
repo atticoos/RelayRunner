@@ -14,12 +14,6 @@ Use [Conventional Commits](https://www.conventionalcommits.org/) for every commi
 - Write the description in the imperative mood and in lowercase, with no trailing period.
 - Mark a breaking change with `!` after the type or scope, such as `feat(api)!: …`.
 
-## Naming: relay and pick
-
-Users opt a job in with the relay reusable workflow, `relayrunner/actions/.github/workflows/relay.yml` ([relayrunner/actions](https://github.com/relayrunner/actions)). Its one job asks for the `relayrunner` label, and the gateway answers it with a runner label for the user's next job. Call it the relay in anything users see: docs, the dashboard, the CLI and the landing page. Show the reusable workflow in examples rather than a hand-written `runs-on: relayrunner` job.
-
-Inside the gateway the same job is the pick: the `PickRunner` Durable Object, `kind: "pick"` rows in `workflow_job`, and the `relayrunner pick finished` log. Keep those names in code.
-
 ## Formatting and checks
 
 Format with oxfmt (`pnpm format`) and lint with Oxlint (`pnpm lint`). Run `pnpm check` before you push; CI runs the same command. The pre-commit hook formats and lints staged files, so don't skip it with `--no-verify`.
