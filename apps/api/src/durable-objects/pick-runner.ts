@@ -72,9 +72,6 @@ export class PickRunner extends DurableObject<Env> {
           ...pick,
           claimedJob: job.message.jobDisplayName,
           runnerLabels: jit.labels,
-          // Temporary (#119): what the claimed job carries, to confirm the relay's inputs reach
-          // us. Only context names and the `inputs` entry: `github` holds the job's token.
-          ...jobInputs(job.message.contextData),
         };
         runnerId = undefined; // GitHub removes a JIT runner once its job is done.
       }
@@ -97,12 +94,6 @@ export class PickRunner extends DurableObject<Env> {
       }),
     );
   }
-}
-
-function jobInputs(contextData: unknown) {
-  if (typeof contextData !== "object" || contextData === null) return { contextNames: null };
-  const contexts = contextData as Record<string, unknown>;
-  return { contextNames: Object.keys(contexts), inputs: contexts.inputs ?? null };
 }
 
 async function waitForJob(client: RunnerClient) {
@@ -149,7 +140,14 @@ async function pickRunner(env: Env, installationId: number, contextData: unknown
     repositoryId: repo.id,
     repo: context.repo,
     runId: context.runId,
+    machine: context.machine,
     private: repo.private,
   });
-  return { runner, repo: context.repo, runId: context.runId, private: repo.private };
+  return {
+    runner,
+    repo: context.repo,
+    runId: context.runId,
+    private: repo.private,
+    machine: context.machine,
+  };
 }

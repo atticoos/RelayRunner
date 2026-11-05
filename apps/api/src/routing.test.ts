@@ -4,9 +4,12 @@ import {
   chooseMachine,
   holdsMachine,
   jobContext,
+  hasLabels,
   lastPicked,
+  machineLabels,
   machineRunnerName,
   newRouteId,
+  parseLabels,
   ROUTE_HOLD_MS,
   routeIdFromLabels,
   routeLabel,
@@ -39,12 +42,12 @@ describe("route labels", () => {
 });
 
 describe("chooseMachine", () => {
-  const machine = (id: string, online: boolean, state: "idle" | "busy" | null) => ({
-    id,
-    name: id,
-    online,
-    state,
-  });
+  const machine = (
+    id: string,
+    online: boolean,
+    state: "idle" | "busy" | null,
+    labels = ["self-hosted", "macOS", "ARM64"],
+  ) => ({ id, name: id, online, state, labels });
 
   test("picks an online, idle machine no route holds", () => {
     const picked = chooseMachine(
@@ -103,6 +106,63 @@ describe("chooseMachine", () => {
       ["b", 2_000],
     ]);
     expect(chooseMachine(candidates, new Set(), picked)?.id).toBe("a");
+  });
+
+  test("only machines with every wanted label, before the least recently picked", () => {
+    const candidates = [
+      machine("linux", true, "idle", machineLabels({ os: "linux", arch: "x64" })),
+      machine("mac", true, "idle", machineLabels({ os: "macos", arch: "arm64" })),
+      machine("mac-busy", true, "busy", machineLabels({ os: "macos", arch: "arm64" })),
+    ];
+    // The Linux box was never picked, so it would win without labels.
+    const picked = new Map([["mac", 5_000]]);
+    expect(chooseMachine(candidates, new Set(), picked)?.id).toBe("linux");
+    expect(chooseMachine(candidates, new Set(), picked, ["self-hosted"])?.id).toBe("linux");
+    expect(chooseMachine(candidates, new Set(), picked, ["macOS", "ARM64"])?.id).toBe("mac");
+    expect(chooseMachine(candidates, new Set(), picked, ["linux", "x64"])?.id).toBe("linux");
+    // A free machine without every label is never picked.
+    expect(chooseMachine(candidates, new Set(), picked, ["macOS", "X64"])).toBeNull();
+    expect(chooseMachine(candidates, new Set(["mac"]), picked, ["macOS"])).toBeNull();
+  });
+});
+
+describe("machine labels", () => {
+  test("are GitHub's self-hosted defaults from the stored os and arch", () => {
+    expect(machineLabels({ os: "macos", arch: "arm64" })).toEqual([
+      "self-hosted",
+      "macOS",
+      "ARM64",
+    ]);
+    expect(machineLabels({ os: "linux", arch: "x64" })).toEqual(["self-hosted", "Linux", "X64"]);
+    expect(machineLabels({ os: "windows", arch: "arm" })).toEqual([
+      "self-hosted",
+      "Windows",
+      "ARM",
+    ]);
+    expect(machineLabels({ os: null, arch: null })).toEqual(["self-hosted"]);
+  });
+
+  test("match when the machine has every wanted label, ignoring case", () => {
+    const mac = machineLabels({ os: "macos", arch: "arm64" });
+    expect(hasLabels(mac, ["self-hosted", "macOS", "ARM64"])).toBe(true);
+    expect(hasLabels(mac, ["macos", "arm64"])).toBe(true);
+    expect(hasLabels(mac, ["SELF-HOSTED"])).toBe(true);
+    expect(hasLabels(mac, ["macOS", "X64"])).toBe(false);
+    expect(hasLabels(mac, ["linux"])).toBe(false);
+    expect(hasLabels(mac, ["gpu"])).toBe(false);
+  });
+
+  test("self-hosted matches every machine", () => {
+    for (const os of ["linux", "macos", "windows", null])
+      expect(hasLabels(machineLabels({ os, arch: "x64" }), ["self-hosted"])).toBe(true);
+  });
+
+  test("relay inputs are comma-separated, trimmed, empties dropped", () => {
+    expect(parseLabels("self-hosted, macOS ,ARM64")).toEqual(["self-hosted", "macOS", "ARM64"]);
+    expect(parseLabels(" macOS,, ,ARM64, ")).toEqual(["macOS", "ARM64"]);
+    expect(parseLabels("")).toEqual([]);
+    expect(parseLabels("  ")).toEqual([]);
+    expect(parseLabels(undefined)).toEqual([]);
   });
 });
 
@@ -166,7 +226,12 @@ describe("jobContext", () => {
           ["event_name", "workflow_dispatch"],
         ]),
       ),
-    ).toEqual({ repo: "relayrunner/relayrunner-ci-tests", runId: 41902043823 });
+    ).toEqual({
+      repo: "relayrunner/relayrunner-ci-tests",
+      runId: 41902043823,
+      machine: [],
+      github: [],
+    });
     expect(
       jobContext(
         github([
@@ -174,7 +239,48 @@ describe("jobContext", () => {
           ["run_id", { t: 4, n: 5 }],
         ]),
       ),
-    ).toEqual({ repo: "a/b", runId: 5 });
+    ).toEqual({ repo: "a/b", runId: 5, machine: [], github: [] });
+  });
+
+  // From a claimed relay job (relay v1.0.0-beta.2, relayrunner-ci-tests run 42078905012): the
+  // `inputs` entry exactly as logged. The `github` context is cut down to what we read, because
+  // the real one carries the job's token.
+  const claimed = {
+    github: {
+      t: 2,
+      d: [
+        { k: "repository", v: "relayrunner/relayrunner-ci-tests" },
+        { k: "run_id", v: "42078905012" },
+      ],
+    },
+    inputs: {
+      d: [
+        { k: "machine", v: "self-hosted" },
+        { k: "github", v: "ubuntu-latest" },
+      ],
+      t: 2,
+    },
+  };
+
+  test("reads the relay's machine and github inputs", () => {
+    expect(jobContext(claimed)).toEqual({
+      repo: "relayrunner/relayrunner-ci-tests",
+      runId: 42078905012,
+      machine: ["self-hosted"],
+      github: ["ubuntu-latest"],
+    });
+  });
+
+  test("an empty machine input means no machine labels", () => {
+    const inputs = {
+      t: 2,
+      d: [
+        { k: "machine", v: "" },
+        { k: "github", v: "ubuntu-latest" },
+      ],
+    };
+    expect(jobContext({ ...claimed, inputs })?.machine).toEqual([]);
+    expect(jobContext({ ...claimed, inputs: { t: 2, d: [] } })?.machine).toEqual([]);
   });
 
   test("returns null when either is missing", () => {

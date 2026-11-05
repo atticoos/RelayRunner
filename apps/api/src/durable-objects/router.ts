@@ -7,6 +7,7 @@ import {
   chooseMachine,
   FALLBACK_RUNNER,
   holdsMachine,
+  machineLabels,
   lastPicked,
   newRouteId,
   routeLabel,
@@ -22,6 +23,8 @@ export interface PickedJob {
   repositoryId: number;
   repo: string;
   runId: number;
+  // Labels a machine must all have (the relay's `machine` input). Empty: don't use machines.
+  machine: string[];
   // Public repos never go to a machine: anyone could run code on it with a pull request.
   private: boolean;
 }
@@ -34,7 +37,7 @@ const ROUTE_KEY = "route:";
 export class Router extends DurableObject<Env> {
   /** The runs-on label the run's next job should use: a route's `rr-<id>`, or ubuntu-latest. */
   async route(job: PickedJob): Promise<string> {
-    if (!job.private) return FALLBACK_RUNNER;
+    if (!job.private || job.machine.length === 0) return FALLBACK_RUNNER;
     // One decision at a time, so two picks can't both see the same machine as free.
     return this.ctx.blockConcurrencyWhile(async () => {
       const now = Date.now();
@@ -42,7 +45,12 @@ export class Router extends DurableObject<Env> {
       const held = new Set(routes.filter((r) => holdsMachine(r, now)).map((r) => r.machineId));
 
       const machines = await createDb(this.env.DB)
-        .select({ id: schema.machine.id, name: schema.machine.name })
+        .select({
+          id: schema.machine.id,
+          name: schema.machine.name,
+          os: schema.machine.os,
+          arch: schema.machine.arch,
+        })
         .from(schema.machine)
         .where(
           and(
@@ -55,11 +63,13 @@ export class Router extends DurableObject<Env> {
         machines
           .filter((machine) => !held.has(machine.id))
           .map(async (machine) => ({
-            ...machine,
+            id: machine.id,
+            name: machine.name,
+            labels: machineLabels(machine),
             ...(await this.env.MACHINE_LINK.getByName(machine.id).status()),
           })),
       );
-      const machine = chooseMachine(candidates, held, lastPicked(routes));
+      const machine = chooseMachine(candidates, held, lastPicked(routes), job.machine);
       if (!machine) return FALLBACK_RUNNER;
 
       const route: Route = {
