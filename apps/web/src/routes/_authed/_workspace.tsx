@@ -1,7 +1,6 @@
 import { Link, Outlet, createFileRoute, redirect, useMatchRoute } from "@tanstack/react-router";
 import { ArrowLeftIcon } from "lucide-react";
 import type { ReactNode } from "react";
-import { Badge } from "@/components/ui/badge";
 import { WorkspaceMenu } from "@/components/workspace-menu";
 import { authDisabled } from "@/lib/auth-client";
 import { ensureActiveWorkspace, getCurrentWorkspace, type CurrentWorkspace } from "@/lib/workspace";
@@ -92,15 +91,9 @@ function SettingsNav({ workspaceName }: { workspaceName: string }) {
           <Link to="/settings/github" className={navLink} activeProps={navActive}>
             GitHub orgs
           </Link>
-          <span
-            aria-disabled
-            className="flex items-center gap-2 px-2.5 py-1.5 text-[15px] text-sidebar-foreground/60"
-          >
+          <Link to="/settings/members" className={navLink} activeProps={navActive}>
             Members
-            <Badge variant="idle" className="px-1.5 text-[10px] tracking-wider">
-              SOON
-            </Badge>
-          </span>
+          </Link>
         </SettingsGroup>
         <SettingsGroup label="Account">
           <Link to="/settings/account" className={navLink} activeProps={navActive}>

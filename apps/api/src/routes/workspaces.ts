@@ -1,5 +1,5 @@
 import { readRunnerOrder, runnerOrderSchema } from "@relayrunner/runner-order";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, count, eq, isNotNull, isNull } from "drizzle-orm";
 import { Hono } from "hono";
 import { createMiddleware } from "hono/factory";
 import type { AppEnv } from "../app.ts";
@@ -32,6 +32,25 @@ export const workspaceRoutes = new Hono<AppEnv>()
       .orderBy(asc(schema.githubInstallation.accountLogin));
     const { runnerOrder: _, ...rest } = workspace;
     return c.json({ workspace: rest, role, installations: installations.map(present) });
+  })
+  // How many live machines each member enrolled, keyed by user id, for the Members page (#136).
+  // Same filter as GET /api/machines: claimed and not revoked.
+  .get("/current/machine-counts", requireUser, requireWorkspace, async (c) => {
+    const rows = await c.var.db
+      .select({ userId: schema.machine.createdBy, machines: count() })
+      .from(schema.machine)
+      .where(
+        and(
+          eq(schema.machine.workspaceId, c.var.workspace.id),
+          isNotNull(schema.machine.os),
+          isNull(schema.machine.revokedAt),
+          isNotNull(schema.machine.createdBy),
+        ),
+      )
+      .groupBy(schema.machine.createdBy);
+    const counts: Record<string, number> = {};
+    for (const row of rows) if (row.userId) counts[row.userId] = row.machines;
+    return c.json({ counts });
   })
   // The workspace's runner order (#110). Routing reads it from #113 on.
   .get("/:id/runner-order", requireUser, requireMember, async (c) => {
