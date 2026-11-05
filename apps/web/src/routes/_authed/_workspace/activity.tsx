@@ -13,6 +13,7 @@ import {
   Plug,
   Plus,
   Unplug,
+  UserMinus,
 } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { PageHeader } from "@/components/page-header";
@@ -169,7 +170,13 @@ const DISCONNECT_REASONS = {
   error: "of a protocol error",
 } as const;
 
-// What a non-job event says, in a sentence after the machine's name.
+// Who or what a non-job event is about: the member for member events, else the machine.
+function subject(item: ActivityItem) {
+  if (item.type === "member.removed") return item.data.memberName;
+  return item.machine?.name ?? "A machine";
+}
+
+// What a non-job event says, in a sentence after its subject.
 function sentence(item: ActivityItem) {
   switch (item.type) {
     case "machine.enrolled": {
@@ -182,6 +189,8 @@ function sentence(item: ActivityItem) {
       return `disconnected because ${DISCONNECT_REASONS[item.data.reason]}`;
     case "machine.revoked":
       return "was revoked";
+    case "member.removed":
+      return item.data.left ? "left the workspace" : "was removed from the workspace";
     case "job.routed":
       return "routed a job";
     case "job.unroutable":
@@ -194,6 +203,7 @@ const EVENT_ICONS = {
   "machine.connected": Plug,
   "machine.disconnected": Unplug,
   "machine.revoked": Ban,
+  "member.removed": UserMinus,
   "job.routed": Laptop,
   "job.unroutable": Ban,
 } as const;
@@ -334,6 +344,8 @@ function WalkLines({ walk, runner }: { walk: RouteWalk; runner: string | null })
 function EventRow({ item, now }: { item: ActivityItem; now: number }) {
   const Icon = EVENT_ICONS[item.type];
   const online = item.type === "machine.connected";
+  // "Zach left the workspace", not "... by Zach".
+  const leftOnTheirOwn = item.type === "member.removed" && item.data.left;
   return (
     <Row
       icon={
@@ -345,9 +357,11 @@ function EventRow({ item, now }: { item: ActivityItem; now: number }) {
       at={item.occurredAt}
       now={now}
     >
-      <span className="font-medium">{item.machine?.name ?? "A machine"}</span>{" "}
+      <span className="font-medium">{subject(item)}</span>{" "}
       <span className="text-muted-foreground">{sentence(item)}</span>
-      {item.actor && <span className="text-muted-foreground"> by {item.actor.name}</span>}
+      {item.actor && !leftOnTheirOwn && (
+        <span className="text-muted-foreground"> by {item.actor.name}</span>
+      )}
     </Row>
   );
 }
@@ -647,6 +661,24 @@ function samplePage(filter: ActivityFilter | undefined): ActivityPage {
           ...relay,
         },
       }),
+    },
+    {
+      id: 9,
+      type: "machine.revoked",
+      data: { machineName: "zach-studio" },
+      occurredAt: at(14.9),
+      actor: { id: "u1", name: "Atticus White" },
+      machine: { id: "m2", name: "zach-studio" },
+      job: null,
+    },
+    {
+      id: 8,
+      type: "member.removed",
+      data: { memberName: "Zach", left: false },
+      occurredAt: at(15),
+      actor: { id: "u1", name: "Atticus White" },
+      machine: null,
+      job: null,
     },
     {
       id: 2,

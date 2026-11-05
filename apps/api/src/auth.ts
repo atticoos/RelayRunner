@@ -1,8 +1,10 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
 import { bearer, deviceAuthorization, oAuthProxy, organization } from "better-auth/plugins";
 import { createDb, schema } from "./db/index.ts";
 import { sendEmail } from "./email.ts";
+import { MEMBER_REMOVAL_PATHS, onMemberRemoved, removedMember } from "./members.ts";
 import type { Env } from "./env.ts";
 
 // Preview dashboards (Workers Builds `wrangler preview`) reach this Worker through their own API
@@ -48,6 +50,25 @@ export function createAuth(env: Env, waitUntil?: (promise: Promise<unknown>) => 
           },
         },
       },
+    },
+    hooks: {
+      // A member removed from (or leaving) a workspace loses the machines they enrolled there
+      // (#138). This runs after Better Auth has deleted the membership, inline rather than on a
+      // queue: one D1 update clears every token, then each open socket closes.
+      after: createAuthMiddleware(async (ctx) => {
+        if (!(MEMBER_REMOVAL_PATHS as readonly string[]).includes(ctx.path)) return;
+        const member = removedMember(ctx.context.returned);
+        if (!member) return;
+        // The endpoint's session isn't on the hook's context; read it from the request again.
+        // Revoke even if that somehow fails: losing the actor beats leaving machines live.
+        const session = await getSessionFromCtx(ctx).catch(() => null);
+        await onMemberRemoved(env, createDb(env.DB), {
+          workspaceId: member.organizationId,
+          userId: member.userId,
+          actorUserId: session?.user.id ?? null,
+          left: ctx.path === "/organization/leave",
+        });
+      }),
     },
     session: {
       // Keep a signed copy of the session in a cookie so most getSession calls skip D1.

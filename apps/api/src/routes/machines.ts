@@ -13,6 +13,7 @@ import {
   generateMachineToken,
   normalizeUserCode,
   presentMachine,
+  revokeMachines,
   sha256Hex,
   verifyMachineToken,
 } from "../machines.ts";
@@ -241,12 +242,12 @@ export const machineRoutes = new Hono<AppEnv>()
     );
     // Owners and admins can revoke any machine; members only the ones they enrolled. The check
     // rides in the update so the common case is one query.
-    const [machine] = await db
-      .update(schema.machine)
-      // Dropping the hash too means the token can never match again, whatever reads it.
-      .set({ revokedAt: new Date(), tokenHash: null, enrollmentHash: null })
-      .where(canManage(role) ? live : and(live, eq(schema.machine.createdBy, user!.id)))
-      .returning();
+    const [machine] = await revokeMachines(
+      c.env,
+      db,
+      (canManage(role) ? live : and(live, eq(schema.machine.createdBy, user!.id)))!,
+      user!.id,
+    );
     if (!machine) {
       // Nothing changed: tell a member a machine they can see apart from one that isn't there.
       const [exists] = await db
@@ -256,15 +257,6 @@ export const machineRoutes = new Hono<AppEnv>()
         .limit(1);
       return exists ? c.json({ error: "forbidden" }, 403) : c.json({ error: "not_found" }, 404);
     }
-    await recordEvent(c.var.db, {
-      workspaceId: machine.workspaceId,
-      type: "machine.revoked",
-      data: { machineName: machine.name },
-      machineId: machine.id,
-      actorUserId: c.var.user!.id,
-    });
-    // The token can't open a new socket any more; close the one that's open.
-    await c.env.MACHINE_LINK.getByName(machine.id).revoke();
     return c.json({ machine: presentMachine(machine) });
   });
 

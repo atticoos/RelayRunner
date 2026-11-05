@@ -60,6 +60,12 @@ export const ActivityEvent = z.discriminatedUnion("type", [
   }),
   // Someone removed the machine from the workspace. Actor: that user.
   z.object({ type: z.literal("machine.revoked"), data: z.object(machineData) }),
+  // Someone left the workspace (`left`), or an owner or admin removed them. Actor: whoever did it.
+  // Each machine they enrolled there is revoked right after, logging its own machine.revoked.
+  z.object({
+    type: z.literal("member.removed"),
+    data: z.object({ memberName: z.string(), left: z.boolean() }),
+  }),
   // RelayRunner routed a job (a job in a run with a `runs-on: relayrunner` pick). Its row shows the
   // job's live state, so there is one event per job, not one per status change.
   z.object({ type: z.literal("job.routed"), data: z.object({}) }),
