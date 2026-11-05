@@ -12,6 +12,7 @@ import {
   importAppPrivateKey,
   installationToken,
 } from "../github-app.ts";
+import { pausedByName } from "../machines.ts";
 import { machineRunnerName, routeLabel, type Route } from "../routing.ts";
 import {
   CLOSE,
@@ -67,12 +68,20 @@ export class MachineLink extends DurableObject<Env> {
     if (!session) return close(ws, CLOSE.policy, "unknown socket");
     const outcome = handleFrame(session, frame, Date.now());
     ws.serializeAttachment(outcome.state);
-    // The first hello is when the machine comes online.
-    if (!session.hello && outcome.state.hello)
-      await recordMachineEvent(createDb(this.env.DB), session.machineId, {
+    // The first hello is when the machine comes online. A paused machine hears so right away.
+    if (!session.hello && outcome.state.hello) {
+      const db = createDb(this.env.DB);
+      await recordMachineEvent(db, session.machineId, {
         type: "machine.connected",
         data: { runnerVersion: outcome.state.hello.runnerVersion ?? null },
       });
+      const [machine] = await db
+        .select()
+        .from(schema.machine)
+        .where(eq(schema.machine.id, session.machineId))
+        .limit(1);
+      if (machine?.pausedAt) ws.send(pausedFrame(true, await pausedByName(db, machine)));
+    }
     if ("job" in outcome && outcome.job) await this.onJob(session.machineId, outcome.job);
     if ("reply" in outcome) {
       ws.send(outcome.reply);
@@ -182,6 +191,14 @@ export class MachineLink extends DurableObject<Env> {
     return "sent";
   }
 
+  /**
+   * Tells the machine's CLI it was paused or resumed, if it's online. Routing reads the pause from
+   * D1, so this is only so `relayrunner connect` can say so.
+   */
+  async notifyPaused(paused: boolean, by: string | null): Promise<void> {
+    this.onlineSocket()?.send(pausedFrame(paused, by));
+  }
+
   /** Closes the machine's socket for good. DELETE /api/machines/:id calls this on revoke. */
   async revoke(): Promise<void> {
     for (const ws of this.ctx.getWebSockets()) {
@@ -239,6 +256,10 @@ export class MachineLink extends DurableObject<Env> {
       .set({ lastSeenAt: new Date() })
       .where(eq(schema.machine.id, machineId));
   }
+}
+
+function pausedFrame(paused: boolean, by: string | null) {
+  return encodeMessage({ v: PROTOCOL_VERSION, type: "paused", paused, by });
 }
 
 // Close codes this side sends. When the machine echoes one back, webSocketClose sees it again.

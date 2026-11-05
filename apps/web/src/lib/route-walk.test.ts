@@ -35,6 +35,26 @@ describe("walkSummary", () => {
     });
   });
 
+  test("names the paused machines", () => {
+    const paused = (names: string[]) =>
+      walk({
+        skipped: [{ key: "machine", reason: "machine_paused", paused: names }],
+        machine: ["macOS", "ARM64"],
+      });
+    expect(walkSummary(paused(["atticus-mbp"]))).toEqual({
+      text: "atticus-mbp is paused",
+      tone: "fallback",
+    });
+    expect(walkSummary(paused(["a", "b"]))?.text).toBe("a and b are paused");
+    expect(walkSummary(paused(["a", "b", "c"]))?.text).toBe("3 machines are paused");
+    expect(walkLines(paused(["atticus-mbp"]), "ubuntu-latest")[0]?.text).toBe(
+      "the only machine with macOS, ARM64, atticus-mbp, is paused",
+    );
+    expect(walkLines(paused(["a", "b"]), "ubuntu-latest")[0]?.text).toBe(
+      "every machine with macOS, ARM64 is paused (a, b)",
+    );
+  });
+
   test("never hides a provider the order leaves out", () => {
     expect(walkSummary(walk({ step: "machine", notInOrder: ["github"] }))).toEqual({
       text: "github is set but not in your order",

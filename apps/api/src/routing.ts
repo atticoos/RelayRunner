@@ -73,6 +73,8 @@ export interface Candidate {
   state: "idle" | "busy" | null;
   // The machine's runner labels (machineLabels).
   labels: string[];
+  // Paused machines stay connected but never take a new job.
+  paused?: boolean;
 }
 
 // GitHub's default self-hosted runner labels, so a job's `runs-on` list can be copied into the
@@ -117,8 +119,8 @@ export function lastPicked(routes: Route[]): Map<string, number> {
 }
 
 /**
- * Of the machines with every wanted label, the online, idle one no route holds that was least
- * recently picked, or null. Machines never picked come first; ties keep the candidates' order.
+ * Of the machines with every wanted label, the online, idle, unpaused one no route holds that was
+ * least recently picked, or null. Machines never picked come first; ties keep the candidates' order.
  * No wanted labels means none is required; a job that names no machine labels doesn't get here.
  */
 export function chooseMachine(
@@ -130,7 +132,8 @@ export function chooseMachine(
   let best: Candidate | null = null;
   let bestAt = Infinity;
   for (const machine of candidates) {
-    if (!machine.online || machine.state !== "idle" || held.has(machine.id)) continue;
+    if (!machine.online || machine.state !== "idle" || machine.paused || held.has(machine.id))
+      continue;
     if (!hasLabels(machine.labels, wanted)) continue;
     const at = picked.get(machine.id) ?? -Infinity;
     if (at < bestAt) {
@@ -139,6 +142,19 @@ export function chooseMachine(
     }
   }
   return best;
+}
+
+/**
+ * When every machine with the wanted labels is paused, their names; otherwise empty. A mix of
+ * paused and busy or offline machines isn't "paused": unpausing wouldn't be enough on its own.
+ */
+export function pausedMatches(
+  machines: { name: string; labels: string[]; paused?: boolean }[],
+  wanted: string[] = [],
+): string[] {
+  const matching = machines.filter((machine) => hasLabels(machine.labels, wanted));
+  if (matching.length === 0 || !matching.every((machine) => machine.paused)) return [];
+  return matching.map((machine) => machine.name);
 }
 
 export interface QueuedJob {
@@ -235,7 +251,12 @@ import type { SkipReason } from "@relayrunner/activity";
 export interface SkippedStep {
   key: RunnerKey;
   reason: SkipReason;
+  // machine_paused: the paused machines' names.
+  paused?: string[];
 }
+
+// What the machine step's pick found: a route label, every matching machine paused, or nothing.
+export type MachinePick = string | { paused: string[] } | null;
 
 // `notInOrder` lists providers the job configured that the order leaves out, either way, so an
 // ignored input is never silent.
@@ -254,12 +275,13 @@ export interface RouteRequest {
 /**
  * Walks the order top to bottom. A step whose provider the job didn't configure is skipped, and a
  * provider the job configures but the order leaves out is never tried. `pickMachine` is only
- * called when the machine step is reached and may run; it returns the route label or null.
+ * called when the machine step is reached and may run; it returns the route label, the paused
+ * machines when every one that fits is paused, or null.
  */
 export async function decideRoute(
   order: RunnerOrder,
   job: RouteRequest,
-  pickMachine: () => Promise<string | null>,
+  pickMachine: () => Promise<MachinePick>,
 ): Promise<RouteDecision> {
   const skipped: SkippedStep[] = [];
   const inOrder = new Set(order.steps.map((step) => step.key));
@@ -269,9 +291,11 @@ export async function decideRoute(
       if (job.machine.length === 0) skipped.push({ key, reason: "not_configured" });
       else if (!job.private) skipped.push({ key, reason: "public_repo" });
       else {
-        const label = await pickMachine();
-        if (label) return { runner: label, step: key, skipped, notInOrder };
-        skipped.push({ key, reason: "no_machine" });
+        const pick = await pickMachine();
+        if (typeof pick === "string") return { runner: pick, step: key, skipped, notInOrder };
+        if (pick && pick.paused.length > 0)
+          skipped.push({ key, reason: "machine_paused", paused: pick.paused });
+        else skipped.push({ key, reason: "no_machine" });
       }
     } else if (key === "github") {
       if (job.github.length === 0) skipped.push({ key, reason: "not_configured" });
@@ -290,7 +314,7 @@ export function noRunnerReason(
 ): string {
   if (job.machine.length === 0 && job.github.length === 0)
     return `${NO_RUNNER}: the relay sets neither \`machine\` nor \`github\`.`;
-  const parts = skipped.map(({ key, reason }) => {
+  const parts = skipped.map(({ key, reason, paused = [] }) => {
     switch (reason) {
       case "not_configured":
         return `\`${key}\` isn't set on this relay`;
@@ -300,6 +324,10 @@ export function noRunnerReason(
         return job.machine.length === 1 && job.machine[0].toLowerCase() === "self-hosted"
           ? "no local machine is online and idle"
           : `no local machine with ${job.machine.join(", ")} is online and idle`;
+      case "machine_paused":
+        return paused.length === 1
+          ? `the only machine that fits, ${paused[0]}, is paused`
+          : `every machine that fits is paused (${paused.join(", ")})`;
       case "too_many_labels":
         return `\`github\` takes one label, not ${job.github.join(", ")}`;
     }

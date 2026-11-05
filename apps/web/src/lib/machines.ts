@@ -14,6 +14,11 @@ export type Machine = {
   lastSeenAt: string | null;
   revokedAt: string | null;
   createdAt: string;
+  /**
+   * Set while paused: jobs skip the machine, but it stays connected. `by` is who paused it, or
+   * null when its own CLI did. Missing from an API that predates pausing.
+   */
+  paused?: { at: string; by: string | null } | null;
   /** Live, from the machine's connection. Online once it has said hello. */
   status?: {
     online: boolean;
@@ -41,6 +46,20 @@ export function timeAgo(date: string | number, now = Date.now()) {
     if (Math.abs(seconds) >= size) return format.format(Math.round(seconds / size), unit);
   }
   return format.format(-1, "minute");
+}
+
+/** Pauses the machine: it stays connected, but jobs skip it until it's resumed. */
+export function pauseMachine(id: string) {
+  return api<{ machine: Machine }>(`/machines/${encodeURIComponent(id)}/pause`, {
+    method: "POST",
+  });
+}
+
+/** Lets jobs route to a paused machine again. */
+export function resumeMachine(id: string) {
+  return api<{ machine: Machine }>(`/machines/${encodeURIComponent(id)}/resume`, {
+    method: "POST",
+  });
 }
 
 /** Revokes the machine's token. Its CLI has to run `relayrunner connect` again. */

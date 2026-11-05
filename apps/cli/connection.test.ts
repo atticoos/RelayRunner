@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { parseMachineMessage, type MachineMessage } from "@relayrunner/machine-protocol";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { WebSocketServer, type WebSocket as ServerSocket } from "ws";
 import { backoff, connect, connectUrl, type ConnectionEvent } from "./connection.ts";
 import type { JobUpdate } from "./job.ts";
@@ -134,6 +134,26 @@ describe("connect", () => {
       { v: 1, type: "status", state: "idle" },
       { v: 1, type: "status", state: "idle" },
     ]);
+
+    stop.abort();
+    expect(await end).toEqual({ reason: "stopped" });
+  });
+
+  test("reports being paused and resumed, and stays online", async () => {
+    const gateway = await startGateway();
+    const { stop, events, end } = start(gateway);
+    const connection = await gateway.next();
+    await connection.waitFor((m) => m.type === "status");
+
+    connection.socket.send(JSON.stringify({ v: 1, type: "paused", paused: true, by: "Zach" }));
+    connection.socket.send(JSON.stringify({ v: 1, type: "paused", paused: false, by: null }));
+    await vi.waitFor(() =>
+      expect(events.filter((event) => event.type === "paused")).toEqual([
+        { type: "paused", paused: true, by: "Zach" },
+        { type: "paused", paused: false, by: null },
+      ]),
+    );
+    expect(events).not.toContainEqual(expect.objectContaining({ type: "gateway-error" }));
 
     stop.abort();
     expect(await end).toEqual({ reason: "stopped" });
