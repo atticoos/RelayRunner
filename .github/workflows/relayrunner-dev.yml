@@ -4,29 +4,22 @@ on:
   workflow_dispatch:
 
 jobs:
-  pick:
-    runs-on: relayrunner
-    outputs:
-      runner: ${{ steps.route.outputs.runner }}
-    steps:
-      # Only runs if an ordinary runner picks this job up. The gateway reports
-      # the output directly and skips steps.
-      - id: route
-        run: echo "runner=ubuntu-latest" >> "$GITHUB_OUTPUT"
+  relay:
+    uses: relayrunner/actions/.github/workflows/relay.yml@v1.0.0-beta.1
 
   test:
-    needs: pick
+    needs: relay
     if: ${{ !cancelled() }}
-    runs-on: ${{ needs.pick.outputs.runner || 'ubuntu-latest' }}
+    runs-on: ${{ needs.relay.outputs.runner || 'ubuntu-latest' }}
     steps:
       - name: Report route
         env:
-          CHOSEN_RUNNER: ${{ needs.pick.outputs.runner }}
-          PICK_RESULT: ${{ needs.pick.result }}
+          CHOSEN_RUNNER: ${{ needs.relay.outputs.runner }}
+          RELAY_RESULT: ${{ needs.relay.result }}
         run: |
           route="${CHOSEN_RUNNER:-ubuntu-latest}"
           source="gateway"
-          if [ -z "$CHOSEN_RUNNER" ]; then source="fallback (pick result: $PICK_RESULT)"; fi
+          if [ -z "$CHOSEN_RUNNER" ]; then source="fallback (relay result: $RELAY_RESULT)"; fi
 
           echo "Routed to: $route ($source)"
           echo "Runner name: $RUNNER_NAME"

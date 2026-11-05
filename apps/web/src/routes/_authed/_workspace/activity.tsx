@@ -126,7 +126,7 @@ function ActivityPage() {
             ) : (
               <>
                 Nothing yet. Add a{" "}
-                <span className="font-mono text-foreground">runs-on: relayrunner</span> pick job to
+                <span className="font-mono text-foreground">relayrunner/actions</span> relay job to
                 a workflow in a connected org, push, and its jobs show up here.
               </>
             )}

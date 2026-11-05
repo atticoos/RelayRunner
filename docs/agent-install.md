@@ -64,9 +64,10 @@ org's owners, jobs start reaching this computer once an owner accepts it.
 List the workflows in `.github/workflows/` and the jobs in each. Suggest jobs that can run on
 this computer, and let the user pick. A job is a good fit when:
 
-- it runs on `ubuntu-latest` today. When the computer is offline or busy, an opted-in job runs
-  on `ubuntu-latest`, whatever it used before.
-- it has **no** `strategy.matrix`. Each routed job needs its own pick, so a matrix can't share
+- it runs on a GitHub-hosted label today, such as `ubuntu-latest`. When the computer is offline
+  or busy, an opted-in job runs on the relay's fallback label, which is `ubuntu-latest` unless
+  you set it (see step 5).
+- it has **no** `strategy.matrix`. Each routed job needs its own relay, so a matrix can't share
   one.
 - it has no `container:` or `services:`, unless this computer is Linux with Docker running.
 - its steps work on this computer's OS. On macOS, check for Linux-only commands such as
@@ -76,9 +77,10 @@ this computer, and let the user pick. A job is a good fit when:
 
 ## 5. Show the patch, then apply it
 
-For each chosen job, add a pick job just before it. The pick asks RelayRunner where this run
-of the job should go. Then point the job's `runs-on` at the pick's answer. Name the pick
-`pick-<job id>` so each routed job has its own.
+For each chosen job, add a relay job just before it. The relay is RelayRunner's reusable
+workflow, [`relayrunner/actions`](https://github.com/relayrunner/actions). It asks RelayRunner
+where this run of the job should go. Then point the job's `runs-on` at the relay's answer.
+Name the relay `relay-<job id>` so each routed job has its own.
 
 Before:
 
@@ -95,31 +97,36 @@ After:
 
 ```yaml
 jobs:
-  pick-test:
-    runs-on: relayrunner
-    outputs:
-      runner: ${{ steps.route.outputs.runner }}
-    steps:
-      # Only runs if an ordinary runner takes this job. RelayRunner answers without running steps.
-      - id: route
-        run: echo "runner=ubuntu-latest" >> "$GITHUB_OUTPUT"
+  relay-test:
+    uses: relayrunner/actions/.github/workflows/relay.yml@v1.0.0-beta.1
 
   test:
-    needs: pick-test
+    needs: relay-test
     if: ${{ !cancelled() }}
-    runs-on: ${{ needs.pick-test.outputs.runner || 'ubuntu-latest' }}
+    runs-on: ${{ needs.relay-test.outputs.runner || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
       - run: npm test
 ```
 
+Use the `uses:` line exactly as shown. GitHub needs the full path to a reusable workflow, and
+the tag pins the version. If the job used another runner label before, keep it as the
+fallback, both in the relay's `fallback` input and in the `||`:
+
+```yaml
+relay-test:
+  uses: relayrunner/actions/.github/workflows/relay.yml@v1.0.0-beta.1
+  with:
+    fallback: ubuntu-24.04
+```
+
 Keep everything else in the job as it is. Watch out for these cases:
 
-- **The job already has `needs:`.** Add the pick to the list (`needs: [build, pick-test]`).
+- **The job already has `needs:`.** Add the relay to the list (`needs: [build, relay-test]`).
   Keep the job from running after one of its original dependencies fails by requiring each one
   to succeed:
-  `if: ${{ !cancelled() && needs.build.result == 'success' }}`. Don't require the pick to
-  succeed: if it fails, the job falls back to `ubuntu-latest`.
+  `if: ${{ !cancelled() && needs.build.result == 'success' }}`. Don't require the relay to
+  succeed: if it fails, the job runs on its fallback label.
 - **The job already has `if:`.** Combine it: `if: ${{ !cancelled() && (<existing condition>) }}`.
 - **Other jobs depend on this one.** Leave them alone. They still depend on `test`.
 
@@ -129,11 +136,11 @@ GitHub.
 
 ## 6. Confirm it works
 
-After the user pushes, a run of an opted-in job shows `pick-<job>` finishing in about a second,
-then the job itself. In the job's log, the runner name tells where it ran: a name starting
+After the user pushes, a run of an opted-in job shows `relay-<job> / RelayRunner` finishing in
+about a second, then the job itself. In the job's log, the runner name tells where it ran: a name starting
 with this computer's machine name (from `relayrunner whoami`) means it ran here, and a
-GitHub-hosted name means the fallback. If the job stays
-queued on `relayrunner`, the GitHub App is probably not installed on the repo's organization.
+GitHub-hosted name means the fallback. If `relay-<job> / RelayRunner` stays
+queued, the GitHub App is probably not installed on the repo's organization.
 The user can check under Settings → GitHub orgs in the dashboard.
 
 To stop using this computer for a while, the user presses Ctrl-C in the `relayrunner connect`
