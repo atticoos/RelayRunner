@@ -9,6 +9,8 @@ import type { Env } from "./env.ts";
 // PREVIEW_ORIGINS) and a real in-memory D1.
 const production = "https://relayrunner-app.relayrun.workers.dev";
 const preview = "https://feature-x-relayrunner-app.relayrun.workers.dev";
+// The interim custom domain signs in the same way until BETTER_AUTH_URL moves to it.
+const customDomain = "https://app.relayrunner.app";
 
 let proxy: Awaited<ReturnType<typeof getPlatformProxy<Env>>>;
 let env: Env;
@@ -93,57 +95,63 @@ function startSignIn(origin: string) {
 }
 
 describe("preview sign-in", () => {
-  test("a preview signs in through the production callback and gets its own session cookie", async () => {
-    // 1. The preview starts sign-in. GitHub must be told to return to production.
-    const started = await startSignIn(preview);
-    expect(started.status).toBe(200);
-    const { url } = (await started.json()) as { url: string };
-    const authorize = new URL(url);
-    expect(authorize.origin).toBe("https://github.com");
-    expect(authorize.searchParams.get("redirect_uri")).toBe(
-      `${production}/api/auth/callback/github`,
-    );
-    const state = authorize.searchParams.get("state");
-    expect(state).toBeTruthy();
+  test.each([
+    ["a preview", preview],
+    ["the custom domain", customDomain],
+  ])(
+    "%s signs in through the production callback and gets its own session cookie",
+    async (_, preview) => {
+      // 1. The preview starts sign-in. GitHub must be told to return to production.
+      const started = await startSignIn(preview);
+      expect(started.status).toBe(200);
+      const { url } = (await started.json()) as { url: string };
+      const authorize = new URL(url);
+      expect(authorize.origin).toBe("https://github.com");
+      expect(authorize.searchParams.get("redirect_uri")).toBe(
+        `${production}/api/auth/callback/github`,
+      );
+      const state = authorize.searchParams.get("state");
+      expect(state).toBeTruthy();
 
-    // 2. GitHub redirects to production, which exchanges the code and hands off to the preview.
-    stubGitHub();
-    const callback = await app.request(
-      `${production}/api/auth/callback/github?code=abc&state=${encodeURIComponent(state!)}`,
-      {},
-      env,
-    );
-    expect(callback.status).toBe(302);
-    const handoff = new URL(callback.headers.get("location")!);
-    expect(handoff.origin).toBe(preview);
-    expect(handoff.pathname).toBe("/api/auth/callback/github/oauth-proxy");
-    expect(handoff.searchParams.get("profile")).toBeTruthy();
-    // Production must not have signed anyone in on its own host.
-    expect(callback.headers.getSetCookie().some((cookie) => cookie.includes("session_token"))).toBe(
-      false,
-    );
+      // 2. GitHub redirects to production, which exchanges the code and hands off to the preview.
+      stubGitHub();
+      const callback = await app.request(
+        `${production}/api/auth/callback/github?code=abc&state=${encodeURIComponent(state!)}`,
+        {},
+        env,
+      );
+      expect(callback.status).toBe(302);
+      const handoff = new URL(callback.headers.get("location")!);
+      expect(handoff.origin).toBe(preview);
+      expect(handoff.pathname).toBe("/api/auth/callback/github/oauth-proxy");
+      expect(handoff.searchParams.get("profile")).toBeTruthy();
+      // Production must not have signed anyone in on its own host.
+      expect(
+        callback.headers.getSetCookie().some((cookie) => cookie.includes("session_token")),
+      ).toBe(false);
 
-    // 3. The preview completes the hand-off, sets its session cookie, and lands on the app.
-    const completed = await app.request(
-      handoff.href,
-      { headers: { cookie: cookiesFrom(started) } },
-      env,
-    );
-    expect(completed.status).toBe(302);
-    expect(completed.headers.get("location")).toBe("/runners");
-    const cookie = cookiesFrom(completed);
-    expect(cookie).toContain("session_token");
-    expect(completed.headers.getSetCookie().every((set) => !/domain=/i.test(set))).toBe(true);
+      // 3. The preview completes the hand-off, sets its session cookie, and lands on the app.
+      const completed = await app.request(
+        handoff.href,
+        { headers: { cookie: cookiesFrom(started) } },
+        env,
+      );
+      expect(completed.status).toBe(302);
+      expect(completed.headers.get("location")).toBe("/runners");
+      const cookie = cookiesFrom(completed);
+      expect(cookie).toContain("session_token");
+      expect(completed.headers.getSetCookie().every((set) => !/domain=/i.test(set))).toBe(true);
 
-    const session = await app.request(
-      `${preview}/api/auth/get-session`,
-      { headers: { cookie } },
-      env,
-    );
-    expect(((await session.json()) as { user: { email: string } }).user.email).toBe(
-      "octo@example.com",
-    );
-  });
+      const session = await app.request(
+        `${preview}/api/auth/get-session`,
+        { headers: { cookie } },
+        env,
+      );
+      expect(((await session.json()) as { user: { email: string } }).user.email).toBe(
+        "octo@example.com",
+      );
+    },
+  );
 
   test("an untrusted host never receives the hand-off", async () => {
     // Better Auth skips its Origin/CSRF check under vitest (and only enforces it when cookies are
