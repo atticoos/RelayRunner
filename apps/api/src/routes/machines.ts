@@ -12,11 +12,15 @@ import { MACHINE_ID_HEADER } from "../durable-objects/machine-session.ts";
 import {
   generateMachineToken,
   normalizeUserCode,
+  pausedByName,
   presentMachine,
   revokeMachines,
+  setMachinePaused,
   sha256Hex,
   verifyMachineToken,
+  type PauseVia,
 } from "../machines.ts";
+import type { Env } from "../env.ts";
 import { sendEmail } from "../email.ts";
 import { requireUser, waitUntil } from "../middleware/session.ts";
 import { requireWorkspace } from "../middleware/workspace.ts";
@@ -202,15 +206,49 @@ export const machineRoutes = new Hono<AppEnv>()
       c.env.MACHINE_LINK.getByName(machine.id).status(),
     ]);
     return c.json({
-      machine: { ...presentMachine(machine), status },
+      machine: { ...presentMachine(machine, await pausedByName(db, machine)), status },
       workspace,
       enrolledBy: enrolledBy ?? null,
     });
   })
-  .get("/", requireUser, requireWorkspace, async (c) => {
-    const machines = await c.var.db
-      .select()
+  // Pausing from the machine itself, for `relayrunner pause` and `resume`: `Authorization: Bearer
+  // rrm_…`, 401 like /me. Registered before /:id so "me" isn't read as a machine id.
+  .post("/me/:action{pause|resume}", async (c) => {
+    const token = c.req.header("authorization")?.match(/^Bearer\s+(\S+)$/i)?.[1];
+    const db = createDb(c.env.DB);
+    const machine = await verifyMachineToken(db, token);
+    if (!machine) return c.json({ error: "unauthorized" }, 401);
+    return pauseResponse(c.env, db, machine.id, c.req.param("action") === "pause", {
+      userId: null,
+      via: "cli",
+    });
+  })
+  // Any member of the workspace may pause or resume any of its machines: the pool is shared, and
+  // pausing is easy to undo. Activity records who did it.
+  .post("/:id/:action{pause|resume}", requireUser, requireWorkspace, async (c) => {
+    const [machine] = await c.var.db
+      .select({ id: schema.machine.id })
       .from(schema.machine)
+      .where(
+        and(
+          eq(schema.machine.id, c.req.param("id")),
+          eq(schema.machine.workspaceId, c.var.workspace.id),
+          isNotNull(schema.machine.os),
+          isNull(schema.machine.revokedAt),
+        ),
+      )
+      .limit(1);
+    if (!machine) return c.json({ error: "not_found" }, 404);
+    return pauseResponse(c.env, c.var.db, machine.id, c.req.param("action") === "pause", {
+      userId: c.var.user!.id,
+      via: "dashboard",
+    });
+  })
+  .get("/", requireUser, requireWorkspace, async (c) => {
+    const rows = await c.var.db
+      .select({ machine: schema.machine, pausedBy: schema.user.name })
+      .from(schema.machine)
+      .leftJoin(schema.user, eq(schema.user.id, schema.machine.pausedBy))
       .where(
         and(
           eq(schema.machine.workspaceId, c.var.workspace.id),
@@ -219,16 +257,17 @@ export const machineRoutes = new Hono<AppEnv>()
         ),
       )
       .orderBy(asc(schema.machine.name));
+    const machines = rows.map((row) => row.machine);
     // Live status from each machine's MachineLink. Fine for a handful of machines per workspace.
     const statuses = await Promise.all(
       machines.map((machine) => c.env.MACHINE_LINK.getByName(machine.id).status()),
     );
     return c.json({
-      machines: machines.map((machine, i) => ({
-        ...presentMachine(machine),
+      machines: rows.map((row, i) => ({
+        ...presentMachine(row.machine, row.pausedBy),
         status: statuses[i],
         // Whether the signed-in user may revoke it (#134), so the dashboard can hide the action.
-        canRevoke: canRevokeMachine(c.var.role, c.var.user!.id, machine),
+        canRevoke: canRevokeMachine(c.var.role, c.var.user!.id, row.machine),
       })),
     });
   })
@@ -259,6 +298,24 @@ export const machineRoutes = new Hono<AppEnv>()
     }
     return c.json({ machine: presentMachine(machine) });
   });
+
+// Pauses or resumes the machine, tells its open connection, and answers with the machine.
+async function pauseResponse(
+  env: Env,
+  db: ReturnType<typeof createDb>,
+  machineId: string,
+  paused: boolean,
+  actor: { userId: string | null; via: PauseVia },
+) {
+  const result = await setMachinePaused(db, machineId, paused, actor);
+  if (!result) return Response.json({ error: "not_found" }, { status: 404 });
+  const by = await pausedByName(db, result.machine);
+  const link = env.MACHINE_LINK.getByName(machineId);
+  if (result.changed) await link.notifyPaused(paused, by);
+  return Response.json({
+    machine: { ...presentMachine(result.machine, by), status: await link.status() },
+  });
+}
 
 // Better Auth's device errors carry an RFC 8628 code in the body; pass it through.
 function deviceError(error: unknown) {

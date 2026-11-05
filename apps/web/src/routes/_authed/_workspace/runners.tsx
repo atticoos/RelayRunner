@@ -26,8 +26,13 @@ import { createFileRoute, useRouter } from "@tanstack/react-router";
 import {
   ArrowDownIcon,
   ArrowUpIcon,
+  BanIcon,
   CheckIcon,
+  CopyIcon,
+  EllipsisIcon,
   GripVerticalIcon,
+  PauseIcon,
+  PlayIcon,
   PlusIcon,
   XIcon,
 } from "lucide-react";
@@ -37,8 +42,22 @@ import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { authDisabled } from "@/lib/auth-client";
-import { listMachines, revokeMachine, timeAgo, type Machine } from "@/lib/machines";
+import {
+  listMachines,
+  pauseMachine,
+  resumeMachine,
+  revokeMachine,
+  timeAgo,
+  type Machine,
+} from "@/lib/machines";
 import { RunnerOrderError, getRunnerOrder, saveRunnerOrder } from "@/lib/runner-order";
 import { cn } from "@/lib/utils";
 
@@ -216,8 +235,10 @@ const keys = (steps: RunnerStep[]) => steps.map((step) => step.key).join(",");
 
 function meta(key: RunnerKey, machines: Machine[]) {
   if (key === "github") return "Runs on the label the job sets in relay.yml's github input.";
-  const count = machines.filter((machine) => !machine.revokedAt).length;
-  return `${count} ${count === 1 ? "machine" : "machines"} · spread by least recently picked · never for public repos`;
+  const active = machines.filter((machine) => !machine.revokedAt);
+  const count = active.length;
+  const paused = active.filter((machine) => machine.paused).length;
+  return `${count} ${count === 1 ? "machine" : "machines"}${paused ? ` · ${paused} paused` : ""} · spread by least recently picked · never for public repos`;
 }
 
 function ProviderSection({
@@ -366,40 +387,55 @@ function MachineList({ machines }: { machines: Machine[] }) {
 function MachineCard({ machine }: { machine: Machine }) {
   const router = useRouter();
   const [confirming, setConfirming] = useState(false);
-  const [pending, setPending] = useState(false);
+  const [pending, setPending] = useState<"revoke" | "pause" | "resume" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function revoke() {
-    setPending(true);
+  async function act(action: "revoke" | "pause" | "resume") {
+    setPending(action);
     setError(null);
     try {
-      await revokeMachine(machine.id);
+      if (action === "revoke") await revokeMachine(machine.id);
+      else if (action === "pause") await pauseMachine(machine.id);
+      else await resumeMachine(machine.id);
       await router.invalidate();
+      if (action !== "revoke") setPending(null);
     } catch {
-      setError("Couldn't revoke the machine. Try again.");
-      setPending(false);
+      setError(`Couldn't ${action} the machine. Try again.`);
+      setPending(null);
+    }
+  }
+
+  async function copyLabels() {
+    try {
+      await navigator.clipboard.writeText((machine.labels ?? []).join(", "));
+    } catch {
+      // Clipboard can be blocked; the chips are still readable and copy one at a time.
     }
   }
 
   // Previews talk to the production API, which may not send status yet: read that as offline.
   const status = machine.status ?? { online: false, state: null, connectedAt: null };
-  const live = machineBadge[status.online ? (status.state ?? "idle") : "offline"];
-  const seen = status.online
-    ? status.connectedAt && `Connected ${timeAgo(status.connectedAt)}`
-    : machine.lastSeenAt
-      ? `Last seen ${timeAgo(machine.lastSeenAt)}`
-      : "Never connected";
+  const paused = machine.paused ?? null;
+  const live = paused
+    ? pausedBadge(status)
+    : machineBadge[status.online ? (status.state ?? "idle") : "offline"];
+  const seen = paused
+    ? pausedLine(paused, status)
+    : status.online
+      ? status.connectedAt && `Connected ${timeAgo(status.connectedAt)}`
+      : machine.lastSeenAt
+        ? `Last seen ${timeAgo(machine.lastSeenAt)}`
+        : "Never connected";
 
   return (
-    <Card className="py-4">
+    <Card className={cn("py-4", paused && "border-run-edge/60")}>
       <CardHeader className="px-4">
-        <div className="grid gap-1">
-          <CardTitle className="font-mono text-sm font-medium">{machine.name}</CardTitle>
-          <CardDescription>
-            {seen || "Your machine"}
-            {error && <span className="block text-destructive">{error}</span>}
-          </CardDescription>
-        </div>
+        <CardTitle className="self-center font-mono text-sm font-medium">{machine.name}</CardTitle>
+        {/* Full width under the name and the actions, so a long paused line fits on a phone. */}
+        <CardDescription className="col-span-2">
+          {seen || "Your machine"}
+          {error && <span className="block text-destructive">{error}</span>}
+        </CardDescription>
         <CardAction className="row-span-1 flex items-center gap-2">
           <Badge variant={live.variant}>{live.label}</Badge>
           {confirming ? (
@@ -407,7 +443,7 @@ function MachineCard({ machine }: { machine: Machine }) {
               <Button
                 size="sm"
                 variant="ghost"
-                disabled={pending}
+                disabled={pending !== null}
                 onClick={() => setConfirming(false)}
               >
                 Cancel
@@ -415,27 +451,110 @@ function MachineCard({ machine }: { machine: Machine }) {
               <Button
                 size="sm"
                 variant="destructive"
-                disabled={pending}
-                onClick={() => void revoke()}
+                disabled={pending !== null}
+                onClick={() => void act("revoke")}
               >
-                {pending ? "Revoking…" : "Revoke"}
+                {pending === "revoke" ? "Revoking…" : "Revoke"}
               </Button>
             </>
           ) : (
-            <Button size="sm" variant="outline" onClick={() => setConfirming(true)}>
-              Revoke
-            </Button>
+            <>
+              {/* Pausing is rare and lives in the menu; resuming is the one thing a paused
+                  machine needs, so it gets the button. */}
+              {paused && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={pending !== null}
+                  onClick={() => void act("resume")}
+                >
+                  <PlayIcon aria-hidden />
+                  {/* Icon only on a phone, so the badge and the name keep their room. */}
+                  <span className="sr-only sm:not-sr-only">
+                    {pending === "resume" ? "Resuming…" : "Resume"}
+                  </span>
+                </Button>
+              )}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    size="icon-sm"
+                    variant="ghost"
+                    aria-label={`More actions for ${machine.name}`}
+                    disabled={pending !== null}
+                  >
+                    <EllipsisIcon aria-hidden />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-60">
+                  {paused ? (
+                    <DropdownMenuItem onSelect={() => void act("resume")}>
+                      <PlayIcon aria-hidden />
+                      Resume
+                    </DropdownMenuItem>
+                  ) : (
+                    <DropdownMenuItem onSelect={() => void act("pause")}>
+                      <PauseIcon aria-hidden />
+                      <span className="grid">
+                        <span>Pause</span>
+                        <span className="text-xs text-muted-foreground">
+                          Stay connected, skip new jobs
+                        </span>
+                      </span>
+                    </DropdownMenuItem>
+                  )}
+                  {machine.labels && machine.labels.length > 0 && (
+                    <DropdownMenuItem onSelect={() => void copyLabels()}>
+                      <CopyIcon aria-hidden />
+                      Copy labels
+                    </DropdownMenuItem>
+                  )}
+                  {/* Members revoke only the machines they enrolled; the API says which. */}
+                  {machine.canRevoke !== false && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem variant="destructive" onSelect={() => setConfirming(true)}>
+                        <BanIcon aria-hidden />
+                        Revoke…
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </>
           )}
         </CardAction>
         {/* Full width under the name and the actions, so the chips have room on a phone. */}
-        {machine.labels && machine.labels.length > 0 && <MachineLabels labels={machine.labels} />}
+        {machine.labels && machine.labels.length > 0 && (
+          <MachineLabels labels={machine.labels} dimmed={paused !== null} />
+        )}
       </CardHeader>
     </Card>
   );
 }
 
+// A paused machine's badge: still online or not, and whether it's finishing a job.
+function pausedBadge(status: { online: boolean; state: "idle" | "busy" | null }) {
+  if (!status.online) return { variant: "paused", label: "Offline · Paused" } as const;
+  if (status.state === "busy")
+    return { variant: "paused", label: "Paused · Finishing job" } as const;
+  return { variant: "paused", label: "Online · Paused" } as const;
+}
+
+function pausedLine(
+  paused: { at: string; by: string | null },
+  status: { online: boolean; state: "idle" | "busy" | null },
+) {
+  const who = paused.by ? `Paused by ${paused.by}` : "Paused from its CLI";
+  const then =
+    status.online && status.state === "busy"
+      ? "finishing its job, then no new jobs"
+      : "jobs skip it until it's resumed";
+  return `${who} ${timeAgo(paused.at)} · ${then}`;
+}
+
 // The labels a job's `machine:` input matches. Clicking one copies it.
-function MachineLabels({ labels }: { labels: string[] }) {
+function MachineLabels({ labels, dimmed = false }: { labels: string[]; dimmed?: boolean }) {
   const [copied, setCopied] = useState<string | null>(null);
 
   async function copy(label: string) {
@@ -449,7 +568,10 @@ function MachineLabels({ labels }: { labels: string[] }) {
   }
 
   return (
-    <ul className="col-span-2 flex flex-wrap items-center gap-1.5" aria-label="Labels">
+    <ul
+      className={cn("col-span-2 flex flex-wrap items-center gap-1.5", dimmed && "opacity-60")}
+      aria-label="Labels"
+    >
       {labels.map((label) => (
         <li key={label} className="flex">
           <Badge asChild variant="outline" className="font-mono font-normal">

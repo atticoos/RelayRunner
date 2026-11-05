@@ -13,6 +13,7 @@ import {
 import { ensureRunner, RunnerError, runnerPlatform } from "./install.ts";
 import { runJob } from "./job.ts";
 import { login, LoginError, openBrowser } from "./login.ts";
+import { setPaused } from "./pause.ts";
 import { whoami, type WhoamiResponse } from "./whoami.ts";
 
 // The dashboard's origin. It forwards /api/* (including the machine WebSocket) to the API.
@@ -179,6 +180,14 @@ function show(event: ConnectionEvent) {
     case "run":
       clack.log.step(`${at} Starting job ${event.routeId}`);
       break;
+    case "paused":
+      if (event.paused)
+        clack.log.warn(
+          `${at} Paused${event.by ? ` by ${event.by}` : ""}. Staying online, but new jobs skip this machine until it's resumed.`,
+        );
+      else
+        clack.log.success(`${at} Resumed${event.by ? ` by ${event.by}` : ""}. Waiting for jobs.`);
+      break;
     case "run-refused":
       clack.log.warn(`${at} Turned down job ${event.routeId}: already running one.`);
       break;
@@ -257,9 +266,11 @@ const whoamiCommand = defineCommand({
 
 function describeIdentity(server: string, identity: WhoamiResponse) {
   const { machine, workspace, enrolledBy } = identity;
-  const status = machine.status.online
-    ? `online${machine.status.state ? `, ${machine.status.state}` : ""}`
-    : "offline";
+  const status =
+    (machine.status.online
+      ? `online${machine.status.state ? `, ${machine.status.state}` : ""}`
+      : "offline") +
+    (machine.paused ? `, paused${machine.paused.by ? ` by ${machine.paused.by}` : ""}` : "");
   const enrolled = [
     enrolledBy && `by ${enrolledBy.name} <${enrolledBy.email}>`,
     `on ${new Date(machine.createdAt).toLocaleDateString()}`,
@@ -297,12 +308,62 @@ function normalizeServer(value: string) {
   }
 }
 
+// `relayrunner pause` and `resume`: the same as the machine's ⋯ menu on the Runners page.
+function pauseCommand(paused: boolean) {
+  return defineCommand({
+    meta: {
+      name: paused ? "pause" : "resume",
+      description: paused
+        ? "Stop new jobs routing to this machine. It stays connected and finishes a job it's running."
+        : "Let jobs route to this machine again after `relayrunner pause`.",
+    },
+    async run() {
+      const credentials = readCredentials();
+      if (!credentials) {
+        console.error("Not signed in. Run `relayrunner connect` to sign in.");
+        process.exitCode = 1;
+        return;
+      }
+      const result = await setPaused({
+        server: credentials.server,
+        token: credentials.token,
+        paused,
+      });
+      const name = credentials.machine.name;
+      switch (result.status) {
+        case "ok":
+          console.log(
+            paused
+              ? `Paused ${name}. It stays connected, and new jobs will skip it.${result.busy ? "\nIt finishes the job it's running first." : ""}\nRun \`relayrunner resume\` to take jobs again.`
+              : `Resumed ${name}. Jobs can route here again.`,
+          );
+          break;
+        case "revoked":
+          console.error(
+            `${name} was removed from ${credentials.workspace.name} or its token is no longer valid.\nRun \`relayrunner connect\` to sign in again.`,
+          );
+          process.exitCode = 1;
+          break;
+        case "failed":
+          console.error(`Couldn't ${paused ? "pause" : "resume"} ${name}: ${result.reason}.`);
+          process.exitCode = 1;
+          break;
+      }
+    },
+  });
+}
+
 const main = defineCommand({
   meta: {
     name: "relayrunner",
     description: "Run GitHub Actions jobs on your machine through the RelayRunner gateway.",
   },
-  subCommands: { connect: connectCommand, whoami: whoamiCommand },
+  subCommands: {
+    connect: connectCommand,
+    whoami: whoamiCommand,
+    pause: pauseCommand(true),
+    resume: pauseCommand(false),
+  },
 });
 
 void runMain(main);

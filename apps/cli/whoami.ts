@@ -14,6 +14,8 @@ export const WhoamiResponse = z.object({
     createdAt: z.union([z.string(), z.number()]),
     lastSeenAt: z.union([z.string(), z.number()]).nullable(),
     status: z.object({ online: z.boolean(), state: z.string().nullable() }),
+    // Missing from a gateway that predates pausing.
+    paused: z.object({ by: z.string().nullable() }).nullish(),
   }),
   workspace: z.object({ id: z.string().min(1), name: z.string(), slug: z.string().nullish() }),
   enrolledBy: z.object({ name: z.string(), email: z.string() }).nullable(),

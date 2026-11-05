@@ -45,6 +45,19 @@ its workspace, who enrolled it (name and email) and whether it's online now.
 - `--json` prints the same as JSON (never the token). `--server <url>` or
   `RELAYRUNNER_URL` only reports a sign-in for that gateway.
 
+## `relayrunner pause` and `relayrunner resume`
+
+```sh
+npx relayrunner pause
+npx relayrunner resume
+```
+
+Pausing stops new jobs routing to this machine while it stays connected and
+enrolled. A job it's already running finishes. `resume` lets jobs route here
+again. Anyone in the workspace can do the same from the machine's ⋯ menu on the
+Runners page, and a running `relayrunner connect` prints when that happens.
+Both exit 1 when not signed in or when the token is no longer valid.
+
 ## Building
 
 `pnpm --filter relayrunner build` bundles the CLI into `dist/cli.js` with

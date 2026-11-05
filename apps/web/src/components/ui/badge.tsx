@@ -21,6 +21,8 @@ const badgeVariants = cva(
         go: "border-go-edge bg-go-soft text-foreground",
         run: "border-run-edge bg-run/15 text-foreground",
         idle: "border-border text-muted-foreground",
+        // A paused machine: amber like a run, but dashed and unfilled, since nothing is running.
+        paused: "border-dashed border-run-edge text-run",
       },
     },
     defaultVariants: {

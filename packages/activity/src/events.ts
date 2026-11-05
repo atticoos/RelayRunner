@@ -20,6 +20,8 @@ export const SKIP_REASONS = [
   "public_repo",
   // No online, idle machine had every wanted label.
   "no_machine",
+  // Every machine with the wanted labels is paused (listed in the step's `paused`).
+  "machine_paused",
   // `github` named more than one label.
   "too_many_labels",
 ] as const;
@@ -32,7 +34,14 @@ export type SkipReason = (typeof SKIP_REASONS)[number];
  */
 export const RouteWalk = z.object({
   step: z.enum(RUNNER_KEYS).nullable(),
-  skipped: z.array(z.object({ key: z.enum(RUNNER_KEYS), reason: z.enum(SKIP_REASONS) })),
+  skipped: z.array(
+    z.object({
+      key: z.enum(RUNNER_KEYS),
+      reason: z.enum(SKIP_REASONS),
+      // machine_paused: the paused machines' names.
+      paused: z.array(z.string()).optional(),
+    }),
+  ),
   notInOrder: z.array(z.enum(RUNNER_KEYS)),
   machine: z.array(z.string()),
   github: z.array(z.string()),
@@ -57,6 +66,17 @@ export const ActivityEvent = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("machine.disconnected"),
     data: z.object({ ...machineData, reason: z.enum(DISCONNECT_REASONS) }),
+  }),
+  // Someone paused the machine: it stays connected, but jobs skip it until it's resumed. Actor:
+  // the user who paused it from the dashboard, or none when its own CLI did (`via`).
+  z.object({
+    type: z.literal("machine.paused"),
+    data: z.object({ ...machineData, via: z.enum(["dashboard", "cli"]) }),
+  }),
+  // Someone resumed a paused machine, so jobs can route to it again. Actor as for machine.paused.
+  z.object({
+    type: z.literal("machine.resumed"),
+    data: z.object({ ...machineData, via: z.enum(["dashboard", "cli"]) }),
   }),
   // Someone removed the machine from the workspace. Actor: that user.
   z.object({ type: z.literal("machine.revoked"), data: z.object(machineData) }),

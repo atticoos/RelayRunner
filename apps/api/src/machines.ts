@@ -1,4 +1,4 @@
-import { type SQL, and, eq, isNull } from "drizzle-orm";
+import { type SQL, and, eq, isNotNull, isNull } from "drizzle-orm";
 import { recordEvent } from "./activity.ts";
 import type { Db } from "./db/index.ts";
 import { schema } from "./db/index.ts";
@@ -41,8 +41,14 @@ export function normalizeUserCode(userCode: string) {
   return userCode.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
 }
 
-/** What the dashboard and the CLI see of a machine. Never includes the token hash. */
-export function presentMachine(machine: typeof schema.machine.$inferSelect) {
+/**
+ * What the dashboard and the CLI see of a machine. Never includes the token hash. `pausedBy` is
+ * the name of the user who paused it, when the caller looked it up.
+ */
+export function presentMachine(
+  machine: typeof schema.machine.$inferSelect,
+  pausedBy: string | null = null,
+) {
   return {
     id: machine.id,
     name: machine.name,
@@ -54,6 +60,8 @@ export function presentMachine(machine: typeof schema.machine.$inferSelect) {
     lastSeenAt: machine.lastSeenAt,
     revokedAt: machine.revokedAt,
     createdAt: machine.createdAt,
+    // Null unless paused. `by` is null when the machine's own CLI paused it.
+    paused: machine.pausedAt ? { at: machine.pausedAt, by: pausedBy } : null,
   };
 }
 
@@ -87,4 +95,61 @@ export async function revokeMachines(env: Env, db: Db, where: SQL, actorUserId: 
   // The tokens can't open a new socket any more; close the ones that are open.
   await Promise.all(machines.map((machine) => env.MACHINE_LINK.getByName(machine.id).revoke()));
   return machines;
+}
+
+export type PauseVia = "dashboard" | "cli";
+
+/**
+ * Pauses or resumes a machine and logs it in Activity. `userId` is who did it from the dashboard,
+ * or null for the machine's own CLI. Doing what's already the case changes nothing and logs
+ * nothing. Returns the machine as it is now, or null if it's gone or revoked.
+ */
+export async function setMachinePaused(
+  db: Db,
+  machineId: string,
+  paused: boolean,
+  actor: { userId: string | null; via: PauseVia },
+) {
+  const [machine] = await db
+    .update(schema.machine)
+    .set(
+      paused
+        ? { pausedAt: new Date(), pausedBy: actor.userId }
+        : { pausedAt: null, pausedBy: null },
+    )
+    .where(
+      and(
+        eq(schema.machine.id, machineId),
+        isNull(schema.machine.revokedAt),
+        paused ? isNull(schema.machine.pausedAt) : isNotNull(schema.machine.pausedAt),
+      ),
+    )
+    .returning();
+  if (!machine) {
+    const [current] = await db
+      .select()
+      .from(schema.machine)
+      .where(and(eq(schema.machine.id, machineId), isNull(schema.machine.revokedAt)))
+      .limit(1);
+    return current ? { machine: current, changed: false } : null;
+  }
+  await recordEvent(db, {
+    workspaceId: machine.workspaceId,
+    type: paused ? "machine.paused" : "machine.resumed",
+    data: { machineName: machine.name, via: actor.via },
+    machineId: machine.id,
+    actorUserId: actor.userId,
+  });
+  return { machine, changed: true };
+}
+
+/** The name of the user who paused a machine, or null (not paused, or paused by its CLI). */
+export async function pausedByName(db: Db, machine: typeof schema.machine.$inferSelect) {
+  if (!machine.pausedAt || !machine.pausedBy) return null;
+  const [user] = await db
+    .select({ name: schema.user.name })
+    .from(schema.user)
+    .where(eq(schema.user.id, machine.pausedBy))
+    .limit(1);
+  return user?.name ?? null;
 }

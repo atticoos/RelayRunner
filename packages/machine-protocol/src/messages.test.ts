@@ -76,6 +76,8 @@ describe("parseGatewayMessage", () => {
   const messages: GatewayMessage[] = [
     { v, type: "run", routeId: "7f3k", jitConfig: "eyJydW5uZXIiOiIuLi4ifQ==" },
     { v, type: "error", code: "version_mismatch", message: "update relayrunner" },
+    { v, type: "paused", paused: true, by: "Atticus" },
+    { v, type: "paused", paused: false, by: null },
   ];
 
   it.each(messages)("round-trips $type", (message) => {

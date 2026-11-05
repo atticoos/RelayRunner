@@ -15,8 +15,17 @@ function machineLabels(walk: RouteWalk) {
   return labels.length ? labels.join(", ") : null;
 }
 
-function shortSkip(walk: RouteWalk, reason: SkipReason): string | null {
+// "atticus-mbp is paused", "a and b are paused", "3 machines are paused".
+function pausedText(paused: string[] = []) {
+  if (paused.length === 1) return `${paused[0]} is paused`;
+  if (paused.length === 2) return `${paused[0]} and ${paused[1]} are paused`;
+  return paused.length ? `${paused.length} machines are paused` : "machines are paused";
+}
+
+function shortSkip(walk: RouteWalk, reason: SkipReason, paused?: string[]): string | null {
   switch (reason) {
+    case "machine_paused":
+      return pausedText(paused);
     case "no_machine": {
       const labels = machineLabels(walk);
       return labels ? `no idle machine with ${labels}` : "no idle machine";
@@ -31,8 +40,20 @@ function shortSkip(walk: RouteWalk, reason: SkipReason): string | null {
   }
 }
 
-function longSkip(walk: RouteWalk, key: RunnerKey, reason: SkipReason): string {
+function longSkip(
+  walk: RouteWalk,
+  key: RunnerKey,
+  reason: SkipReason,
+  paused: string[] = [],
+): string {
   switch (reason) {
+    case "machine_paused": {
+      const labels = machineLabels(walk);
+      const fits = labels ? `with ${labels}` : "that fits";
+      return paused.length === 1
+        ? `the only machine ${fits}, ${paused[0]}, is paused`
+        : `every machine ${fits} is paused (${paused.join(", ")})`;
+    }
     case "no_machine": {
       const labels = machineLabels(walk);
       return labels
@@ -58,10 +79,11 @@ export type WalkTone = "fallback" | "info";
 export function walkSummary(walk: RouteWalk): { text: string; tone: WalkTone } | null {
   const parts: string[] = [];
   let tone: WalkTone = "info";
-  for (const { reason } of walk.skipped) {
-    const text = shortSkip(walk, reason);
+  for (const { reason, paused } of walk.skipped) {
+    const text = shortSkip(walk, reason, paused);
     if (text) parts.push(text);
-    if (reason === "no_machine" || reason === "too_many_labels") tone = "fallback";
+    if (reason === "no_machine" || reason === "machine_paused" || reason === "too_many_labels")
+      tone = "fallback";
   }
   for (const key of walk.notInOrder) parts.push(`${key} is set but not in your order`);
   return parts.length ? { text: parts.join("; "), tone } : null;
@@ -80,11 +102,11 @@ export interface WalkLine {
  * `runner` names where the answering step sent the job: its line reads "on <runner>".
  */
 export function walkLines(walk: RouteWalk, runner: string | null): WalkLine[] {
-  const lines: WalkLine[] = walk.skipped.map(({ key, reason }, index) => ({
+  const lines: WalkLine[] = walk.skipped.map(({ key, reason, paused }, index) => ({
     position: index + 1,
     key,
     state: "skipped",
-    text: longSkip(walk, key, reason),
+    text: longSkip(walk, key, reason, paused),
   }));
   if (walk.step)
     lines.push({

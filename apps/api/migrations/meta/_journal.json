@@ -71,6 +71,13 @@
       "when": 1793903625545,
       "tag": "20261105183345_route_decision",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1793905928183,
+      "tag": "20261105191208_machine_paused",
+      "breakpoints": true
     }
   ]
 }
