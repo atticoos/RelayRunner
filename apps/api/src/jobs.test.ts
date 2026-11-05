@@ -235,6 +235,91 @@ describe("Activity: why a job ran where", () => {
   });
 });
 
+describe("Activity: jobs that couldn't run", () => {
+  // A relay in `runId` that failed fast, then GitHub skipping the jobs that needed it.
+  async function failedRun(installationId: number, workspaceId: string, runId: number) {
+    const context = pickContext(runId);
+    const decision = await decideRoute(
+      { steps: [{ key: "machine" }] },
+      { ...context, private: true },
+      async () => null,
+    );
+    if (decision.runner !== null) throw new Error("expected no runner");
+    await processWebhook(
+      env,
+      jobEvent(installationId, { id: runId + 1, runId, name: "relay", labels: ["relayrunner"] }),
+    );
+    await recordPick(createDb(env.DB), {
+      workspaceId,
+      repositoryId: 55,
+      context,
+      jobName: "relay",
+      decision,
+      reason: decision.reason,
+    });
+  }
+
+  function skipped(installationId: number, runId: number, id: number, name: string) {
+    return processWebhook(
+      env,
+      jobEvent(
+        installationId,
+        {
+          id,
+          runId,
+          name,
+          labels: [],
+          conclusion: "skipped",
+          createdAt: `2026-11-04T18:0${id % 10}:00Z`,
+        },
+        "completed",
+      ),
+    );
+  }
+
+  test("folds the skipped jobs into the relay's entry", async () => {
+    const { cookie, installationId, workspaceId, runId } = await connectedWorkspace();
+    await failedRun(installationId, workspaceId, runId);
+    expect((await activity(cookie)).items).toMatchObject([
+      { type: "job.unroutable", jobsNotRun: [] },
+    ]);
+
+    await skipped(installationId, runId, runId + 2, "build");
+    await skipped(installationId, runId, runId + 3, "test");
+    const { items } = await activity(cookie);
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ type: "job.unroutable", jobsNotRun: ["build", "test"] });
+  });
+
+  test("keeps a never-routed job's row when its run has no unroutable entry", async () => {
+    const { cookie, installationId, runId } = await connectedWorkspace();
+    await processWebhook(
+      env,
+      jobEvent(installationId, { id: runId + 1, runId, name: "relay", labels: ["relayrunner"] }),
+    );
+    await skipped(installationId, runId, runId + 2, "deploy");
+    const { jobs, items } = await activity(cookie);
+    expect(items).toHaveLength(1);
+    expect(jobs).toMatchObject([{ name: "deploy", conclusion: "skipped", runner: { label: "" } }]);
+  });
+
+  test("leaves another attempt's jobs alone", async () => {
+    const { cookie, installationId, workspaceId, runId } = await connectedWorkspace();
+    await failedRun(installationId, workspaceId, runId);
+    await processWebhook(
+      env,
+      jobEvent(
+        installationId,
+        { id: runId + 2, runId, runAttempt: 2, name: "build", labels: [], conclusion: "skipped" },
+        "completed",
+      ),
+    );
+    const { items } = await activity(cookie);
+    expect(items.map((item) => item.type)).toEqual(["job.routed", "job.unroutable"]);
+    expect(items[1]).toMatchObject({ jobsNotRun: [] });
+  });
+});
+
 describe("Activity", () => {
   test("lists the job a pick routed, with the runner it selected", async () => {
     const { cookie, installationId, runId } = await connectedWorkspace();

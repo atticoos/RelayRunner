@@ -33,7 +33,7 @@ import {
   type ActivityPage,
 } from "@/lib/activity";
 import { authDisabled } from "@/lib/auth-client";
-import { failureText, walkLines, walkSummary, type RouteWalk } from "@/lib/route-walk";
+import { failureText, jobNames, walkLines, walkSummary, type RouteWalk } from "@/lib/route-walk";
 
 // Fast enough that a push shows up within seconds, without a live connection.
 const POLL_MS = 5_000;
@@ -256,12 +256,15 @@ function Row({
   now,
   toggle,
   detail,
+  why = "why it ran here",
   children,
 }: {
   icon: ReactNode;
   at: string;
   now: number;
   toggle?: Toggle;
+  // What the chevron shows, for its label: "Show why it ran here".
+  why?: string;
   detail?: ReactNode;
   children: ReactNode;
 }) {
@@ -282,7 +285,7 @@ function Row({
             type="button"
             onClick={toggle.onToggle}
             aria-expanded={toggle.open}
-            aria-label={toggle.open ? "Hide why it ran here" : "Show why it ran here"}
+            aria-label={toggle.open ? `Hide ${why}` : `Show ${why}`}
             title={toggle.open ? "Hide why" : "Show why"}
             className="-my-1 shrink-0 cursor-pointer rounded-sm p-1 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
@@ -455,8 +458,10 @@ function JobRow({ job, now }: { job: ActivityJob; now: number }) {
   const took = duration(job, now);
   const { runner, walk } = job;
   const RunnerIcon = runner.type === "machine" ? Laptop : Cloud;
-  const runnerName =
-    runner.type === "machine" ? (runner.name ?? "a local machine") : runner.label || "unknown";
+  // GitHub never sent the job anywhere: a job it needed failed, so its runs-on was never worked
+  // out. Usually folded into its relay's "couldn't run" entry; this row is for runs without one.
+  const unrouted = runner.type === "github" && !runner.label;
+  const runnerName = runner.type === "machine" ? (runner.name ?? "a local machine") : runner.label;
   const summary = walk ? walkSummary(walk) : null;
   const toggle = summary ? { open, onToggle: () => setOpen(!open) } : undefined;
   return (
@@ -486,19 +491,28 @@ function JobRow({ job, now }: { job: ActivityJob; now: number }) {
       >
         {job.name}
       </a>{" "}
-      <span className="text-muted-foreground">{jobVerb(job)}</span>{" "}
-      <span
-        className="font-medium"
-        title={job.runnerName ? `Ran on ${job.runnerName}` : "Not picked up yet"}
-      >
-        <RunnerIcon
-          aria-hidden
-          className="mr-1 inline size-3 align-[-0.1em] text-muted-foreground"
-        />
-        <span className={runner.type === "github" ? "font-mono text-xs" : undefined}>
-          {runnerName}
-        </span>
-      </span>
+      {unrouted ? (
+        <>
+          <span className="text-muted-foreground">{jobVerb(job).replace(/ (on|for)$/, "")}</span>{" "}
+          <Reason text="not routed" tone="info" />
+        </>
+      ) : (
+        <>
+          <span className="text-muted-foreground">{jobVerb(job)}</span>{" "}
+          <span
+            className="font-medium"
+            title={job.runnerName ? `Ran on ${job.runnerName}` : "Not picked up yet"}
+          >
+            <RunnerIcon
+              aria-hidden
+              className="mr-1 inline size-3 align-[-0.1em] text-muted-foreground"
+            />
+            <span className={runner.type === "github" ? "font-mono text-xs" : undefined}>
+              {runnerName}
+            </span>
+          </span>
+        </>
+      )}
       {summary && (
         <>
           {" "}
@@ -523,9 +537,10 @@ function JobRow({ job, now }: { job: ActivityJob; now: number }) {
   );
 }
 
-// A relay that failed fast because nothing in the runner order could take its run: "RelayRunner
-// dev / relay couldn't route no machine with macOS is online and idle · repo". The job that
-// needed it never started, so this is the only trace of the run here.
+// A run whose relay failed fast because nothing in the runner order could take it, told as the jobs
+// that couldn't run: "RelayRunner dev / build and test couldn't run no idle machine with macOS ·
+// repo". The relay itself isn't named: it's how routing works, not a job anyone thinks about. Until
+// GitHub reports the jobs skipped, it's the run: "RelayRunner dev couldn't run".
 function UnroutableRow({
   item,
   now,
@@ -537,12 +552,14 @@ function UnroutableRow({
   const { data } = item;
   const runUrl = `https://github.com/${data.repository}/actions/runs/${data.runId}`;
   const toggle = data.walk ? { open, onToggle: () => setOpen(!open) } : undefined;
+  const names = jobNames(item.jobsNotRun ?? []);
   return (
     <Row
-      icon={<Ban aria-label="Couldn't route" className={`${ICON} text-destructive`} />}
+      icon={<Ban aria-label="Couldn't run" className={`${ICON} text-destructive`} />}
       at={item.occurredAt}
       now={now}
       toggle={toggle}
+      why="why it couldn't run"
       detail={data.walk && <WalkLines walk={data.walk} runner={null} />}
     >
       <a
@@ -554,9 +571,13 @@ function UnroutableRow({
       >
         {data.workflow ?? "Workflow"}
       </a>
-      <span className="text-muted-foreground"> / </span>
-      <span className="font-medium">{data.job ?? "relay"}</span>{" "}
-      <span className="text-destructive">couldn't route</span>{" "}
+      {names && (
+        <>
+          <span className="text-muted-foreground"> / </span>
+          <span className="font-medium">{names}</span>
+        </>
+      )}{" "}
+      <span className="text-destructive">couldn't run</span>{" "}
       <Reason text={failureText(data.reason)} tone="failure" toggle={toggle} />
       <span className="text-xs text-muted-foreground">
         {" · "}
@@ -643,12 +664,11 @@ function samplePage(filter: ActivityFilter | undefined): ActivityPage {
         runAttempt: 1,
         workflow: "RelayRunner dev",
         job: "relay",
-        reason:
-          "No runner available: no local machine with macOS, ARM64 is online and idle; `github` isn't set on this relay.",
+        reason: `No runner available: the only machine that fits, ${mac.name}, is paused.`,
         walk: {
           step: null,
           skipped: [
-            { key: "machine", reason: "no_machine" },
+            { key: "machine", reason: "machine_paused", paused: [mac.name] },
             { key: "github", reason: "not_configured" },
           ],
           notInOrder: [],
@@ -660,6 +680,7 @@ function samplePage(filter: ActivityFilter | undefined): ActivityPage {
       actor: null,
       machine: null,
       job: null,
+      jobsNotRun: ["test (macos)", "deploy"],
     },
     {
       id: 9,
@@ -756,6 +777,22 @@ function samplePage(filter: ActivityFilter | undefined): ActivityPage {
           notInOrder: [],
           ...relay,
         },
+      }),
+    },
+    {
+      id: 3,
+      type: "job.routed",
+      data: {},
+      occurredAt: at(180),
+      actor: null,
+      machine: null,
+      // A run from before relays failed fast: GitHub skipped the job and never sent it anywhere.
+      job: job(1, 180, {
+        name: "deploy",
+        runner: { type: "github", label: "" },
+        status: "completed",
+        conclusion: "skipped",
+        completedAt: at(180),
       }),
     },
     {

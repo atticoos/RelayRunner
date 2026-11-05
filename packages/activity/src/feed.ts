@@ -48,6 +48,12 @@ export type ActivityItem = ActivityEvent & {
   /** The machine's current name, falling back to its name at the time. */
   machine: { id: string | null; name: string } | null;
   job: ActivityJob | null;
+  /**
+   * For a `job.unroutable` relay: the run's jobs that needed it and so never ran, by name, in the
+   * order GitHub created them. Empty until GitHub reports them skipped. Their own job rows are left
+   * out of the log, since this entry already says they couldn't run.
+   */
+  jobsNotRun?: string[];
 };
 
 export interface ActivityPage {

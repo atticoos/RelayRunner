@@ -127,3 +127,14 @@ export function failureText(reason: string) {
   const text = reason.startsWith(NO_RUNNER_PREFIX) ? reason.slice(NO_RUNNER_PREFIX.length) : reason;
   return text.replace(/`/g, "").replace(/\.$/, "");
 }
+
+/**
+ * Job names as a phrase: "build", "build and test", "build, test and deploy", or "build, test and 3
+ * more" past three. Null for none.
+ */
+export function jobNames(names: string[]): string | null {
+  if (names.length === 0) return null;
+  if (names.length === 1) return names[0] ?? null;
+  if (names.length <= 3) return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+  return `${names.slice(0, 2).join(", ")} and ${names.length - 2} more`;
+}
