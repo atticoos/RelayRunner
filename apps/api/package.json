@@ -13,6 +13,7 @@
   "dependencies": {
     "@relayrunner/access": "workspace:*",
     "@relayrunner/activity": "workspace:*",
+    "@relayrunner/email": "workspace:*",
     "@relayrunner/github-webhooks": "workspace:*",
     "@relayrunner/machine-protocol": "workspace:*",
     "better-auth": "catalog:",

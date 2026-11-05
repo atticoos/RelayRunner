@@ -2,6 +2,7 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { bearer, deviceAuthorization, oAuthProxy, organization } from "better-auth/plugins";
 import { createDb, schema } from "./db/index.ts";
+import { sendEmail } from "./email.ts";
 import type { Env } from "./env.ts";
 
 // Preview dashboards (Workers Builds `wrangler preview`) reach this Worker through their own API
@@ -18,8 +19,10 @@ export function previewOrigins(env: Pick<Env, "PREVIEW_ORIGINS">) {
 export const MACHINE_CLIENT_ID = "relayrunner-cli";
 
 // Workers only expose bindings per request, so build the auth instance per request too. It is
-// cheap: no I/O happens until a handler runs.
-export function createAuth(env: Env) {
+// cheap: no I/O happens until a handler runs. `waitUntil` (the request's ExecutionContext) lets
+// mail go out after the response; without it (tests, scripts) the hook waits for the send.
+export function createAuth(env: Env, waitUntil?: (promise: Promise<unknown>) => void) {
+  const background = (promise: Promise<unknown>) => (waitUntil ? waitUntil(promise) : promise);
   return betterAuth({
     // Always the production dashboard origin, so GitHub only ever sees one OAuth callback URL.
     baseURL: env.BETTER_AUTH_URL,
@@ -32,6 +35,18 @@ export function createAuth(env: Env) {
       github: {
         clientId: env.GITHUB_APP_CLIENT_ID,
         clientSecret: env.GITHUB_APP_CLIENT_SECRET,
+      },
+    },
+    databaseHooks: {
+      user: {
+        create: {
+          // First GitHub sign-in creates the user: send the welcome email.
+          after: async (user) => {
+            await background(
+              sendEmail(env, { to: user.email, template: "welcome", context: { name: user.name } }),
+            );
+          },
+        },
       },
     },
     session: {
