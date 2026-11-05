@@ -106,3 +106,81 @@ describe("workspaces", () => {
     expect(response.status).toBe(400);
   });
 });
+
+describe("runner order", () => {
+  const put = (id: string, cookie: string, body: unknown) =>
+    app.request(
+      `/api/workspaces/${id}/runner-order`,
+      {
+        method: "PUT",
+        headers: { cookie, "content-type": "application/json", origin: env.BETTER_AUTH_URL },
+        body: JSON.stringify(body),
+      },
+      env,
+    );
+
+  test("a new workspace reads the default order: machine, then github", async () => {
+    const { cookie } = await signIn();
+    const { workspace, cookie: jar } = await createWorkspace(cookie, "Order", "order-default");
+    const response = await call(`/workspaces/${workspace.id}/runner-order`, jar);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      order: { steps: [{ key: "machine" }, { key: "github" }] },
+      isDefault: true,
+    });
+  });
+
+  test("a member saves an order and reads it back", async () => {
+    const { cookie } = await signIn();
+    const { workspace, cookie: jar } = await createWorkspace(cookie, "Order", "order-save");
+    const order = { steps: [{ key: "github" }, { key: "machine" }] };
+    const saved = await put(workspace.id, jar, order);
+    expect(saved.status).toBe(200);
+    expect(await saved.json()).toEqual({ order, isDefault: false });
+
+    const read = await call(`/workspaces/${workspace.id}/runner-order`, jar);
+    expect(await read.json()).toEqual({ order, isDefault: false });
+    const row = await env.DB.prepare("select runner_order from workspace where id = ?")
+      .bind(workspace.id)
+      .first<{ runner_order: string }>();
+    expect(JSON.parse(row!.runner_order)).toEqual(order);
+  });
+
+  test("an empty order or a repeated provider is rejected with a reason", async () => {
+    const { cookie } = await signIn();
+    const { workspace, cookie: jar } = await createWorkspace(cookie, "Order", "order-invalid");
+
+    const empty = await put(workspace.id, jar, { steps: [] });
+    expect(empty.status).toBe(400);
+    expect(await empty.json()).toEqual({
+      error: "invalid_runner_order",
+      issues: [{ path: ["steps"], message: "Add at least one provider." }],
+    });
+
+    const twice = await put(workspace.id, jar, { steps: [{ key: "github" }, { key: "github" }] });
+    expect(twice.status).toBe(400);
+    expect(await twice.json()).toMatchObject({
+      issues: [{ path: ["steps", 1, "key"], message: "GitHub-hosted is already in the order." }],
+    });
+
+    const unknown = await put(workspace.id, jar, { steps: [{ key: "blacksmith" }] });
+    expect(unknown.status).toBe(400);
+
+    const read = await call(`/workspaces/${workspace.id}/runner-order`, jar);
+    expect(await read.json()).toMatchObject({ isDefault: true });
+  });
+
+  test("someone outside the workspace can't read or change its order", async () => {
+    const { cookie } = await signIn();
+    const { workspace } = await createWorkspace(cookie, "Order", "order-private");
+    const { cookie: outsider } = await signIn();
+
+    const read = await call(`/workspaces/${workspace.id}/runner-order`, outsider);
+    expect(read.status).toBe(404);
+    const write = await put(workspace.id, outsider, { steps: [{ key: "github" }] });
+    expect(write.status).toBe(404);
+
+    const signedOut = await app.request(`/api/workspaces/${workspace.id}/runner-order`, {}, env);
+    expect(signedOut.status).toBe(401);
+  });
+});
