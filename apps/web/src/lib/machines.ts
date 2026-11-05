@@ -6,6 +6,11 @@ export type Machine = {
   name: string;
   os: "linux" | "macos" | "windows" | null;
   arch: "x64" | "arm64" | "arm" | null;
+  /**
+   * The runner labels a job's `machine:` input matches against, in GitHub's spellings, such as
+   * `["self-hosted", "macOS", "ARM64"]`. Missing from an API that predates them.
+   */
+  labels?: string[];
   lastSeenAt: string | null;
   revokedAt: string | null;
   createdAt: string;
@@ -94,4 +99,13 @@ export function describeDeviceError(error: unknown) {
     default:
       return "Something went wrong. Try again.";
   }
+}
+
+/**
+ * The relay input line that targets a machine like this one. `self-hosted` matches every machine,
+ * so it's left out unless it's the only label.
+ */
+export function machineInput(labels: string[]) {
+  const specific = labels.filter((label) => label.toLowerCase() !== "self-hosted");
+  return `machine: ${(specific.length > 0 ? specific : labels).join(", ")}`;
 }

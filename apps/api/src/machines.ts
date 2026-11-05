@@ -1,6 +1,7 @@
 import { and, eq, isNull } from "drizzle-orm";
 import type { Db } from "./db/index.ts";
 import { schema } from "./db/index.ts";
+import { machineLabels } from "./routing.ts";
 
 // Machine tokens: what `relayrunner connect` holds after enrolling, and sends on the MachineLink
 // WebSocket upgrade. Only their SHA-256 is stored, so a leaked database can't impersonate a
@@ -45,6 +46,9 @@ export function presentMachine(machine: typeof schema.machine.$inferSelect) {
     name: machine.name,
     os: machine.os,
     arch: machine.arch,
+    // The labels routing matches a job's `machine` input against, so the dashboard shows exactly
+    // what matches.
+    labels: machineLabels(machine),
     lastSeenAt: machine.lastSeenAt,
     revokedAt: machine.revokedAt,
     createdAt: machine.createdAt,

@@ -277,6 +277,8 @@ describe("machines in the dashboard", () => {
         name: "build-box",
         os: "macos",
         arch: "arm64",
+        // The same labels routing matches on.
+        labels: ["self-hosted", "macOS", "ARM64"],
         status: { online: false, state: null, connectedAt: null },
       }),
     ]);

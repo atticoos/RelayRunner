@@ -26,6 +26,8 @@ import { createFileRoute, useRouter } from "@tanstack/react-router";
 import {
   ArrowDownIcon,
   ArrowUpIcon,
+  CheckIcon,
+  CopyIcon,
   GripVerticalIcon,
   InfoIcon,
   PlusIcon,
@@ -38,7 +40,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { authDisabled } from "@/lib/auth-client";
-import { listMachines, revokeMachine, timeAgo, type Machine } from "@/lib/machines";
+import { listMachines, machineInput, revokeMachine, timeAgo, type Machine } from "@/lib/machines";
 import { RunnerOrderError, getRunnerOrder, saveRunnerOrder } from "@/lib/runner-order";
 import { cn } from "@/lib/utils";
 
@@ -50,8 +52,6 @@ const machineBadge = {
   busy: { variant: "run", label: "Online · Busy" },
   offline: { variant: "idle", label: "Offline" },
 } as const;
-
-const osLabel = { linux: "Linux", macos: "macOS", windows: "Windows" } as const;
 
 export const Route = createFileRoute("/_authed/_workspace/runners")({
   loader: async ({ context }) => {
@@ -391,7 +391,6 @@ function MachineCard({ machine }: { machine: Machine }) {
     }
   }
 
-  const platform = [machine.os && osLabel[machine.os], machine.arch].filter(Boolean).join(" · ");
   // Previews talk to the production API, which may not send status yet: read that as offline.
   const status = machine.status ?? { online: false, state: null, connectedAt: null };
   const live = machineBadge[status.online ? (status.state ?? "idle") : "offline"];
@@ -407,12 +406,11 @@ function MachineCard({ machine }: { machine: Machine }) {
         <div className="grid gap-1">
           <CardTitle className="font-mono text-sm font-medium">{machine.name}</CardTitle>
           <CardDescription>
-            Your machine{platform && ` · ${platform}`}
-            {seen && <span className="block">{seen}</span>}
+            {seen || "Your machine"}
             {error && <span className="block text-destructive">{error}</span>}
           </CardDescription>
         </div>
-        <CardAction className="flex items-center gap-2">
+        <CardAction className="row-span-1 flex items-center gap-2">
           <Badge variant={live.variant}>{live.label}</Badge>
           {confirming ? (
             <>
@@ -439,7 +437,50 @@ function MachineCard({ machine }: { machine: Machine }) {
             </Button>
           )}
         </CardAction>
+        {/* Full width under the name and the actions, so the chips have room on a phone. */}
+        {machine.labels && machine.labels.length > 0 && <MachineLabels labels={machine.labels} />}
       </CardHeader>
     </Card>
+  );
+}
+
+// The labels a job's `machine:` input matches, and a button that copies the line to paste.
+function MachineLabels({ labels }: { labels: string[] }) {
+  const [copied, setCopied] = useState(false);
+  const line = machineInput(labels);
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(line);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard can be blocked (insecure origin, permissions); the button's title shows the line.
+    }
+  }
+
+  return (
+    <div className="col-span-2 flex flex-wrap items-center gap-1.5">
+      <ul className="contents" aria-label="Labels">
+        {labels.map((label) => (
+          <li key={label}>
+            <Badge variant="outline" className="font-mono font-normal">
+              {label}
+            </Badge>
+          </li>
+        ))}
+      </ul>
+      <Button
+        size="sm"
+        variant="ghost"
+        className="h-6 gap-1 px-1.5 text-xs text-muted-foreground"
+        title={line}
+        aria-label={copied ? "Copied" : `Copy ${line}`}
+        onClick={() => void copy()}
+      >
+        {copied ? <CheckIcon /> : <CopyIcon />}
+        {copied ? "Copied" : "Copy input"}
+      </Button>
+    </div>
   );
 }
