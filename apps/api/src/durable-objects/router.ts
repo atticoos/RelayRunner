@@ -7,6 +7,7 @@ import {
   chooseMachine,
   FALLBACK_RUNNER,
   holdsMachine,
+  lastPicked,
   newRouteId,
   routeLabel,
   ROUTE_TTL_MS,
@@ -58,7 +59,7 @@ export class Router extends DurableObject<Env> {
             ...(await this.env.MACHINE_LINK.getByName(machine.id).status()),
           })),
       );
-      const machine = chooseMachine(candidates, held);
+      const machine = chooseMachine(candidates, held, lastPicked(routes));
       if (!machine) return FALLBACK_RUNNER;
 
       const route: Route = {
