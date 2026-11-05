@@ -58,6 +58,7 @@ import {
   timeAgo,
   type Machine,
 } from "@/lib/machines";
+import { canManage } from "@/lib/roles";
 import { RunnerOrderError, getRunnerOrder, saveRunnerOrder } from "@/lib/runner-order";
 import { cn } from "@/lib/utils";
 
@@ -111,6 +112,8 @@ function RunnersPage() {
   const [steps, setSteps] = useState<RunnerStep[]>(loaded.order.steps);
   const [status, setStatus] = useState<SaveStatus>({ kind: "idle" });
   const dirty = keys(steps) !== keys(saved.steps);
+  // Owners and admins change the order (#134); members read it. The API refuses a member's save.
+  const editable = canManage(current.role);
   const unused = RUNNER_KEYS.filter((key) => !steps.some((step) => step.key === key));
 
   function change(next: RunnerStep[]) {
@@ -150,7 +153,10 @@ function RunnersPage() {
   return (
     <section>
       <PageHeader title="Runners" action={<AddRunner />}>
-        Jobs try these providers from top to bottom. Move a section to change the order.
+        Jobs try these providers from top to bottom.{" "}
+        {editable
+          ? "Move a section to change the order."
+          : "Owners and admins can change the order."}
       </PageHeader>
       <div className="grid max-w-3xl gap-3">
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
@@ -165,6 +171,7 @@ function RunnersPage() {
                   providerKey={step.key}
                   meta={meta(step.key, loaded.machines)}
                   position={index + 1}
+                  editable={editable}
                   canMoveUp={index > 0}
                   canMoveDown={index < steps.length - 1}
                   canRemove={steps.length > 1}
@@ -179,7 +186,11 @@ function RunnersPage() {
         </DndContext>
 
         {unused.map((key) => (
-          <UnusedSection key={key} providerKey={key} onAdd={() => change([...steps, { key }])}>
+          <UnusedSection
+            key={key}
+            providerKey={key}
+            onAdd={editable ? () => change([...steps, { key }]) : undefined}
+          >
             {body(key)}
           </UnusedSection>
         ))}
@@ -245,6 +256,7 @@ function ProviderSection({
   providerKey,
   meta,
   position,
+  editable,
   canMoveUp,
   canMoveDown,
   canRemove,
@@ -255,6 +267,7 @@ function ProviderSection({
   providerKey: RunnerKey;
   meta: string;
   position: number;
+  editable: boolean;
   canMoveUp: boolean;
   canMoveDown: boolean;
   canRemove: boolean;
@@ -270,7 +283,7 @@ function ProviderSection({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: providerKey });
+  } = useSortable({ id: providerKey, disabled: !editable });
   const label = RUNNER_LABELS[providerKey];
 
   return (
@@ -283,16 +296,18 @@ function ProviderSection({
       )}
     >
       <div className="flex items-center gap-2 bg-secondary px-2.5 py-2 sm:gap-3">
-        <button
-          ref={setActivatorNodeRef}
-          type="button"
-          aria-label={`Drag ${label}`}
-          className="hidden size-7 shrink-0 cursor-grab touch-none items-center justify-center rounded text-muted-foreground hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none active:cursor-grabbing sm:flex"
-          {...attributes}
-          {...listeners}
-        >
-          <GripVerticalIcon aria-hidden className="size-4" />
-        </button>
+        {editable && (
+          <button
+            ref={setActivatorNodeRef}
+            type="button"
+            aria-label={`Drag ${label}`}
+            className="hidden size-7 shrink-0 cursor-grab touch-none items-center justify-center rounded text-muted-foreground hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none active:cursor-grabbing sm:flex"
+            {...attributes}
+            {...listeners}
+          >
+            <GripVerticalIcon aria-hidden className="size-4" />
+          </button>
+        )}
         <span className="flex size-6 shrink-0 items-center justify-center rounded-full border font-mono text-xs text-muted-foreground tabular-nums">
           {position}
         </span>
@@ -300,36 +315,38 @@ function ProviderSection({
           <h2 className="text-sm font-semibold">{label}</h2>
           <p className="text-xs text-muted-foreground">{meta}</p>
         </div>
-        <div className="flex shrink-0 items-center">
-          <Button
-            size="icon-sm"
-            variant="ghost"
-            aria-label={`Move ${label} up`}
-            disabled={!canMoveUp}
-            onClick={() => onMove(-1)}
-          >
-            <ArrowUpIcon aria-hidden />
-          </Button>
-          <Button
-            size="icon-sm"
-            variant="ghost"
-            aria-label={`Move ${label} down`}
-            disabled={!canMoveDown}
-            onClick={() => onMove(1)}
-          >
-            <ArrowDownIcon aria-hidden />
-          </Button>
-          <Button
-            size="icon-sm"
-            variant="ghost"
-            aria-label={`Remove ${label} from the order`}
-            title={canRemove ? undefined : "The order needs at least one provider."}
-            disabled={!canRemove}
-            onClick={onRemove}
-          >
-            <XIcon aria-hidden />
-          </Button>
-        </div>
+        {editable && (
+          <div className="flex shrink-0 items-center">
+            <Button
+              size="icon-sm"
+              variant="ghost"
+              aria-label={`Move ${label} up`}
+              disabled={!canMoveUp}
+              onClick={() => onMove(-1)}
+            >
+              <ArrowUpIcon aria-hidden />
+            </Button>
+            <Button
+              size="icon-sm"
+              variant="ghost"
+              aria-label={`Move ${label} down`}
+              disabled={!canMoveDown}
+              onClick={() => onMove(1)}
+            >
+              <ArrowDownIcon aria-hidden />
+            </Button>
+            <Button
+              size="icon-sm"
+              variant="ghost"
+              aria-label={`Remove ${label} from the order`}
+              title={canRemove ? undefined : "The order needs at least one provider."}
+              disabled={!canRemove}
+              onClick={onRemove}
+            >
+              <XIcon aria-hidden />
+            </Button>
+          </div>
+        )}
       </div>
       {children && <div className="grid gap-2 border-t p-2">{children}</div>}
     </li>
@@ -343,7 +360,8 @@ function UnusedSection({
   children,
 }: {
   providerKey: RunnerKey;
-  onAdd: () => void;
+  /** Missing for members, who can't change the order. */
+  onAdd?: () => void;
   children: ReactNode;
 }) {
   return (
@@ -355,10 +373,12 @@ function UnusedSection({
           </h2>
           <p className="text-xs text-muted-foreground">Not in the order. Jobs never run here.</p>
         </div>
-        <Button size="sm" variant="outline" onClick={onAdd}>
-          <PlusIcon aria-hidden />
-          Add to order
-        </Button>
+        {onAdd && (
+          <Button size="sm" variant="outline" onClick={onAdd}>
+            <PlusIcon aria-hidden />
+            Add to order
+          </Button>
+        )}
       </div>
       {children && (
         <div className="grid gap-2 border-t border-dashed p-2 opacity-70">{children}</div>

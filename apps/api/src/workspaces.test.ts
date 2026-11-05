@@ -291,3 +291,36 @@ describe("roles (#134)", () => {
     expect(await code(remove)).toBe("YOU_ARE_NOT_ALLOWED_TO_DELETE_THIS_MEMBER");
   });
 });
+
+describe("machine counts (#136)", () => {
+  test("counts each member's live, claimed machines and nobody else's", async () => {
+    const { user, cookie } = await signIn();
+    const { workspace, cookie: jar } = await createWorkspace(cookie, "Counts", "counts");
+    const member = await testing.joinWorkspace(env, workspace.id, "member");
+    const other = await createWorkspace((await signIn()).cookie, "Other", "counts-other");
+
+    const insert = (id: string, workspaceId: string, createdBy: string, extra = "") =>
+      env.DB.prepare(
+        `insert into machine (id, workspace_id, name, os, arch, created_by, revoked_at, created_at, updated_at)
+         values (?, ?, ?, ${extra.includes("pending") ? "null" : "'macos'"}, 'arm64', ?, ${
+           extra.includes("revoked") ? "1" : "null"
+         }, 1, 1)`,
+      )
+        .bind(id, workspaceId, id, createdBy)
+        .run();
+    await insert("count-a", workspace.id, user.id);
+    await insert("count-b", workspace.id, user.id);
+    await insert("count-c", workspace.id, member.user.id);
+    await insert("count-revoked", workspace.id, member.user.id, "revoked");
+    await insert("count-pending", workspace.id, member.user.id, "pending");
+    await insert("count-other", other.workspace.id, user.id);
+
+    for (const viewer of [jar, member.cookie]) {
+      const response = await call("/workspaces/current/machine-counts", viewer);
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({
+        counts: { [user.id]: 2, [member.user.id]: 1 },
+      });
+    }
+  });
+});

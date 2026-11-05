@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/card";
 import { ApiError } from "@/lib/api";
 import { authDisabled, signIn } from "@/lib/auth-client";
+import { canManage } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 import { githubOutcomes as outcomes, isGitHubOutcome, type GitHubOutcome } from "@/lib/github";
 import {
@@ -28,8 +29,11 @@ export const Route = createFileRoute("/_authed/_workspace/settings/github")({
   validateSearch: (search: Record<string, unknown>): { github?: GitHubOutcome } => ({
     github: isGitHubOutcome(search.github) ? search.github : undefined,
   }),
-  loader: (): Promise<UnclaimedInstallations> =>
-    authDisabled ? Promise.resolve({ installations: [] }) : getUnclaimedInstallations(),
+  // Only owners and admins can claim, so members skip the GitHub lookup.
+  loader: ({ context }): Promise<UnclaimedInstallations> =>
+    authDisabled || !canManage(context.current.role)
+      ? Promise.resolve({ installations: [] })
+      : getUnclaimedInstallations(),
   component: GitHubSettingsPage,
 });
 
@@ -38,6 +42,7 @@ function GitHubSettingsPage() {
   const { github } = Route.useSearch();
   const unclaimed = Route.useLoaderData();
   const { workspace, installations } = current;
+  const manager = canManage(current.role);
 
   return (
     <section>
@@ -52,17 +57,20 @@ function GitHubSettingsPage() {
             <CardTitle className="text-sm">Connected</CardTitle>
             <CardDescription>
               Where the RelayRunner GitHub App is installed for {workspace.name}.
+              {!manager && " Owners and admins connect GitHub orgs."}
             </CardDescription>
-            <CardAction>
-              <Button asChild size="sm" variant={installations.length ? "outline" : "default"}>
-                {/* A full page load: this leaves the dashboard for GitHub's install page. GitHub
+            {manager && (
+              <CardAction>
+                <Button asChild size="sm" variant={installations.length ? "outline" : "default"}>
+                  {/* A full page load: this leaves the dashboard for GitHub's install page. GitHub
                     lists only accounts that can take a new install; with none left it opens the
                     existing installation's settings instead. */}
-                <a href="/api/github/install">
-                  {installations.length ? "Connect another org" : "Connect GitHub org"}
-                </a>
-              </Button>
-            </CardAction>
+                  <a href="/api/github/install">
+                    {installations.length ? "Connect another org" : "Connect GitHub org"}
+                  </a>
+                </Button>
+              </CardAction>
+            )}
           </CardHeader>
           <CardContent className="px-4">
             {installations.length === 0 ? (
@@ -77,12 +85,14 @@ function GitHubSettingsPage() {
           </CardContent>
         </Card>
 
-        <UnclaimedCard
-          workspaceName={workspace.name}
-          unclaimed={unclaimed}
-          // The notice above already has a sign-in prompt.
-          hideSignIn={github === "reauth"}
-        />
+        {manager && (
+          <UnclaimedCard
+            workspaceName={workspace.name}
+            unclaimed={unclaimed}
+            // The notice above already has a sign-in prompt.
+            hideSignIn={github === "reauth"}
+          />
+        )}
       </div>
     </section>
   );
