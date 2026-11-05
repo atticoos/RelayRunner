@@ -5,23 +5,21 @@ on:
 
 jobs:
   relay:
-    uses: relayrunner/actions/.github/workflows/relay.yml@v1.0.0-beta.1
+    uses: relayrunner/actions/.github/workflows/relay.yml@v1.0.0-beta.2
+    with:
+      github: ubuntu-latest
 
   test:
     needs: relay
-    if: ${{ !cancelled() }}
-    runs-on: ${{ needs.relay.outputs.runner || 'ubuntu-latest' }}
+    runs-on: ${{ needs.relay.outputs.runner }}
     steps:
       - name: Report route
         env:
           CHOSEN_RUNNER: ${{ needs.relay.outputs.runner }}
-          RELAY_RESULT: ${{ needs.relay.result }}
         run: |
-          route="${CHOSEN_RUNNER:-ubuntu-latest}"
-          source="gateway"
-          if [ -z "$CHOSEN_RUNNER" ]; then source="fallback (relay result: $RELAY_RESULT)"; fi
+          route="$CHOSEN_RUNNER"
 
-          echo "Routed to: $route ($source)"
+          echo "Routed to: $route"
           echo "Runner name: $RUNNER_NAME"
           uname -a
 
@@ -31,7 +29,6 @@ jobs:
             echo "| | |"
             echo "| --- | --- |"
             echo "| Chosen runner | \`$route\` |"
-            echo "| Source | $source |"
             echo "| Runner name | \`$RUNNER_NAME\` |"
             echo "| OS / arch | $RUNNER_OS / $RUNNER_ARCH |"
           } >> "$GITHUB_STEP_SUMMARY"

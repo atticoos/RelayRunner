@@ -65,8 +65,8 @@ List the workflows in `.github/workflows/` and the jobs in each. Suggest jobs th
 this computer, and let the user pick. A job is a good fit when:
 
 - it runs on a GitHub-hosted label today, such as `ubuntu-latest`. When the computer is offline
-  or busy, an opted-in job runs on the relay's fallback label, which is `ubuntu-latest` unless
-  you set it (see step 5).
+  or busy, an opted-in job runs on that label, which you pass to the relay's `github` input (see
+  step 5).
 - it has **no** `strategy.matrix`. Each routed job needs its own relay, so a matrix can't share
   one.
 - it has no `container:` or `services:`, unless this computer is Linux with Docker running.
@@ -98,36 +98,35 @@ After:
 ```yaml
 jobs:
   relay-test:
-    uses: relayrunner/actions/.github/workflows/relay.yml@v1.0.0-beta.1
+    uses: relayrunner/actions/.github/workflows/relay.yml@v1.0.0-beta.2
+    with:
+      machine: self-hosted
+      github: ubuntu-latest
 
   test:
     needs: relay-test
-    if: ${{ !cancelled() }}
-    runs-on: ${{ needs.relay-test.outputs.runner || 'ubuntu-latest' }}
+    runs-on: ${{ needs.relay-test.outputs.runner }}
     steps:
       - uses: actions/checkout@v4
       - run: npm test
 ```
 
 Use the `uses:` line exactly as shown. GitHub needs the full path to a reusable workflow, and
-the tag pins the version. If the job used another runner label before, keep it as the
-fallback, both in the relay's `fallback` input and in the `||`:
+the tag pins the version. The relay's inputs say which runners can take the job:
 
-```yaml
-relay-test:
-  uses: relayrunner/actions/.github/workflows/relay.yml@v1.0.0-beta.1
-  with:
-    fallback: ubuntu-24.04
-```
+- `machine` lists labels a machine must have, comma-separated, and a machine needs all of them.
+  `self-hosted` means any of the user's machines. To keep a job on matching machines only, name
+  the OS or architecture, such as `machine: macOS, ARM64`. Without `machine`, the job never runs
+  on the user's machines.
+- `github` is the GitHub-hosted label to use when no machine fits. Put the job's old
+  `runs-on` label here, such as `ubuntu-24.04` or `macos-latest`.
+
+If no runner fits, the relay fails with the reason, and the job doesn't start.
 
 Keep everything else in the job as it is. Watch out for these cases:
 
 - **The job already has `needs:`.** Add the relay to the list (`needs: [build, relay-test]`).
-  Keep the job from running after one of its original dependencies fails by requiring each one
-  to succeed:
-  `if: ${{ !cancelled() && needs.build.result == 'success' }}`. Don't require the relay to
-  succeed: if it fails, the job runs on its fallback label.
-- **The job already has `if:`.** Combine it: `if: ${{ !cancelled() && (<existing condition>) }}`.
+- **The job already has `if:`.** Keep it as it is.
 - **Other jobs depend on this one.** Leave them alone. They still depend on `test`.
 
 Show the user the full diff and wait for their approval before you write it. Then tell them
@@ -139,7 +138,7 @@ GitHub.
 After the user pushes, a run of an opted-in job shows `relay-<job> / RelayRunner` finishing in
 about a second, then the job itself. In the job's log, the runner name tells where it ran: a name starting
 with this computer's machine name (from `relayrunner whoami`) means it ran here, and a
-GitHub-hosted name means the fallback. If `relay-<job> / RelayRunner` stays
+GitHub-hosted name means the `github` label. If `relay-<job> / RelayRunner` stays
 queued, the GitHub App is probably not installed on the repo's organization.
 The user can check under Settings → GitHub orgs in the dashboard.
 
