@@ -48,11 +48,3 @@ export function isGitHubOutcome(value: unknown): value is GitHubOutcome {
 export function githubInstallHref(next?: string) {
   return next ? `/api/github/install?next=${encodeURIComponent(next)}` : "/api/github/install";
 }
-
-/** A same-origin dashboard path, or undefined. Guards `?redirect=` values before navigating. */
-export function dashboardPath(value: unknown): string | undefined {
-  if (typeof value !== "string" || !value.startsWith("/") || value.startsWith("//"))
-    return undefined;
-  if (value.startsWith("/\\")) return undefined;
-  return value;
-}

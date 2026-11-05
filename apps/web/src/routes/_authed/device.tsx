@@ -1,7 +1,8 @@
-import { Link, createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
 import { CheckIcon } from "lucide-react";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Brand } from "@/components/brand";
+import { CreateWorkspaceForm } from "@/components/create-workspace-form";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -38,7 +39,7 @@ import {
 // walks them through every step and back here each time:
 //
 // 1. Sign in (the _authed guard sends them to /login and back; GitHub sign-in creates the account).
-// 2. Create a workspace (/workspaces/new?redirect=<this page>).
+// 2. Create a workspace, right here.
 // 3. Connect GitHub: install the App (/api/github/install?next=<this page>), or add an install
 //    they already made. A non-admin's install only sends a request to the org's owners, so with
 //    ?github=requested they may carry on and jobs start once an owner accepts.
@@ -277,19 +278,21 @@ function useReturnPath() {
 }
 
 function CreateWorkspaceStep() {
-  const back = useReturnPath();
+  const router = useRouter();
   return (
-    <Message
-      title="Create a workspace"
-      body="Your machines and GitHub orgs live in a workspace. Create one to connect this machine to; you'll come right back here."
-      action={
-        <Button asChild size="lg" className="w-full font-bold">
-          <Link to="/workspaces/new" search={{ redirect: back }}>
-            Create a workspace
-          </Link>
-        </Button>
-      }
-    />
+    <Card className="w-full">
+      <CardHeader>
+        <CardTitle>Create a workspace</CardTitle>
+        <CardDescription>
+          Your machines and GitHub orgs live in a workspace. Name one to connect this machine to.
+          You'll be its owner.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {/* Creating it makes it active; reloading the page's data moves on to the GitHub step. */}
+        <CreateWorkspaceForm onCreated={() => router.invalidate()} />
+      </CardContent>
+    </Card>
   );
 }
 
