@@ -16,6 +16,7 @@ import {
   Plus,
   Unplug,
   UserCheck,
+  UserMinus,
   UserPlus,
   UserX,
 } from "lucide-react";
@@ -203,6 +204,7 @@ function sentence(item: ActivityItem) {
     case "member.invited":
     case "member.invite_canceled":
     case "member.joined":
+    case "member.removed":
       return memberSentence(item);
   }
 }
@@ -216,6 +218,8 @@ function memberSentence(item: ActivityItem) {
       return `cancelled the invite for ${item.data.email}`;
     case "member.joined":
       return `joined as ${article(item.data.role)}`;
+    case "member.removed":
+      return item.data.left ? "left the workspace" : `removed ${item.data.memberName}`;
     default:
       return "";
   }
@@ -232,6 +236,7 @@ const EVENT_ICONS = {
   "machine.paused": Pause,
   "machine.resumed": Play,
   "machine.revoked": Ban,
+  "member.removed": UserMinus,
   "job.routed": Laptop,
   "job.unroutable": Ban,
   "member.invited": UserPlus,
@@ -376,7 +381,12 @@ function EventRow({ item, now }: { item: ActivityItem; now: number }) {
   const Icon = EVENT_ICONS[item.type];
   const online = item.type === "machine.connected";
   if (item.type.startsWith("member.")) {
-    const who = item.type === "member.joined" ? item.data.name : item.actor?.name;
+    const who =
+      item.type === "member.joined"
+        ? item.data.name
+        : item.type === "member.removed" && item.data.left
+          ? (item.actor?.name ?? item.data.memberName)
+          : item.actor?.name;
     return (
       <Row
         icon={
@@ -747,6 +757,24 @@ function samplePage(filter: ActivityFilter | undefined): ActivityPage {
           ...relay,
         },
       }),
+    },
+    {
+      id: 9,
+      type: "machine.revoked",
+      data: { machineName: "zach-studio" },
+      occurredAt: at(14.9),
+      actor: { id: "u1", name: "Atticus White" },
+      machine: { id: "m2", name: "zach-studio" },
+      job: null,
+    },
+    {
+      id: 8,
+      type: "member.removed",
+      data: { memberName: "Zach", left: false },
+      occurredAt: at(15),
+      actor: { id: "u1", name: "Atticus White" },
+      machine: null,
+      job: null,
     },
     {
       id: 12,

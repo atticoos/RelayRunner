@@ -1,7 +1,8 @@
-import { and, eq, isNotNull, isNull } from "drizzle-orm";
+import { type SQL, and, eq, isNotNull, isNull } from "drizzle-orm";
 import { recordEvent } from "./activity.ts";
 import type { Db } from "./db/index.ts";
 import { schema } from "./db/index.ts";
+import type { Env } from "./env.ts";
 import { machineLabels } from "./routing.ts";
 
 // Machine tokens: what `relayrunner connect` holds after enrolling, and sends on the MachineLink
@@ -69,6 +70,31 @@ function base64Url(bytes: Uint8Array) {
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
     .replace(/=+$/, "");
+}
+
+/**
+ * Revokes every live machine `where` matches: the token stops working (its hash is dropped, so it
+ * can never match again), each machine logs `machine.revoked` with the actor, and its open
+ * MachineLink socket closes, ending any running job. Returns the machines it revoked.
+ */
+export async function revokeMachines(env: Env, db: Db, where: SQL, actorUserId: string | null) {
+  const machines = await db
+    .update(schema.machine)
+    .set({ revokedAt: new Date(), tokenHash: null, enrollmentHash: null })
+    .where(and(where, isNull(schema.machine.revokedAt)))
+    .returning();
+  for (const machine of machines) {
+    await recordEvent(db, {
+      workspaceId: machine.workspaceId,
+      type: "machine.revoked",
+      data: { machineName: machine.name },
+      machineId: machine.id,
+      actorUserId,
+    });
+  }
+  // The tokens can't open a new socket any more; close the ones that are open.
+  await Promise.all(machines.map((machine) => env.MACHINE_LINK.getByName(machine.id).revoke()));
+  return machines;
 }
 
 export type PauseVia = "dashboard" | "cli";

@@ -80,6 +80,12 @@ export const ActivityEvent = z.discriminatedUnion("type", [
   }),
   // Someone removed the machine from the workspace. Actor: that user.
   z.object({ type: z.literal("machine.revoked"), data: z.object(machineData) }),
+  // Someone left the workspace (`left`), or an owner or admin removed them. Actor: whoever did it.
+  // Each machine they enrolled there is revoked right after, logging its own machine.revoked.
+  z.object({
+    type: z.literal("member.removed"),
+    data: z.object({ memberName: z.string(), left: z.boolean() }),
+  }),
   // An owner or admin invited someone by email (#135). Re-inviting the same email logs it again.
   // Actor: the inviter.
   z.object({
