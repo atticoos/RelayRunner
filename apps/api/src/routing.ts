@@ -64,6 +64,38 @@ export interface Candidate {
   name: string;
   online: boolean;
   state: "idle" | "busy" | null;
+  // The machine's runner labels (machineLabels).
+  labels: string[];
+}
+
+// GitHub's default self-hosted runner labels, so a job's `runs-on` list can be copied into the
+// relay's `machine` input as-is.
+const OS_LABELS: Record<string, string> = { linux: "Linux", macos: "macOS", windows: "Windows" };
+const ARCH_LABELS: Record<string, string> = { x64: "X64", arm64: "ARM64", arm: "ARM" };
+
+/** A machine's labels from its stored os and arch: `self-hosted`, then OS and arch when known. */
+export function machineLabels(machine: { os: string | null; arch: string | null }): string[] {
+  const labels = ["self-hosted"];
+  const os = machine.os ? OS_LABELS[machine.os] : undefined;
+  const arch = machine.arch ? ARCH_LABELS[machine.arch] : undefined;
+  if (os) labels.push(os);
+  if (arch) labels.push(arch);
+  return labels;
+}
+
+/** A relay input's labels: comma-separated, trimmed, empties dropped. */
+export function parseLabels(input: unknown): string[] {
+  if (typeof input !== "string") return [];
+  return input
+    .split(",")
+    .map((label) => label.trim())
+    .filter(Boolean);
+}
+
+/** Whether a machine has every wanted label, ignoring case as GitHub does. */
+export function hasLabels(machine: string[], wanted: string[]) {
+  const have = new Set(machine.map((label) => label.toLowerCase()));
+  return wanted.every((label) => have.has(label.toLowerCase()));
 }
 
 /** When each machine was last picked: the newest route per machine. */
@@ -78,18 +110,21 @@ export function lastPicked(routes: Route[]): Map<string, number> {
 }
 
 /**
- * The online, idle machine no route holds that was least recently picked, or null. Machines
- * never picked come first; ties keep the candidates' order.
+ * Of the machines with every wanted label, the online, idle one no route holds that was least
+ * recently picked, or null. Machines never picked come first; ties keep the candidates' order.
+ * No wanted labels means none is required; a job that names no machine labels doesn't get here.
  */
 export function chooseMachine(
   candidates: Candidate[],
   held: Set<string>,
   picked: Map<string, number> = new Map(),
+  wanted: string[] = [],
 ): Candidate | null {
   let best: Candidate | null = null;
   let bestAt = Infinity;
   for (const machine of candidates) {
     if (!machine.online || machine.state !== "idle" || held.has(machine.id)) continue;
+    if (!hasLabels(machine.labels, wanted)) continue;
     const at = picked.get(machine.id) ?? -Infinity;
     if (at < bestAt) {
       best = machine;
@@ -122,15 +157,22 @@ export function machineRunnerName(machineName: string, routeId: string) {
   return `${base}-${routeId}`;
 }
 
-// The parts of a claimed job's `github` context the Router needs.
+// What the Router needs from a claimed job: its repo and run from the `github` context, and the
+// relay's per-provider inputs from `inputs`.
 export interface JobContext {
   repo: string;
   runId: number;
+  // Labels a machine must all have. Empty when the relay's `machine` input is left out or empty:
+  // the job doesn't use machines.
+  machine: string[];
+  // The GitHub-hosted runner label(s) from the relay's `github` input. Empty when left out.
+  github: string[];
 }
 
 // The job message carries its expression contexts in `contextData`, as the runner's
 // PipelineContextData JSON: a dictionary is {t: 2, d: [{k, v}]}, a string is a bare JSON string,
 // and a number is {t: 4, n}. Returns null when `github.repository` or `github.run_id` is missing.
+// Missing `inputs` (a relay older than per-provider inputs) reads as no labels.
 export function jobContext(contextData: unknown): JobContext | null {
   const github = dictionary(isRecord(contextData) ? contextData.github : undefined);
   if (!github) return null;
@@ -138,7 +180,13 @@ export function jobContext(contextData: unknown): JobContext | null {
   const runId = Number(scalar(github.get("run_id")));
   if (typeof repo !== "string" || !repo.includes("/") || !Number.isSafeInteger(runId) || runId <= 0)
     return null;
-  return { repo, runId };
+  const inputs = dictionary(isRecord(contextData) ? contextData.inputs : undefined);
+  return {
+    repo,
+    runId,
+    machine: parseLabels(scalar(inputs?.get("machine"))),
+    github: parseLabels(scalar(inputs?.get("github"))),
+  };
 }
 
 function dictionary(value: unknown): Map<string, unknown> | null {
