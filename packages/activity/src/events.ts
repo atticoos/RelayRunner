@@ -60,6 +60,22 @@ export const ActivityEvent = z.discriminatedUnion("type", [
   }),
   // Someone removed the machine from the workspace. Actor: that user.
   z.object({ type: z.literal("machine.revoked"), data: z.object(machineData) }),
+  // An owner or admin invited someone by email (#135). Re-inviting the same email logs it again.
+  // Actor: the inviter.
+  z.object({
+    type: z.literal("member.invited"),
+    data: z.object({ email: z.string(), role: z.string() }),
+  }),
+  // An owner or admin cancelled a pending invite. Actor: that user.
+  z.object({
+    type: z.literal("member.invite_canceled"),
+    data: z.object({ email: z.string(), role: z.string() }),
+  }),
+  // Someone accepted an invite and joined. Actor: the new member.
+  z.object({
+    type: z.literal("member.joined"),
+    data: z.object({ name: z.string(), email: z.string(), role: z.string() }),
+  }),
   // RelayRunner routed a job (a job in a run with a `runs-on: relayrunner` pick). Its row shows the
   // job's live state, so there is one event per job, not one per status change.
   z.object({ type: z.literal("job.routed"), data: z.object({}) }),
@@ -85,5 +101,5 @@ export type ActivityEvent = z.infer<typeof ActivityEvent>;
 export type ActivityEventType = ActivityEvent["type"];
 
 /** The Activity page's filters: the part of the type before the dot. */
-export const ACTIVITY_FILTERS = ["job", "machine"] as const;
+export const ACTIVITY_FILTERS = ["job", "machine", "member"] as const;
 export type ActivityFilter = (typeof ACTIVITY_FILTERS)[number];

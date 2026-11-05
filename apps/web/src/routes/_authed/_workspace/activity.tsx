@@ -13,6 +13,9 @@ import {
   Plug,
   Plus,
   Unplug,
+  UserCheck,
+  UserPlus,
+  UserX,
 } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { PageHeader } from "@/components/page-header";
@@ -42,6 +45,7 @@ const FILTERS: { value: ActivityFilter | undefined; label: string }[] = [
   { value: undefined, label: "All" },
   { value: "job", label: "Jobs" },
   { value: "machine", label: "Machines" },
+  { value: "member", label: "Members" },
 ];
 
 function ActivityPage() {
@@ -106,7 +110,9 @@ function ActivityPage() {
 
   return (
     <section>
-      <PageHeader title="Activity">Routed jobs and machine events, newest first.</PageHeader>
+      <PageHeader title="Activity">
+        Routed jobs, machine events and member changes, newest first.
+      </PageHeader>
       <div className="grid max-w-4xl gap-2">
         <div role="group" aria-label="Show" className="flex gap-1.5">
           {FILTERS.map(({ value, label }) => (
@@ -125,6 +131,8 @@ function ActivityPage() {
           <p className="rounded-xl border bg-card px-4 py-6 text-sm text-muted-foreground">
             {filter === "machine" ? (
               <>Nothing yet. Machines show up here when they enroll, connect or disconnect.</>
+            ) : filter === "member" ? (
+              <>Nothing yet. Invites and new members show up here.</>
             ) : (
               <>
                 Nothing yet. Add a{" "}
@@ -186,7 +194,29 @@ function sentence(item: ActivityItem) {
       return "routed a job";
     case "job.unroutable":
       return "couldn't route a job";
+    case "member.invited":
+    case "member.invite_canceled":
+    case "member.joined":
+      return memberSentence(item);
   }
+}
+
+// Member events lead with who did it: "Atticus invited ada@example.com as an admin".
+function memberSentence(item: ActivityItem) {
+  switch (item.type) {
+    case "member.invited":
+      return `invited ${item.data.email} as ${article(item.data.role)}`;
+    case "member.invite_canceled":
+      return `cancelled the invite for ${item.data.email}`;
+    case "member.joined":
+      return `joined as ${article(item.data.role)}`;
+    default:
+      return "";
+  }
+}
+
+function article(role: string) {
+  return /^[aeiou]/i.test(role) ? `an ${role}` : `a ${role}`;
 }
 
 const EVENT_ICONS = {
@@ -196,6 +226,9 @@ const EVENT_ICONS = {
   "machine.revoked": Ban,
   "job.routed": Laptop,
   "job.unroutable": Ban,
+  "member.invited": UserPlus,
+  "member.invite_canceled": UserX,
+  "member.joined": UserCheck,
 } as const;
 
 const ICON = "size-3.5 shrink-0";
@@ -334,6 +367,26 @@ function WalkLines({ walk, runner }: { walk: RouteWalk; runner: string | null })
 function EventRow({ item, now }: { item: ActivityItem; now: number }) {
   const Icon = EVENT_ICONS[item.type];
   const online = item.type === "machine.connected";
+  if (item.type.startsWith("member.")) {
+    const who = item.type === "member.joined" ? item.data.name : item.actor?.name;
+    return (
+      <Row
+        icon={
+          <Icon
+            aria-hidden
+            className={
+              item.type === "member.joined" ? `${ICON} text-go` : `${ICON} text-muted-foreground`
+            }
+          />
+        }
+        at={item.occurredAt}
+        now={now}
+      >
+        <span className="font-medium">{who ?? "Someone"}</span>{" "}
+        <span className="text-muted-foreground">{memberSentence(item)}</span>
+      </Row>
+    );
+  }
   return (
     <Row
       icon={
@@ -647,6 +700,24 @@ function samplePage(filter: ActivityFilter | undefined): ActivityPage {
           ...relay,
         },
       }),
+    },
+    {
+      id: 12,
+      type: "member.joined",
+      data: { name: "Ada Lovelace", email: "ada@example.com", role: "admin" },
+      occurredAt: at(20),
+      actor: { id: "u2", name: "Ada Lovelace" },
+      machine: null,
+      job: null,
+    },
+    {
+      id: 11,
+      type: "member.invited",
+      data: { email: "ada@example.com", role: "admin" },
+      occurredAt: at(45),
+      actor: { id: "u1", name: "Atticus White" },
+      machine: null,
+      job: null,
     },
     {
       id: 2,
