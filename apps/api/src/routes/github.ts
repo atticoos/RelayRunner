@@ -21,6 +21,7 @@ import {
 } from "../installations.ts";
 import { requireUser } from "../middleware/session.ts";
 import { requireWorkspace } from "../middleware/workspace.ts";
+import { canManage, requireManager } from "../roles.ts";
 
 // Connecting GitHub orgs (GitHub App installations) to workspaces.
 //
@@ -51,11 +52,8 @@ type SetupOutcome =
   | "reauth"
   | "invalid";
 
-const MANAGER_ROLES = new Set(["owner", "admin"]);
-
 export const githubRoutes = new Hono<AppEnv>()
-  .get("/install", requireUser, requireWorkspace, async (c) => {
-    if (!MANAGER_ROLES.has(c.var.role)) return c.json({ error: "forbidden" }, 403);
+  .get("/install", requireUser, requireWorkspace, requireManager, async (c) => {
     if (!c.env.GITHUB_APP_SLUG) return c.json({ error: "github_app_slug_not_configured" }, 500);
     const state = await signInstallState(
       c.env.BETTER_AUTH_SECRET,
@@ -104,7 +102,7 @@ export const githubRoutes = new Hono<AppEnv>()
       // A stale or someone else's link: keep the installation, unclaimed, for the user to claim.
       if (!state || state.userId !== user.id) return done("expired");
       const membership = await isWorkspaceMember(db, state.workspaceId, user.id);
-      if (!membership || !MANAGER_ROLES.has(membership.role)) return done("expired");
+      if (!membership || !canManage(membership.role)) return done("expired");
       const result = await linkInstallation(db, installationId, state.workspaceId);
       return done(result === "taken" ? "taken" : "connected");
     }
@@ -142,8 +140,7 @@ export const githubRoutes = new Hono<AppEnv>()
     return c.json({ installations: rows.map(present) });
   })
 
-  .post("/installations/:id/claim", requireUser, requireWorkspace, async (c) => {
-    if (!MANAGER_ROLES.has(c.var.role)) return c.json({ error: "forbidden" }, 403);
+  .post("/installations/:id/claim", requireUser, requireWorkspace, requireManager, async (c) => {
     const installationId = Number(c.req.param("id"));
     if (!Number.isSafeInteger(installationId) || installationId <= 0)
       return c.json({ error: "not_found" }, 404);

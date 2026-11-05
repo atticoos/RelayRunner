@@ -19,6 +19,7 @@ import {
 import { sendEmail } from "../email.ts";
 import { requireUser, waitUntil } from "../middleware/session.ts";
 import { requireWorkspace } from "../middleware/workspace.ts";
+import { canManage, canRevokeMachine } from "../roles.ts";
 
 // Enrolling a machine (`relayrunner connect`) with Better Auth's device authorization plugin:
 //
@@ -36,8 +37,6 @@ import { requireWorkspace } from "../middleware/workspace.ts";
 //
 // Once enrolled, the CLI stays connected over GET /connect below, a WebSocket to the machine's
 // MachineLink Durable Object speaking @relayrunner/machine-protocol.
-
-const MANAGER_ROLES = new Set(["owner", "admin"]);
 
 const ApproveBody = z.object({
   userCode: z.string().min(1).max(64),
@@ -61,8 +60,8 @@ export const machineRoutes = new Hono<AppEnv>()
     const db = createDb(c.env.DB);
 
     const membership = await isWorkspaceMember(db, workspaceId, user.id);
-    if (!membership || !MANAGER_ROLES.has(membership.role))
-      return c.json({ error: "forbidden" }, 403);
+    // Any member can enroll a machine into the shared pool (#134).
+    if (!membership) return c.json({ error: "forbidden" }, 403);
 
     // Opening the code ties it to this user (Better Auth only lets that user approve it). The
     // dashboard has already done this, but doing it here keeps the endpoint whole on its own.
@@ -224,24 +223,39 @@ export const machineRoutes = new Hono<AppEnv>()
       machines.map((machine) => c.env.MACHINE_LINK.getByName(machine.id).status()),
     );
     return c.json({
-      machines: machines.map((machine, i) => ({ ...presentMachine(machine), status: statuses[i] })),
+      machines: machines.map((machine, i) => ({
+        ...presentMachine(machine),
+        status: statuses[i],
+        // Whether the signed-in user may revoke it (#134), so the dashboard can hide the action.
+        canRevoke: canRevokeMachine(c.var.role, c.var.user!.id, machine),
+      })),
     });
   })
   .delete("/:id", requireUser, requireWorkspace, async (c) => {
-    if (!MANAGER_ROLES.has(c.var.role)) return c.json({ error: "forbidden" }, 403);
-    const [machine] = await c.var.db
+    const machineId = c.req.param("id");
+    const { role, user, workspace, db } = c.var;
+    const live = and(
+      eq(schema.machine.id, machineId),
+      eq(schema.machine.workspaceId, workspace.id),
+      isNull(schema.machine.revokedAt),
+    );
+    // Owners and admins can revoke any machine; members only the ones they enrolled. The check
+    // rides in the update so the common case is one query.
+    const [machine] = await db
       .update(schema.machine)
       // Dropping the hash too means the token can never match again, whatever reads it.
       .set({ revokedAt: new Date(), tokenHash: null, enrollmentHash: null })
-      .where(
-        and(
-          eq(schema.machine.id, c.req.param("id")),
-          eq(schema.machine.workspaceId, c.var.workspace.id),
-          isNull(schema.machine.revokedAt),
-        ),
-      )
+      .where(canManage(role) ? live : and(live, eq(schema.machine.createdBy, user!.id)))
       .returning();
-    if (!machine) return c.json({ error: "not_found" }, 404);
+    if (!machine) {
+      // Nothing changed: tell a member a machine they can see apart from one that isn't there.
+      const [exists] = await db
+        .select({ id: schema.machine.id })
+        .from(schema.machine)
+        .where(live)
+        .limit(1);
+      return exists ? c.json({ error: "forbidden" }, 403) : c.json({ error: "not_found" }, 404);
+    }
     await recordEvent(c.var.db, {
       workspaceId: machine.workspaceId,
       type: "machine.revoked",

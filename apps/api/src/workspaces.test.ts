@@ -1,6 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { app } from "./app.ts";
-import { createAuth } from "./auth.ts";
 import type { Env } from "./env.ts";
 import * as testing from "./testing.ts";
 
@@ -82,19 +81,25 @@ describe("workspaces", () => {
     ]);
   });
 
-  test("a workspace has one member for now", async () => {
+  test("a workspace can have more than one member", async () => {
     const { cookie } = await signIn();
     const {
       workspace: { id },
     } = await createWorkspace(cookie, "Initech", "initech");
-    const other = await signIn();
-    const added = await createAuth(env)
-      .api.addMember({ body: { organizationId: id, userId: other.user.id, role: "member" } })
-      .then(
-        () => "added",
-        (error: { body?: { code?: string } }) => error.body?.code,
-      );
-    expect(added).toBe("ORGANIZATION_MEMBERSHIP_LIMIT_REACHED");
+    const admin = await testing.joinWorkspace(env, id, "admin");
+    const member = await testing.joinWorkspace(env, id, "member");
+    const rows = await env.DB.prepare(
+      "select user_id, role from workspace_member where workspace_id = ? order by created_at",
+    )
+      .bind(id)
+      .all();
+    expect(rows.results).toEqual([
+      expect.objectContaining({ role: "owner" }),
+      { user_id: admin.user.id, role: "admin" },
+      { user_id: member.user.id, role: "member" },
+    ]);
+    const current = await call("/workspaces/current", member.cookie);
+    expect(await current.json()).toMatchObject({ role: "member" });
   });
 
   test("a workspace slug is unique", async () => {
@@ -182,5 +187,107 @@ describe("runner order", () => {
 
     const signedOut = await app.request(`/api/workspaces/${workspace.id}/runner-order`, {}, env);
     expect(signedOut.status).toBe(401);
+  });
+});
+
+describe("roles (#134)", () => {
+  const put = (id: string, cookie: string, body: unknown) =>
+    app.request(
+      `/api/workspaces/${id}/runner-order`,
+      {
+        method: "PUT",
+        headers: { cookie, "content-type": "application/json", origin: env.BETTER_AUTH_URL },
+        body: JSON.stringify(body),
+      },
+      env,
+    );
+  const post = (path: string, cookie: string, body: unknown) => call(path, cookie, body);
+  const code = async (response: Response) => ((await response.json()) as { code?: string }).code;
+
+  test("a member reads the runner order but only owners and admins change it", async () => {
+    const { cookie } = await signIn();
+    const { workspace } = await createWorkspace(cookie, "Roles", "roles-order");
+    const admin = await testing.joinWorkspace(env, workspace.id, "admin");
+    const member = await testing.joinWorkspace(env, workspace.id, "member");
+    const order = { steps: [{ key: "github" }] };
+
+    expect((await call(`/workspaces/${workspace.id}/runner-order`, member.cookie)).status).toBe(
+      200,
+    );
+    const write = await put(workspace.id, member.cookie, order);
+    expect(write.status).toBe(403);
+    expect(await write.json()).toEqual({ error: "forbidden" });
+
+    expect((await put(workspace.id, admin.cookie, order)).status).toBe(200);
+  });
+
+  test("the last owner can't leave, be removed, or be demoted", async () => {
+    const { cookie } = await signIn();
+    const { workspace, cookie: owner } = await createWorkspace(cookie, "Roles", "roles-owner");
+    const admin = await testing.joinWorkspace(env, workspace.id, "admin");
+    const [ownerRow] = (
+      await env.DB.prepare(
+        "select id from workspace_member where workspace_id = ? and role = 'owner'",
+      )
+        .bind(workspace.id)
+        .all<{ id: string }>()
+    ).results;
+
+    const leave = await post("/auth/organization/leave", owner, { organizationId: workspace.id });
+    expect(leave.status).toBe(400);
+    expect(await code(leave)).toBe("YOU_CANNOT_LEAVE_THE_ORGANIZATION_AS_THE_ONLY_OWNER");
+
+    const demote = await post("/auth/organization/update-member-role", owner, {
+      organizationId: workspace.id,
+      memberId: ownerRow.id,
+      role: "admin",
+    });
+    expect(demote.status).toBe(400);
+    expect(await code(demote)).toBe("YOU_CANNOT_LEAVE_THE_ORGANIZATION_WITHOUT_AN_OWNER");
+
+    const removed = await post("/auth/organization/remove-member", admin.cookie, {
+      organizationId: workspace.id,
+      memberIdOrEmail: ownerRow.id,
+    });
+    expect(removed.ok).toBe(false);
+
+    const demotedByAdmin = await post("/auth/organization/update-member-role", admin.cookie, {
+      organizationId: workspace.id,
+      memberId: ownerRow.id,
+      role: "member",
+    });
+    expect(demotedByAdmin.ok).toBe(false);
+
+    const owners = await env.DB.prepare(
+      "select count(*) as n from workspace_member where workspace_id = ? and role = 'owner'",
+    )
+      .bind(workspace.id)
+      .first();
+    expect(owners).toEqual({ n: 1 });
+  });
+
+  test("a member can't change roles or remove anyone", async () => {
+    const { cookie } = await signIn();
+    const { workspace } = await createWorkspace(cookie, "Roles", "roles-member");
+    const admin = await testing.joinWorkspace(env, workspace.id, "admin");
+    const member = await testing.joinWorkspace(env, workspace.id, "member");
+    const [adminRow] = (
+      await env.DB.prepare("select id from workspace_member where user_id = ?")
+        .bind(admin.user.id)
+        .all<{ id: string }>()
+    ).results;
+
+    const promote = await post("/auth/organization/update-member-role", member.cookie, {
+      organizationId: workspace.id,
+      memberId: adminRow.id,
+      role: "member",
+    });
+    expect(await code(promote)).toBe("YOU_ARE_NOT_ALLOWED_TO_UPDATE_THIS_MEMBER");
+    const remove = await post("/auth/organization/remove-member", member.cookie, {
+      organizationId: workspace.id,
+      memberIdOrEmail: adminRow.id,
+    });
+    // Better Auth answers this one with a 401.
+    expect(await code(remove)).toBe("YOU_ARE_NOT_ALLOWED_TO_DELETE_THIS_MEMBER");
   });
 });
