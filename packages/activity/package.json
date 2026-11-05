@@ -7,6 +7,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
+    "@relayrunner/runner-order": "workspace:*",
     "zod": "catalog:"
   }
 }

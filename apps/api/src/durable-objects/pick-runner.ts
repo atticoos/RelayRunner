@@ -12,7 +12,8 @@ import { latestRunnerVersion, RunnerClient, decodeJitConfig } from "../runner-pr
 import { RELAYRUNNER_LABEL } from "../webhook-queue.ts";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { createDb, schema } from "../db/index.ts";
-import { jobContext, NO_RUNNER } from "../routing.ts";
+import { recordPick, type PickRecord } from "../route-decisions.ts";
+import { jobContext, NO_RUNNER, type RouteDecision } from "../routing.ts";
 
 export interface PickWork {
   jobId: number;
@@ -65,7 +66,11 @@ export class PickRunner extends DurableObject<Env> {
       const request = await waitForJob(client);
       if (request) {
         const job = await client.claim(request);
-        const pick = await pickRunner(this.env, work.installationId, job.message.contextData);
+        const { record, ...pick } = await pickRunner(
+          this.env,
+          work.installationId,
+          job.message.contextData,
+        );
         if (pick.runner) {
           await client.complete(job, "succeeded", { outputs: { runner: pick.runner } });
         } else {
@@ -83,6 +88,21 @@ export class PickRunner extends DurableObject<Env> {
           runnerLabels: jit.labels,
         };
         runnerId = undefined; // GitHub removes a JIT runner once its job is done.
+        // For the Activity page. The relay is already answered, so a failure here only loses the
+        // explanation.
+        if (record)
+          await recordPick(createDb(this.env.DB), {
+            ...record,
+            jobName: job.message.jobDisplayName || null,
+          }).catch((error) =>
+            console.error(
+              JSON.stringify({
+                msg: "relayrunner pick not recorded",
+                jobId: work.jobId,
+                error: error instanceof Error ? error.message : String(error),
+              }),
+            ),
+          );
       }
     } catch (error) {
       outcome = { result: "error", error: error instanceof Error ? error.message : String(error) };
@@ -118,9 +138,11 @@ async function waitForJob(client: RunnerClient) {
   return null;
 }
 
+type PickInfo = Omit<PickRecord, "jobName">;
+
 // Where the claimed pick job's run goes. Only a repo of a workspace's installation reaches the
 // workspace's Router, which walks the runner order. Anything we can't place gets no runner and a
-// reason, and the relay fails.
+// reason, and the relay fails. `record` is what the Activity page keeps (no workspace, no record).
 async function pickRunner(env: Env, installationId: number, contextData: unknown) {
   const context = jobContext(contextData);
   if (!context)
@@ -140,6 +162,7 @@ async function pickRunner(env: Env, installationId: number, contextData: unknown
       reason: `${NO_RUNNER}: this GitHub App installation isn't connected to a RelayRunner workspace.`,
       repo: context.repo,
     };
+  const workspaceId = installation.workspaceId;
   const [repo] = await db
     .select({ id: schema.githubRepository.id, private: schema.githubRepository.private })
     .from(schema.githubRepository)
@@ -151,14 +174,23 @@ async function pickRunner(env: Env, installationId: number, contextData: unknown
       ),
     )
     .limit(1);
-  if (!repo)
+  if (!repo) {
+    const reason = `${NO_RUNNER}: RelayRunner doesn't have access to ${context.repo}.`;
     return {
       runner: null,
-      reason: `${NO_RUNNER}: RelayRunner doesn't have access to ${context.repo}.`,
+      reason,
       repo: context.repo,
+      record: {
+        workspaceId,
+        repositoryId: null,
+        context,
+        decision: null,
+        reason,
+      } satisfies PickInfo,
     };
-  const decision = await env.ROUTER.getByName(installation.workspaceId).route({
-    workspaceId: installation.workspaceId,
+  }
+  const decision: RouteDecision = await env.ROUTER.getByName(workspaceId).route({
+    workspaceId,
     installationId,
     repositoryId: repo.id,
     repo: context.repo,
@@ -171,8 +203,16 @@ async function pickRunner(env: Env, installationId: number, contextData: unknown
     ...decision,
     repo: context.repo,
     runId: context.runId,
+    runAttempt: context.runAttempt,
     private: repo.private,
     machine: context.machine,
     github: context.github,
+    record: {
+      workspaceId,
+      repositoryId: repo.id,
+      context,
+      decision,
+      reason: decision.runner === null ? decision.reason : null,
+    } satisfies PickInfo,
   };
 }

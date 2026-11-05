@@ -301,3 +301,39 @@ export const activityEvent = sqliteTable(
     uniqueIndex("activity_event_job_idx").on(table.jobId, table.type),
   ],
 );
+
+// How each pick walked its workspace's runner order (src/routing.ts decideRoute), one row per run
+// attempt, so the Activity page can say why a run's jobs went where they did. Written by the
+// PickRunner when it answers. A re-run of failed jobs reuses an earlier attempt's pick, so a job
+// reads the newest row at or before its own attempt. Rows go with their workspace.
+export const routeDecision = sqliteTable(
+  "route_decision",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspace.id, { onDelete: "cascade" }),
+    repositoryId: integer("repository_id").notNull(),
+    runId: integer("run_id").notNull(),
+    runAttempt: integer("run_attempt").notNull(),
+    // The provider that took the run ('machine' or 'github'), or null when nothing fit.
+    step: text("step"),
+    // What the pick answered: a route's `rr-<id>` or a GitHub label. Null when nothing fit.
+    runner: text("runner"),
+    // The earlier steps, in order, as [{key, reason}].
+    skipped: text("skipped", { mode: "json" }).$type<{ key: string; reason: string }[]>().notNull(),
+    // Providers the relay set that the order leaves out.
+    notInOrder: text("not_in_order", { mode: "json" }).$type<string[]>().notNull(),
+    // The relay's `machine` and `github` inputs.
+    machine: text("machine", { mode: "json" }).$type<string[]>().notNull(),
+    github: text("github", { mode: "json" }).$type<string[]>().notNull(),
+    // The message the relay failed with, when nothing fit.
+    reason: text("reason"),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("route_decision_run_idx").on(table.repositoryId, table.runId, table.runAttempt),
+  ],
+);

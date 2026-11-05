@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import {
   Ban,
+  ChevronRight,
   CircleCheck,
   CircleMinus,
   CircleX,
@@ -26,6 +27,7 @@ import {
   type ActivityPage,
 } from "@/lib/activity";
 import { authDisabled } from "@/lib/auth-client";
+import { failureText, walkLines, walkSummary, type RouteWalk } from "@/lib/route-walk";
 
 // Fast enough that a push shows up within seconds, without a live connection.
 const POLL_MS = 5_000;
@@ -136,6 +138,8 @@ function ActivityPage() {
             {items.map((item) =>
               item.job ? (
                 <JobRow key={item.id} job={item.job} now={now} />
+              ) : item.type === "job.unroutable" ? (
+                <UnroutableRow key={item.id} item={item} now={now} />
               ) : (
                 <EventRow key={item.id} item={item} now={now} />
               ),
@@ -180,6 +184,8 @@ function sentence(item: ActivityItem) {
       return "was revoked";
     case "job.routed":
       return "routed a job";
+    case "job.unroutable":
+      return "couldn't route a job";
   }
 }
 
@@ -189,41 +195,138 @@ const EVENT_ICONS = {
   "machine.disconnected": Unplug,
   "machine.revoked": Ban,
   "job.routed": Laptop,
+  "job.unroutable": Ban,
 } as const;
 
 const ICON = "size-3.5 shrink-0";
 
 // Every Activity row: an icon, one line of text that ends in "…" when it doesn't fit (hover shows
-// all of it), and the time pinned on the right.
+// all of it), and the time pinned on the right. A row with `toggle` gets a chevron before the time
+// that shows `detail` under the line, indented to the text. The chevron sits outside the
+// truncated text so it can always be reached, even when a phone cuts the reason off.
 function Row({
   icon,
   at,
   now,
+  toggle,
+  detail,
   children,
 }: {
   icon: ReactNode;
   at: string;
   now: number;
+  toggle?: Toggle;
+  detail?: ReactNode;
   children: ReactNode;
 }) {
   return (
-    <li className="flex min-w-0 items-center gap-2 px-4 py-1.5 text-sm">
-      {icon}
-      <p
-        className="min-w-0 flex-1 truncate"
-        ref={(el) => {
-          if (el) el.title = el.textContent ?? "";
-        }}
-      >
-        {children}
-      </p>
-      <span
-        className="shrink-0 text-xs text-muted-foreground tabular-nums"
-        title={new Date(at).toLocaleString()}
-      >
-        {timeAgo(at, now)}
-      </span>
+    <li className="min-w-0 px-4 py-1.5 text-sm">
+      <div className="flex min-w-0 items-center gap-2">
+        {icon}
+        <p
+          className="min-w-0 flex-1 truncate"
+          ref={(el) => {
+            if (el) el.title = el.textContent ?? "";
+          }}
+        >
+          {children}
+        </p>
+        {toggle && (
+          <button
+            type="button"
+            onClick={toggle.onToggle}
+            aria-expanded={toggle.open}
+            aria-label={toggle.open ? "Hide why it ran here" : "Show why it ran here"}
+            title={toggle.open ? "Hide why" : "Show why"}
+            className="-my-1 shrink-0 cursor-pointer rounded-sm p-1 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <ChevronRight
+              aria-hidden
+              className={`size-3.5 transition-transform ${toggle.open ? "rotate-90" : ""}`}
+            />
+          </button>
+        )}
+        <span
+          className="shrink-0 text-xs text-muted-foreground tabular-nums"
+          title={new Date(at).toLocaleString()}
+        >
+          {timeAgo(at, now)}
+        </span>
+      </div>
+      {toggle?.open && detail}
     </li>
+  );
+}
+
+const REASON_TONES = {
+  fallback: "text-run decoration-run/50",
+  info: "text-foreground/75 decoration-muted-foreground/60",
+  failure: "text-destructive decoration-destructive/50",
+} as const;
+
+type Toggle = { open: boolean; onToggle: () => void };
+
+// The short reason after a job's runner. With `toggle`, clicking it also shows the walk (the row's
+// chevron is the keyboard stop).
+function Reason({
+  text,
+  tone,
+  toggle,
+}: {
+  text: string;
+  tone: keyof typeof REASON_TONES;
+  toggle?: Toggle;
+}) {
+  const style = `text-xs underline decoration-dotted underline-offset-2 ${REASON_TONES[tone]}`;
+  if (!toggle) return <span className={style}>{text}</span>;
+  return (
+    <button
+      type="button"
+      tabIndex={-1}
+      onClick={toggle.onToggle}
+      className={`${style} cursor-pointer hover:decoration-solid`}
+    >
+      {text}
+    </button>
+  );
+}
+
+const LINE_STATES = {
+  skipped: "skipped",
+  ran: "ran it",
+  not_tried: "not tried",
+} as const;
+
+// How the pick walked the runner order, one log line per step: "├ 1 machine  skipped · no
+// machine with macOS was online and idle".
+function WalkLines({ walk, runner }: { walk: RouteWalk; runner: string | null }) {
+  const lines = walkLines(walk, runner);
+  return (
+    <ul
+      aria-label="How RelayRunner walked your runner order"
+      className="mt-1 grid gap-0.5 pl-[22px] font-mono text-xs text-muted-foreground"
+    >
+      {lines.map((line, index) => (
+        <li
+          key={`${line.key}-${line.state}`}
+          className="break-words sm:truncate"
+          ref={(el) => {
+            if (el) el.title = el.textContent ?? "";
+          }}
+        >
+          <span aria-hidden className="text-muted-foreground/50">
+            {index === lines.length - 1 ? "└ " : "├ "}
+          </span>
+          <span className="text-foreground/75">
+            {line.position ?? "–"} {line.key}
+          </span>{" "}
+          <span className={line.state === "ran" ? "text-go" : undefined}>
+            {LINE_STATES[line.state]}
+          </span>
+          {line.text && (line.state === "ran" ? ` ${line.text}` : ` · ${line.text}`)}
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -277,13 +380,22 @@ function JobIcon({ job }: { job: ActivityJob }) {
 // relayrunner-ci-tests · main · 1m 30s", then the time. The job name opens the job on
 // GitHub, the workflow name opens its run.
 function JobRow({ job, now }: { job: ActivityJob; now: number }) {
+  const [open, setOpen] = useState(false);
   const took = duration(job, now);
-  const { runner } = job;
+  const { runner, walk } = job;
   const RunnerIcon = runner.type === "machine" ? Laptop : Cloud;
   const runnerName =
     runner.type === "machine" ? (runner.name ?? "a local machine") : runner.label || "unknown";
+  const summary = walk ? walkSummary(walk) : null;
+  const toggle = summary ? { open, onToggle: () => setOpen(!open) } : undefined;
   return (
-    <Row icon={<JobIcon job={job} />} at={job.createdAt} now={now}>
+    <Row
+      icon={<JobIcon job={job} />}
+      at={job.createdAt}
+      now={now}
+      toggle={toggle}
+      detail={walk && <WalkLines walk={walk} runner={runnerName} />}
+    >
       <a
         href={job.runUrl}
         target="_blank"
@@ -316,6 +428,12 @@ function JobRow({ job, now }: { job: ActivityJob; now: number }) {
           {runnerName}
         </span>
       </span>
+      {summary && (
+        <>
+          {" "}
+          <Reason text={summary.text} tone={summary.tone} toggle={toggle} />
+        </>
+      )}
       <span className="text-xs text-muted-foreground">
         {" · "}
         {job.private && (
@@ -334,6 +452,49 @@ function JobRow({ job, now }: { job: ActivityJob; now: number }) {
   );
 }
 
+// A relay that failed fast because nothing in the runner order could take its run: "RelayRunner
+// dev / relay couldn't route no machine with macOS is online and idle · repo". The job that
+// needed it never started, so this is the only trace of the run here.
+function UnroutableRow({
+  item,
+  now,
+}: {
+  item: Extract<ActivityItem, { type: "job.unroutable" }>;
+  now: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const { data } = item;
+  const runUrl = `https://github.com/${data.repository}/actions/runs/${data.runId}`;
+  const toggle = data.walk ? { open, onToggle: () => setOpen(!open) } : undefined;
+  return (
+    <Row
+      icon={<Ban aria-label="Couldn't route" className={`${ICON} text-destructive`} />}
+      at={item.occurredAt}
+      now={now}
+      toggle={toggle}
+      detail={data.walk && <WalkLines walk={data.walk} runner={null} />}
+    >
+      <a
+        href={runUrl}
+        target="_blank"
+        rel="noreferrer"
+        className="text-muted-foreground hover:text-foreground hover:underline"
+        title="Open the run on GitHub"
+      >
+        {data.workflow ?? "Workflow"}
+      </a>
+      <span className="text-muted-foreground"> / </span>
+      <span className="font-medium">{data.job ?? "relay"}</span>{" "}
+      <span className="text-destructive">couldn't route</span>{" "}
+      <Reason text={failureText(data.reason)} tone="failure" toggle={toggle} />
+      <span className="text-xs text-muted-foreground">
+        {" · "}
+        <span className="font-mono">{data.repository}</span>
+      </span>
+    </Row>
+  );
+}
+
 // Example entries for `VITE_AUTH_DISABLED=true` dev builds, which have no API.
 function samplePage(filter: ActivityFilter | undefined): ActivityPage {
   const at = (minutesAgo: number) => new Date(Date.now() - minutesAgo * 60_000).toISOString();
@@ -347,6 +508,7 @@ function samplePage(filter: ActivityFilter | undefined): ActivityPage {
     workflow: "RelayRunner dev",
     name: "test",
     runner: { type: "github", label: "ubuntu-latest" },
+    walk: null,
     runnerName: null,
     branch: "main",
     sha: "abc123",
@@ -360,7 +522,74 @@ function samplePage(filter: ActivityFilter | undefined): ActivityPage {
     ...rest,
   });
   const mac = { id: "m1", name: "Atticuss-MacBook-Pro.local" };
+  const relay = { machine: ["self-hosted"], github: ["ubuntu-latest"] };
   const items: ActivityItem[] = [
+    {
+      id: 10,
+      type: "job.unroutable",
+      data: {
+        repository: "relayrunner/relayrunner-ci-tests",
+        runId: 90,
+        runAttempt: 1,
+        workflow: "RelayRunner dev",
+        job: "relay",
+        reason:
+          "No runner available: no local machine with macOS, ARM64 is online and idle; `github` isn't set on this relay.",
+        walk: {
+          step: null,
+          skipped: [
+            { key: "machine", reason: "no_machine" },
+            { key: "github", reason: "not_configured" },
+          ],
+          notInOrder: [],
+          machine: ["macOS", "ARM64"],
+          github: [],
+        },
+      },
+      occurredAt: at(0.1),
+      actor: null,
+      machine: null,
+      job: null,
+    },
+    {
+      id: 9,
+      type: "job.routed",
+      data: {},
+      occurredAt: at(3),
+      actor: null,
+      machine: null,
+      job: job(5, 3, {
+        runnerName: "GitHub Actions 12",
+        status: "completed",
+        conclusion: "success",
+        startedAt: at(2.9),
+        completedAt: at(0.7),
+        walk: {
+          step: "github",
+          skipped: [{ key: "machine", reason: "no_machine" }],
+          notInOrder: [],
+          machine: ["macOS", "ARM64"],
+          github: ["ubuntu-latest"],
+        },
+      }),
+    },
+    {
+      id: 8,
+      type: "job.routed",
+      data: {},
+      occurredAt: at(9),
+      actor: null,
+      machine: null,
+      job: job(4, 9, {
+        runner: { type: "machine", machineId: "m1", name: mac.name },
+        runnerName: "Atticus-s-MacBook-0123456789ab",
+        status: "completed",
+        conclusion: "success",
+        startedAt: at(8.9),
+        completedAt: at(7.4),
+        walk: { step: "machine", skipped: [], notInOrder: ["github"], ...relay },
+      }),
+    },
     {
       id: 7,
       type: "job.routed",
@@ -375,6 +604,7 @@ function samplePage(filter: ActivityFilter | undefined): ActivityPage {
         runnerName: "Atticus-s-MacBook-0123456789ab",
         status: "in_progress",
         startedAt: at(0.1),
+        walk: { step: "machine", skipped: [], notInOrder: [], ...relay },
       }),
     },
     {
@@ -404,11 +634,18 @@ function samplePage(filter: ActivityFilter | undefined): ActivityPage {
       machine: null,
       job: job(2, 38, {
         private: false,
+        repository: "relayrunner/actions",
         runnerName: "GitHub Actions 7",
         status: "completed",
         conclusion: "success",
         startedAt: at(37.5),
         completedAt: at(36),
+        walk: {
+          step: "github",
+          skipped: [{ key: "machine", reason: "public_repo" }],
+          notInOrder: [],
+          ...relay,
+        },
       }),
     },
     {
@@ -421,6 +658,7 @@ function samplePage(filter: ActivityFilter | undefined): ActivityPage {
       job: null,
     },
   ];
+  items.sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
   return {
     nextBefore: null,
     items: filter ? items.filter((item) => item.type.startsWith(`${filter}.`)) : items,

@@ -225,12 +225,16 @@ describe("jobContext", () => {
         github([
           ["repository", "relayrunner/relayrunner-ci-tests"],
           ["run_id", "41902043823"],
+          ["run_attempt", "2"],
+          ["workflow", "RelayRunner dev"],
           ["event_name", "workflow_dispatch"],
         ]),
       ),
     ).toEqual({
       repo: "relayrunner/relayrunner-ci-tests",
       runId: 41902043823,
+      runAttempt: 2,
+      workflow: "RelayRunner dev",
       machine: [],
       github: [],
     });
@@ -241,7 +245,7 @@ describe("jobContext", () => {
           ["run_id", { t: 4, n: 5 }],
         ]),
       ),
-    ).toEqual({ repo: "a/b", runId: 5, machine: [], github: [] });
+    ).toEqual({ repo: "a/b", runId: 5, runAttempt: 1, workflow: null, machine: [], github: [] });
   });
 
   // From a claimed relay job (relay v1.0.0-beta.2, relayrunner-ci-tests run 42078905012): the
@@ -268,6 +272,8 @@ describe("jobContext", () => {
     expect(jobContext(claimed)).toEqual({
       repo: "relayrunner/relayrunner-ci-tests",
       runId: 42078905012,
+      runAttempt: 1,
+      workflow: null,
       machine: ["self-hosted"],
       github: ["ubuntu-latest"],
     });
@@ -305,6 +311,7 @@ describe("decideRoute", () => {
       runner: "rr-0123456789ab",
       step: "machine",
       skipped: [],
+      notInOrder: [],
     });
   });
 
@@ -313,6 +320,7 @@ describe("decideRoute", () => {
       runner: "ubuntu-latest",
       step: "github",
       skipped: [{ key: "machine", reason: "no_machine" }],
+      notInOrder: [],
     });
   });
 
@@ -330,6 +338,7 @@ describe("decideRoute", () => {
       runner: "rr-0123456789ab",
       step: "machine",
       skipped: [{ key: "github", reason: "not_configured" }],
+      notInOrder: [],
     });
   });
 
@@ -345,6 +354,15 @@ describe("decideRoute", () => {
     expect(decision.runner === null && decision.reason).toBe(
       "No runner available: `github` isn't set on this relay; Local machines isn't in your runner order.",
     );
+  });
+
+  test("a provider the order leaves out is reported even when another step answers", async () => {
+    expect(await decideRoute({ steps: [{ key: "machine" }] }, both, free)).toEqual({
+      runner: "rr-0123456789ab",
+      step: "machine",
+      skipped: [],
+      notInOrder: ["github"],
+    });
   });
 
   test("nothing fits: fails with the reason for each provider", async () => {
@@ -369,6 +387,7 @@ describe("decideRoute", () => {
       runner: "ubuntu-latest",
       step: "github",
       skipped: [{ key: "machine", reason: "public_repo" }],
+      notInOrder: [],
     });
     expect(pick).not.toHaveBeenCalled();
     const decision = await decideRoute(machineFirst, { ...both, github: [], private: false }, pick);
