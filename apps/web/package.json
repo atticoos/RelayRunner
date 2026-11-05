@@ -10,10 +10,14 @@
     "deploy": "vite build && wrangler deploy"
   },
   "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
     "@fontsource-variable/hanken-grotesk": "catalog:",
     "@fontsource-variable/jetbrains-mono": "catalog:",
     "@relayrunner/access": "workspace:*",
     "@relayrunner/activity": "workspace:*",
+    "@relayrunner/runner-order": "workspace:*",
     "@tanstack/react-router": "^1.170.46",
     "better-auth": "catalog:",
     "class-variance-authority": "^0.7.1",

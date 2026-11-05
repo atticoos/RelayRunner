@@ -23,6 +23,7 @@ import { Route as AuthedWorkspaceSettingsIndexRouteImport } from './routes/_auth
 import { Route as AuthedWorkspaceSettingsAccountRouteImport } from './routes/_authed/_workspace/settings.account'
 import { Route as AuthedWorkspaceSettingsGeneralRouteImport } from './routes/_authed/_workspace/settings.general'
 import { Route as AuthedWorkspaceSettingsGithubRouteImport } from './routes/_authed/_workspace/settings.github'
+import { Route as AuthedWorkspaceSettingsRunnerOrderRouteImport } from './routes/_authed/_workspace/settings.runner-order'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -97,6 +98,12 @@ const AuthedWorkspaceSettingsGithubRoute =
     path: '/settings/github',
     getParentRoute: () => AuthedWorkspaceRoute,
   } as any)
+const AuthedWorkspaceSettingsRunnerOrderRoute =
+  AuthedWorkspaceSettingsRunnerOrderRouteImport.update({
+    id: '/settings/runner-order',
+    path: '/settings/runner-order',
+    getParentRoute: () => AuthedWorkspaceRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -110,6 +117,7 @@ export interface FileRoutesByFullPath {
   '/settings/account': typeof AuthedWorkspaceSettingsAccountRoute
   '/settings/general': typeof AuthedWorkspaceSettingsGeneralRoute
   '/settings/github': typeof AuthedWorkspaceSettingsGithubRoute
+  '/settings/runner-order': typeof AuthedWorkspaceSettingsRunnerOrderRoute
   '/settings/': typeof AuthedWorkspaceSettingsIndexRoute
 }
 export interface FileRoutesByTo {
@@ -124,6 +132,7 @@ export interface FileRoutesByTo {
   '/settings/account': typeof AuthedWorkspaceSettingsAccountRoute
   '/settings/general': typeof AuthedWorkspaceSettingsGeneralRoute
   '/settings/github': typeof AuthedWorkspaceSettingsGithubRoute
+  '/settings/runner-order': typeof AuthedWorkspaceSettingsRunnerOrderRoute
   '/settings': typeof AuthedWorkspaceSettingsIndexRoute
 }
 export interface FileRoutesById {
@@ -141,6 +150,7 @@ export interface FileRoutesById {
   '/_authed/_workspace/settings/account': typeof AuthedWorkspaceSettingsAccountRoute
   '/_authed/_workspace/settings/general': typeof AuthedWorkspaceSettingsGeneralRoute
   '/_authed/_workspace/settings/github': typeof AuthedWorkspaceSettingsGithubRoute
+  '/_authed/_workspace/settings/runner-order': typeof AuthedWorkspaceSettingsRunnerOrderRoute
   '/_authed/_workspace/settings/': typeof AuthedWorkspaceSettingsIndexRoute
 }
 export interface FileRouteTypes {
@@ -157,6 +167,7 @@ export interface FileRouteTypes {
     | '/settings/account'
     | '/settings/general'
     | '/settings/github'
+    | '/settings/runner-order'
     | '/settings/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -171,6 +182,7 @@ export interface FileRouteTypes {
     | '/settings/account'
     | '/settings/general'
     | '/settings/github'
+    | '/settings/runner-order'
     | '/settings'
   id:
     | '__root__'
@@ -187,6 +199,7 @@ export interface FileRouteTypes {
     | '/_authed/_workspace/settings/account'
     | '/_authed/_workspace/settings/general'
     | '/_authed/_workspace/settings/github'
+    | '/_authed/_workspace/settings/runner-order'
     | '/_authed/_workspace/settings/'
   fileRoutesById: FileRoutesById
 }
@@ -297,6 +310,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedWorkspaceSettingsGithubRouteImport
       parentRoute: typeof AuthedWorkspaceRoute
     }
+    '/_authed/_workspace/settings/runner-order': {
+      id: '/_authed/_workspace/settings/runner-order'
+      path: '/settings/runner-order'
+      fullPath: '/settings/runner-order'
+      preLoaderRoute: typeof AuthedWorkspaceSettingsRunnerOrderRouteImport
+      parentRoute: typeof AuthedWorkspaceRoute
+    }
   }
 }
 
@@ -307,6 +327,7 @@ interface AuthedWorkspaceRouteChildren {
   AuthedWorkspaceSettingsAccountRoute: typeof AuthedWorkspaceSettingsAccountRoute
   AuthedWorkspaceSettingsGeneralRoute: typeof AuthedWorkspaceSettingsGeneralRoute
   AuthedWorkspaceSettingsGithubRoute: typeof AuthedWorkspaceSettingsGithubRoute
+  AuthedWorkspaceSettingsRunnerOrderRoute: typeof AuthedWorkspaceSettingsRunnerOrderRoute
   AuthedWorkspaceSettingsIndexRoute: typeof AuthedWorkspaceSettingsIndexRoute
 }
 
@@ -317,6 +338,8 @@ const AuthedWorkspaceRouteChildren: AuthedWorkspaceRouteChildren = {
   AuthedWorkspaceSettingsAccountRoute: AuthedWorkspaceSettingsAccountRoute,
   AuthedWorkspaceSettingsGeneralRoute: AuthedWorkspaceSettingsGeneralRoute,
   AuthedWorkspaceSettingsGithubRoute: AuthedWorkspaceSettingsGithubRoute,
+  AuthedWorkspaceSettingsRunnerOrderRoute:
+    AuthedWorkspaceSettingsRunnerOrderRoute,
   AuthedWorkspaceSettingsIndexRoute: AuthedWorkspaceSettingsIndexRoute,
 }
 

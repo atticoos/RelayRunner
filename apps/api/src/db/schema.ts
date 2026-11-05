@@ -70,6 +70,8 @@ export const workspace = sqliteTable("workspace", {
   slug: text("slug").notNull().unique(),
   logo: text("logo"),
   metadata: text("metadata"),
+  // JSON RunnerOrder (@relayrunner/runner-order). Null means the default order.
+  runnerOrder: text("runner_order"),
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .notNull()
     .$defaultFn(() => new Date()),
