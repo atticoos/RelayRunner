@@ -23,7 +23,14 @@ import {
   type RunnerStep,
 } from "@relayrunner/runner-order";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
-import { ArrowDownIcon, ArrowUpIcon, GripVerticalIcon, PlusIcon, XIcon } from "lucide-react";
+import {
+  ArrowDownIcon,
+  ArrowUpIcon,
+  CheckIcon,
+  GripVerticalIcon,
+  PlusIcon,
+  XIcon,
+} from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { AddRunner } from "@/components/add-runner";
 import { PageHeader } from "@/components/page-header";
@@ -43,8 +50,6 @@ const machineBadge = {
   busy: { variant: "run", label: "Online · Busy" },
   offline: { variant: "idle", label: "Offline" },
 } as const;
-
-const osLabel = { linux: "Linux", macos: "macOS", windows: "Windows" } as const;
 
 export const Route = createFileRoute("/_authed/_workspace/runners")({
   loader: async ({ context }) => {
@@ -376,7 +381,6 @@ function MachineCard({ machine }: { machine: Machine }) {
     }
   }
 
-  const platform = [machine.os && osLabel[machine.os], machine.arch].filter(Boolean).join(" · ");
   // Previews talk to the production API, which may not send status yet: read that as offline.
   const status = machine.status ?? { online: false, state: null, connectedAt: null };
   const live = machineBadge[status.online ? (status.state ?? "idle") : "offline"];
@@ -392,12 +396,11 @@ function MachineCard({ machine }: { machine: Machine }) {
         <div className="grid gap-1">
           <CardTitle className="font-mono text-sm font-medium">{machine.name}</CardTitle>
           <CardDescription>
-            Your machine{platform && ` · ${platform}`}
-            {seen && <span className="block">{seen}</span>}
+            {seen || "Your machine"}
             {error && <span className="block text-destructive">{error}</span>}
           </CardDescription>
         </div>
-        <CardAction className="flex items-center gap-2">
+        <CardAction className="row-span-1 flex items-center gap-2">
           <Badge variant={live.variant}>{live.label}</Badge>
           {confirming ? (
             <>
@@ -424,7 +427,45 @@ function MachineCard({ machine }: { machine: Machine }) {
             </Button>
           )}
         </CardAction>
+        {/* Full width under the name and the actions, so the chips have room on a phone. */}
+        {machine.labels && machine.labels.length > 0 && <MachineLabels labels={machine.labels} />}
       </CardHeader>
     </Card>
+  );
+}
+
+// The labels a job's `machine:` input matches. Clicking one copies it.
+function MachineLabels({ labels }: { labels: string[] }) {
+  const [copied, setCopied] = useState<string | null>(null);
+
+  async function copy(label: string) {
+    try {
+      await navigator.clipboard.writeText(label);
+      setCopied(label);
+      setTimeout(() => setCopied((current) => (current === label ? null : current)), 1500);
+    } catch {
+      // Clipboard can be blocked (insecure origin, permissions); the label is still readable.
+    }
+  }
+
+  return (
+    <ul className="col-span-2 flex flex-wrap items-center gap-1.5" aria-label="Labels">
+      {labels.map((label) => (
+        <li key={label} className="flex">
+          <Badge asChild variant="outline" className="font-mono font-normal">
+            <button
+              type="button"
+              className="cursor-pointer hover:bg-accent hover:text-accent-foreground"
+              title="Copy label"
+              aria-label={copied === label ? `Copied ${label}` : `Copy ${label}`}
+              onClick={() => void copy(label)}
+            >
+              {copied === label && <CheckIcon />}
+              {label}
+            </button>
+          </Badge>
+        </li>
+      ))}
+    </ul>
   );
 }

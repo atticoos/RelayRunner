@@ -6,6 +6,11 @@ export type Machine = {
   name: string;
   os: "linux" | "macos" | "windows" | null;
   arch: "x64" | "arm64" | "arm" | null;
+  /**
+   * The runner labels a job's `machine:` input matches against, in GitHub's spellings, such as
+   * `["self-hosted", "macOS", "ARM64"]`. Missing from an API that predates them.
+   */
+  labels?: string[];
   lastSeenAt: string | null;
   revokedAt: string | null;
   createdAt: string;
