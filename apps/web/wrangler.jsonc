@@ -29,10 +29,11 @@
   "vars": {
     // Zero Trust team domain and Access app AUD whose JWTs the dev-only views accept
     // (packages/access). Per-version preview URLs (<version>-relayrunner-app...) use these top-level
-    // vars, not `previews`, so the AUD has to be here too. Production workers.dev has no Access app,
-    // so a request there carries no JWT and /dev/* answers 403.
+    // vars, not `previews`, so the AUD has to be here too. The second AUD is "relayrunner-app dev
+    // views" (app.relayrunner.app/dev and /api/dev). Production workers.dev has no Access app, so a
+    // request there carries no JWT and /dev/* answers 403.
     "ACCESS_TEAM_DOMAIN": "relayrunner.cloudflareaccess.com",
-    "ACCESS_AUD": "bc8e87c4c78375b0b1e61b4a2a73354543030492e218d02a28c56bc0f95702f7",
+    "ACCESS_AUD": "bc8e87c4c78375b0b1e61b4a2a73354543030492e218d02a28c56bc0f95702f7, 45a666d9534b30a03ef5e04e9ce04da805afa430d00b6bffddeb245aef130460",
   },
   // Workers Logs, traces and Issues (errors grouped per Worker). Wrangler deploys overwrite
   // dashboard settings, so these must stay on here. Source maps make Issues' stacks point at

@@ -38,10 +38,11 @@
     "GITHUB_APP_ID": "5605512",
     // Zero Trust team domain and the Access app AUD whose JWTs /api/dev/* accepts
     // (packages/access). Dashboard previews forward /api/* here with the Access JWT, so this is
-    // the AUD of "relayrunner-app previews", the same as in apps/web/wrangler.jsonc. Requests to
-    // this Worker's own workers.dev URL, or from the production dashboard, carry no JWT and get 403.
+    // the AUDs of "relayrunner-app previews" and "relayrunner-app dev views"
+    // (app.relayrunner.app/dev and /api/dev), the same as in apps/web/wrangler.jsonc. Requests to
+    // this Worker's own URLs, or from the dashboard's workers.dev host, carry no JWT and get 403.
     "ACCESS_TEAM_DOMAIN": "relayrunner.cloudflareaccess.com",
-    "ACCESS_AUD": "bc8e87c4c78375b0b1e61b4a2a73354543030492e218d02a28c56bc0f95702f7",
+    "ACCESS_AUD": "bc8e87c4c78375b0b1e61b4a2a73354543030492e218d02a28c56bc0f95702f7, 45a666d9534b30a03ef5e04e9ce04da805afa430d00b6bffddeb245aef130460",
     // Alert when at least this many webhook deliveries are dead-lettered in an hour
     // (src/dead-letter-alert.ts). Set DEAD_LETTER_ALERT_WEBHOOK_URL with `wrangler secret put` to
     // also post the alert to a Slack or Discord incoming webhook.
