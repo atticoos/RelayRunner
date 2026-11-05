@@ -100,7 +100,7 @@ jobs:
   relay-test:
     uses: relayrunner/actions/.github/workflows/relay.yml@v1.0.0-beta.2
     with:
-      machine: ""
+      machine: self-hosted
       github: ubuntu-latest
 
   test:
@@ -114,9 +114,10 @@ jobs:
 Use the `uses:` line exactly as shown. GitHub needs the full path to a reusable workflow, and
 the tag pins the version. The relay's inputs say which runners can take the job:
 
-- `machine` lists labels a machine must have, comma-separated. `""` means any of the user's
-  machines. To keep a job on matching machines only, name the OS or architecture, such as
-  `machine: macOS, ARM64`.
+- `machine` lists labels a machine must have, comma-separated, and a machine needs all of them.
+  `self-hosted` means any of the user's machines. To keep a job on matching machines only, name
+  the OS or architecture, such as `machine: macOS, ARM64`. Without `machine`, the job never runs
+  on the user's machines.
 - `github` is the GitHub-hosted label to use when no machine fits. Put the job's old
   `runs-on` label here, such as `ubuntu-24.04` or `macos-latest`.
 
