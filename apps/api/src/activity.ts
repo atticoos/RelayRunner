@@ -6,7 +6,7 @@ import {
   type DisconnectReason,
   type RouteWalk,
 } from "@relayrunner/activity";
-import { and, desc, eq, like, lt } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, like, lt, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import { type Db, schema } from "./db/index.ts";
 import { presentJob } from "./jobs.ts";
@@ -113,12 +113,122 @@ export async function listActivity(
     db,
     page.flatMap((row) => (row.job ? [row.job] : [])),
   );
+  const items = page.flatMap((row) => {
+    const item = presentEvent(row, row.job ? (walks.get(jobKey(row.job)) ?? null) : null);
+    return item ? [item] : [];
+  });
   return {
-    items: page.flatMap((row) => {
-      const item = presentEvent(row, row.job ? (walks.get(jobKey(row.job)) ?? null) : null);
-      return item ? [item] : [];
-    }),
+    items: await foldJobsNotRun(db, workspaceId, items),
     nextBefore: rows.length > ACTIVITY_PAGE_SIZE ? page[page.length - 1].event.id : null,
+  };
+}
+
+type WorkflowJob = typeof schema.workflowJob.$inferSelect;
+
+const runKey = (repository: string, runId: number, runAttempt: number) =>
+  `${repository}:${runId}:${runAttempt}`;
+
+// A job GitHub never sent anywhere: no labels (its `runs-on` was never worked out, because a job it
+// needs failed) and no machine. A relay that couldn't route leaves its dependents like this.
+function neverRouted(job: Pick<WorkflowJob, "labels" | "machineId" | "conclusion">) {
+  return job.conclusion === "skipped" && job.labels.length === 0 && !job.machineId;
+}
+
+/**
+ * Shows a run that couldn't route as one entry: each `job.unroutable` gets the names of the jobs
+ * that needed its relay (`jobsNotRun`), and those jobs' own rows are dropped, wherever the relay's
+ * entry sits in the log. A never-routed job whose run has no such entry (logged before relays
+ * failed fast) keeps its row.
+ */
+async function foldJobsNotRun(
+  db: Db,
+  workspaceId: string,
+  items: ActivityItem[],
+): Promise<ActivityItem[]> {
+  const relays = items.flatMap((item) => (item.type === "job.unroutable" ? [item] : []));
+  const orphans = items.flatMap((item) =>
+    item.job && neverRouted(rawJob(item.job)) ? [item.job] : [],
+  );
+  if (relays.length === 0 && orphans.length === 0) return items;
+
+  // The never-routed jobs of every unroutable run on this page.
+  const notRun = new Map<string, string[]>();
+  const relayRuns = [...new Set(relays.map((item) => item.data.runId))];
+  if (relayRuns.length) {
+    const job = schema.workflowJob;
+    const jobs = await db
+      .select({
+        name: job.name,
+        repository: job.repositoryFullName,
+        runId: job.runId,
+        runAttempt: job.runAttempt,
+        labels: job.labels,
+        machineId: job.machineId,
+        conclusion: job.conclusion,
+      })
+      .from(job)
+      .innerJoin(schema.githubInstallation, eq(schema.githubInstallation.id, job.installationId))
+      .where(
+        and(
+          eq(schema.githubInstallation.workspaceId, workspaceId),
+          inArray(job.runId, relayRuns),
+          eq(job.kind, "job"),
+        ),
+      )
+      .orderBy(asc(job.githubCreatedAt), asc(job.id));
+    for (const row of jobs) {
+      if (!neverRouted(row)) continue;
+      const key = runKey(row.repository, row.runId, row.runAttempt);
+      notRun.set(key, [...(notRun.get(key) ?? []), row.name]);
+    }
+  }
+
+  // The runs, on this page or not, whose relay logged that it couldn't route.
+  const unroutable = new Set<string>();
+  const orphanRuns = [...new Set(orphans.map((job) => job.runId))];
+  if (orphanRuns.length) {
+    const events = await db
+      .select({ data: table.data })
+      .from(table)
+      .where(
+        and(
+          eq(table.workspaceId, workspaceId),
+          eq(table.type, "job.unroutable"),
+          inArray(sql<number>`json_extract(${table.data}, '$.runId')`, orphanRuns),
+        ),
+      );
+    for (const { data } of events) {
+      const { repository, runId, runAttempt } = data as {
+        repository: string;
+        runId: number;
+        runAttempt: number;
+      };
+      unroutable.add(runKey(repository, runId, runAttempt));
+    }
+  }
+
+  return items.flatMap<ActivityItem>((item) => {
+    if (item.type === "job.unroutable") {
+      const { repository, runId, runAttempt } = item.data;
+      return [{ ...item, jobsNotRun: notRun.get(runKey(repository, runId, runAttempt)) ?? [] }];
+    }
+    const job = item.job;
+    if (
+      job &&
+      neverRouted(rawJob(job)) &&
+      unroutable.has(runKey(job.repository, job.runId, job.runAttempt))
+    )
+      return [];
+    return [item];
+  });
+}
+
+// The fields neverRouted reads, from a job as the log presents it.
+function rawJob(job: NonNullable<ActivityItem["job"]>) {
+  return {
+    conclusion: job.conclusion,
+    labels: job.runner.type === "github" && job.runner.label ? [job.runner.label] : [],
+    machineId: job.runner.type === "machine" ? "machine" : null,
   };
 }
 

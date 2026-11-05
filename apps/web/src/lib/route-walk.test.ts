@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { failureText, walkLines, walkSummary, type RouteWalk } from "./route-walk.ts";
+import { failureText, jobNames, walkLines, walkSummary, type RouteWalk } from "./route-walk.ts";
 
 const walk = (rest: Partial<RouteWalk>): RouteWalk => ({
   step: "github",
@@ -105,4 +105,14 @@ test("failureText drops the prefix GitHub shows", () => {
       "No runner available: public repos never run on local machines; `github` isn't set on this relay.",
     ),
   ).toBe("public repos never run on local machines; github isn't set on this relay");
+});
+
+describe("jobNames", () => {
+  test("reads as a phrase", () => {
+    expect(jobNames([])).toBeNull();
+    expect(jobNames(["build"])).toBe("build");
+    expect(jobNames(["build", "test"])).toBe("build and test");
+    expect(jobNames(["build", "test", "deploy"])).toBe("build, test and deploy");
+    expect(jobNames(["a", "b", "c", "d", "e"])).toBe("a, b and 3 more");
+  });
 });
