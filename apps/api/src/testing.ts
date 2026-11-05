@@ -99,7 +99,7 @@ export function withSetCookies(cookie: string, response: Response) {
 }
 
 // A new user added to an existing workspace with the given role, with that workspace active.
-// Stands in for accepting an invite until #135 lands.
+// A shortcut past the invite flow (invites.test.ts covers that).
 export async function joinWorkspace(env: Env, workspaceId: string, role: "admin" | "member") {
   const { user, githubToken, cookie } = await signIn(env);
   await createAuth(env).api.addMember({

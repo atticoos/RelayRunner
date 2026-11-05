@@ -9,12 +9,12 @@ import { requireWorkspace } from "../middleware/workspace.ts";
 const ActivityQuery = z.object({
   // An event id: the nextBefore of the previous page.
   before: z.coerce.number().int().positive().max(Number.MAX_SAFE_INTEGER).optional(),
-  // Only one kind of event: 'job' or 'machine'.
+  // Only one kind of event: 'job', 'machine' or 'member'.
   filter: z.enum(ACTIVITY_FILTERS).optional(),
 });
 
 // The Activity page: the active workspace's audit log, newest first. Page with
-// ?before=<nextBefore from the previous page>, narrow with ?filter=job|machine.
+// ?before=<nextBefore from the previous page>, narrow with ?filter=job|machine|member.
 export const activityRoutes = new Hono<AppEnv>().get(
   "/",
   requireUser,

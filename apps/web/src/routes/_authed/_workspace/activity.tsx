@@ -15,7 +15,10 @@ import {
   Plug,
   Plus,
   Unplug,
+  UserCheck,
   UserMinus,
+  UserPlus,
+  UserX,
 } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { PageHeader } from "@/components/page-header";
@@ -45,6 +48,7 @@ const FILTERS: { value: ActivityFilter | undefined; label: string }[] = [
   { value: undefined, label: "All" },
   { value: "job", label: "Jobs" },
   { value: "machine", label: "Machines" },
+  { value: "member", label: "Members" },
 ];
 
 function ActivityPage() {
@@ -109,7 +113,9 @@ function ActivityPage() {
 
   return (
     <section>
-      <PageHeader title="Activity">Routed jobs and machine events, newest first.</PageHeader>
+      <PageHeader title="Activity">
+        Routed jobs, machine events and member changes, newest first.
+      </PageHeader>
       <div className="grid max-w-4xl gap-2">
         <div role="group" aria-label="Show" className="flex gap-1.5">
           {FILTERS.map(({ value, label }) => (
@@ -128,6 +134,8 @@ function ActivityPage() {
           <p className="rounded-xl border bg-card px-4 py-6 text-sm text-muted-foreground">
             {filter === "machine" ? (
               <>Nothing yet. Machines show up here when they enroll, connect or disconnect.</>
+            ) : filter === "member" ? (
+              <>Nothing yet. Invites and new members show up here.</>
             ) : (
               <>
                 Nothing yet. Add a{" "}
@@ -172,13 +180,7 @@ const DISCONNECT_REASONS = {
   error: "of a protocol error",
 } as const;
 
-// Who or what a non-job event is about: the member for member events, else the machine.
-function subject(item: ActivityItem) {
-  if (item.type === "member.removed") return item.data.memberName;
-  return item.machine?.name ?? "A machine";
-}
-
-// What a non-job event says, in a sentence after its subject.
+// What a non-job event says, in a sentence after the machine's name.
 function sentence(item: ActivityItem) {
   switch (item.type) {
     case "machine.enrolled": {
@@ -195,13 +197,36 @@ function sentence(item: ActivityItem) {
       return item.data.via === "cli" ? "was resumed from its CLI" : "was resumed";
     case "machine.revoked":
       return "was revoked";
-    case "member.removed":
-      return item.data.left ? "left the workspace" : "was removed from the workspace";
     case "job.routed":
       return "routed a job";
     case "job.unroutable":
       return "couldn't route a job";
+    case "member.invited":
+    case "member.invite_canceled":
+    case "member.joined":
+    case "member.removed":
+      return memberSentence(item);
   }
+}
+
+// Member events lead with who did it: "Atticus invited ada@example.com as an admin".
+function memberSentence(item: ActivityItem) {
+  switch (item.type) {
+    case "member.invited":
+      return `invited ${item.data.email} as ${article(item.data.role)}`;
+    case "member.invite_canceled":
+      return `cancelled the invite for ${item.data.email}`;
+    case "member.joined":
+      return `joined as ${article(item.data.role)}`;
+    case "member.removed":
+      return item.data.left ? "left the workspace" : `removed ${item.data.memberName}`;
+    default:
+      return "";
+  }
+}
+
+function article(role: string) {
+  return /^[aeiou]/i.test(role) ? `an ${role}` : `a ${role}`;
 }
 
 const EVENT_ICONS = {
@@ -214,6 +239,9 @@ const EVENT_ICONS = {
   "member.removed": UserMinus,
   "job.routed": Laptop,
   "job.unroutable": Ban,
+  "member.invited": UserPlus,
+  "member.invite_canceled": UserX,
+  "member.joined": UserCheck,
 } as const;
 
 const ICON = "size-3.5 shrink-0";
@@ -352,8 +380,31 @@ function WalkLines({ walk, runner }: { walk: RouteWalk; runner: string | null })
 function EventRow({ item, now }: { item: ActivityItem; now: number }) {
   const Icon = EVENT_ICONS[item.type];
   const online = item.type === "machine.connected";
-  // "Zach left the workspace", not "... by Zach".
-  const leftOnTheirOwn = item.type === "member.removed" && item.data.left;
+  if (item.type.startsWith("member.")) {
+    const who =
+      item.type === "member.joined"
+        ? item.data.name
+        : item.type === "member.removed" && item.data.left
+          ? (item.actor?.name ?? item.data.memberName)
+          : item.actor?.name;
+    return (
+      <Row
+        icon={
+          <Icon
+            aria-hidden
+            className={
+              item.type === "member.joined" ? `${ICON} text-go` : `${ICON} text-muted-foreground`
+            }
+          />
+        }
+        at={item.occurredAt}
+        now={now}
+      >
+        <span className="font-medium">{who ?? "Someone"}</span>{" "}
+        <span className="text-muted-foreground">{memberSentence(item)}</span>
+      </Row>
+    );
+  }
   return (
     <Row
       icon={
@@ -365,11 +416,9 @@ function EventRow({ item, now }: { item: ActivityItem; now: number }) {
       at={item.occurredAt}
       now={now}
     >
-      <span className="font-medium">{subject(item)}</span>{" "}
+      <span className="font-medium">{item.machine?.name ?? "A machine"}</span>{" "}
       <span className="text-muted-foreground">{sentence(item)}</span>
-      {item.actor && !leftOnTheirOwn && (
-        <span className="text-muted-foreground"> by {item.actor.name}</span>
-      )}
+      {item.actor && <span className="text-muted-foreground"> by {item.actor.name}</span>}
     </Row>
   );
 }
@@ -723,6 +772,24 @@ function samplePage(filter: ActivityFilter | undefined): ActivityPage {
       type: "member.removed",
       data: { memberName: "Zach", left: false },
       occurredAt: at(15),
+      actor: { id: "u1", name: "Atticus White" },
+      machine: null,
+      job: null,
+    },
+    {
+      id: 12,
+      type: "member.joined",
+      data: { name: "Ada Lovelace", email: "ada@example.com", role: "admin" },
+      occurredAt: at(20),
+      actor: { id: "u2", name: "Ada Lovelace" },
+      machine: null,
+      job: null,
+    },
+    {
+      id: 11,
+      type: "member.invited",
+      data: { email: "ada@example.com", role: "admin" },
+      occurredAt: at(45),
       actor: { id: "u1", name: "Atticus White" },
       machine: null,
       job: null,

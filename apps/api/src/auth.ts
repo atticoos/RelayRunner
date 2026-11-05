@@ -2,6 +2,7 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
 import { bearer, deviceAuthorization, oAuthProxy, organization } from "better-auth/plugins";
+import { recordEvent } from "./activity.ts";
 import { createDb, schema } from "./db/index.ts";
 import { sendEmail } from "./email.ts";
 import { MEMBER_REMOVAL_PATHS, onMemberRemoved, removedMember } from "./members.ts";
@@ -75,7 +76,7 @@ export function createAuth(env: Env, waitUntil?: (promise: Promise<unknown>) => 
       cookieCache: { enabled: true, maxAge: 5 * 60 },
     },
     plugins: [
-      workspaces(),
+      workspaces(env, background),
       // Sign-in from a preview: GitHub returns to the production callback, which exchanges the
       // code and redirects to <preview>/api/auth/callback/github/oauth-proxy with the profile
       // encrypted (BETTER_AUTH_SECRET). The preview then creates the session and sets its own
@@ -106,13 +107,63 @@ export type Session = Auth["$Infer"]["Session"];
 // Workspaces are Better Auth organizations, stored under gateway names (workspace,
 // workspace_member, workspace_invitation, session.active_workspace_id). The dashboard uses the
 // stock organization client at /api/auth/organization/*.
-export function workspaces() {
+export function workspaces(env: Env, background: (promise: Promise<unknown>) => unknown) {
+  const db = () => createDb(env.DB);
   return organization({
     // Any signed-in user can create a workspace and becomes its owner.
     allowUserToCreateOrganization: true,
     creatorRole: "owner",
-    // Teams (#133): owner, admin and member roles; see roles.ts. Invites land in #135.
+    // Teams (#133): owner, admin and member roles; see roles.ts.
     membershipLimit: 100,
+    // Invites (#135). Better Auth's defaults decide who can do what: owners and admins invite
+    // and cancel, only an owner can invite an owner, and accepting needs the signed-in account's
+    // email to match. Invites expire after 48 hours.
+    invitationExpiresIn: 48 * 60 * 60,
+    // Inviting the same email again cancels the pending invite and sends a new link, so an old
+    // link (say, a forwarded email) stops working.
+    cancelPendingInvitationsOnReInvite: true,
+    // The link opens the dashboard's accept page, /invite/<id> (#137).
+    sendInvitationEmail: async ({ id, email, role, organization, inviter, invitation }) => {
+      await background(
+        sendEmail(env, {
+          to: email,
+          template: "invite",
+          context: {
+            invitationId: id,
+            inviterName: inviter.user.name || inviter.user.email,
+            workspaceName: organization.name,
+            role,
+            expiresAt: invitation.expiresAt,
+          },
+        }),
+      );
+    },
+    organizationHooks: {
+      afterCreateInvitation: async ({ invitation, inviter }) => {
+        await recordEvent(db(), {
+          workspaceId: invitation.organizationId,
+          actorUserId: inviter.id,
+          type: "member.invited",
+          data: { email: invitation.email, role: invitation.role },
+        });
+      },
+      afterCancelInvitation: async ({ invitation, cancelledBy }) => {
+        await recordEvent(db(), {
+          workspaceId: invitation.organizationId,
+          actorUserId: cancelledBy.id,
+          type: "member.invite_canceled",
+          data: { email: invitation.email, role: invitation.role },
+        });
+      },
+      afterAcceptInvitation: async ({ member, user }) => {
+        await recordEvent(db(), {
+          workspaceId: member.organizationId,
+          actorUserId: user.id,
+          type: "member.joined",
+          data: { name: user.name, email: user.email, role: member.role },
+        });
+      },
+    },
     schema: {
       organization: { modelName: "workspace" },
       member: { modelName: "workspaceMember", fields: { organizationId: "workspaceId" } },
