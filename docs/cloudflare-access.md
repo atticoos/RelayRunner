@@ -4,12 +4,13 @@ Cloudflare Access keeps dashboard preview URLs and development-only views privat
 
 ## What is protected
 
-| Hostname                                                            | Access          | Why                                                                           |
-| ------------------------------------------------------------------- | --------------- | ----------------------------------------------------------------------------- |
-| `<alias>-relayrunner-app.relayrun.workers.dev` (dashboard previews) | Yes, whole host | Previews run unreviewed code against production data.                         |
-| `relayrunner-app.relayrun.workers.dev` (dashboard)                  | No              | It is the live dashboard until `app.relayrunner.dev` moves to this account.   |
-| `relayrunner-webhooks.relayrun.workers.dev`                         | No              | GitHub posts webhooks here and can't log in. The signature check protects it. |
-| `relayrunner-api.relayrun.workers.dev`                              | No              | Nothing calls it directly; the dashboard reaches it over a service binding.   |
+| Hostname                                                                | Access          | Why                                                                                         |
+| ----------------------------------------------------------------------- | --------------- | ------------------------------------------------------------------------------------------- |
+| `<alias>-relayrunner-app.relayrun.workers.dev` (dashboard previews)     | Yes, whole host | Previews run unreviewed code against production data.                                       |
+| `relayrunner-app.relayrun.workers.dev` (dashboard)                      | No              | It is the live dashboard until `app.relayrunner.dev` moves to this account.                 |
+| `app.relayrunner.app` (dashboard, interim custom domain)                | Only `/dev`     | Same Worker as above. `/dev` and `/api/dev` answer 403 until the Access app below exists.   |
+| `relayrunner-webhooks.relayrun.workers.dev`, `webhooks.relayrunner.app` | No              | GitHub posts webhooks here and can't log in. The signature check protects it.               |
+| `relayrunner-api.relayrun.workers.dev`, `api.relayrunner.app`           | No              | The dashboard reaches it over a service binding. `/api/dev/*` checks the Access JWT itself. |
 
 The API and webhooks Workers set `"preview_urls": false`, so they have no preview hostnames to protect.
 
@@ -72,6 +73,6 @@ For a browser, such as Playwright, set the headers as `extraHTTPHeaders` on the 
 
 To rotate the token, create a new one, add it to the Service Auth policy, update the agents, and then revoke the old token.
 
-## After the custom domain moves
+## Custom domains
 
-When `app.relayrunner.dev` serves the dashboard, add a self-hosted Access application for the paths `app.relayrunner.dev/dev` and `app.relayrunner.dev/api/dev`, with the same two policies. Add its AUD to the top-level `vars.ACCESS_AUD`, separated by a comma from the AUD already there. Dev views then work in production for allowed people and agents.
+The dashboard serves `app.relayrunner.app` now, as an interim domain while `relayrunner.dev` waits out its transfer lock, and will serve `app.relayrunner.dev` after that. For each one, add a self-hosted Access application for the paths `<host>/dev` and `<host>/api/dev`, with the same two policies. Add its AUD to the top-level `vars.ACCESS_AUD`, separated by a comma from the AUD already there. Dev views then work in production for allowed people and agents.

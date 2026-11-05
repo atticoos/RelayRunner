@@ -61,6 +61,9 @@
       "ACCESS_AUD": "bc8e87c4c78375b0b1e61b4a2a73354543030492e218d02a28c56bc0f95702f7",
     },
   },
-  // Production routing (enable once DNS lives in the new account):
-  // "routes": [{ "pattern": "app.relayrunner.dev", "custom_domain": true }]
+  // Custom domains. relayrunner.app is the interim domain while relayrunner.dev waits out its
+  // transfer lock; add app.relayrunner.dev here once that zone lives in this account. Sign-in on
+  // a custom domain goes through the production callback like a preview (PREVIEW_ORIGINS in
+  // apps/api/wrangler.jsonc) until BETTER_AUTH_URL moves to it.
+  "routes": [{ "pattern": "app.relayrunner.app", "custom_domain": true }],
 }
