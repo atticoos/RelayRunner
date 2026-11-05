@@ -97,10 +97,15 @@ async function owner(slug: string) {
 // Runs the whole flow and returns the machine token the CLI would keep.
 async function enroll(slug: string, name = "atticus-mbp") {
   const { workspace, cookie } = await owner(slug);
+  return enrollAs(cookie, workspace.id, name);
+}
+
+// The same flow for a user already in the workspace, in whatever role.
+async function enrollAs(cookie: string, workspaceId: string, name: string) {
   const { body: code } = await requestCode();
   const approved = await call("/machines/approve", cookie, {
     userCode: code.user_code,
-    workspaceId: workspace.id,
+    workspaceId,
     name,
   });
   expect(approved.status).toBe(200);
@@ -116,7 +121,7 @@ async function enroll(slug: string, name = "atticus-mbp") {
     workspace: { id: string };
     token: string;
   };
-  return { ...body, cookie, workspaceId: workspace.id, accessToken: token.access_token, code };
+  return { ...body, cookie, workspaceId, accessToken: token.access_token, code };
 }
 
 describe("machine enrollment", () => {
@@ -347,6 +352,62 @@ describe("machines in the dashboard", () => {
       machines: { status: unknown }[];
     };
     expect(machines[0]?.status).toEqual({ online: true, state: "busy", connectedAt: 1 });
+  });
+});
+
+describe("machines and roles (#134)", () => {
+  const revoke = (id: string, cookie: string) =>
+    app.request(
+      `/api/machines/${id}`,
+      { method: "DELETE", headers: { cookie, origin: env.BETTER_AUTH_URL } },
+      env,
+    );
+  const list = async (cookie: string) =>
+    (
+      (await (await call("/machines", cookie)).json()) as {
+        machines: { id: string; canRevoke: boolean }[];
+      }
+    ).machines;
+
+  test("a member enrolls a machine and revokes it", async () => {
+    const { workspace } = await owner("roles-member-own");
+    const member = await testing.joinWorkspace(env, workspace.id, "member");
+    const { machine, token } = await enrollAs(member.cookie, workspace.id, "member-mbp");
+    expect(await list(member.cookie)).toEqual([
+      expect.objectContaining({ id: machine.id, canRevoke: true }),
+    ]);
+    expect((await revoke(machine.id, member.cookie)).status).toBe(200);
+    expect(await verifyMachineToken(createDb(env.DB), token)).toBeNull();
+  });
+
+  test("a member can't revoke someone else's machine", async () => {
+    const { machine, token, workspaceId } = await enroll("roles-member-other");
+    const member = await testing.joinWorkspace(env, workspaceId, "member");
+    expect(await list(member.cookie)).toEqual([
+      expect.objectContaining({ id: machine.id, canRevoke: false }),
+    ]);
+    const response = await revoke(machine.id, member.cookie);
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ error: "forbidden" });
+    expect(await verifyMachineToken(createDb(env.DB), token)).not.toBeNull();
+    expect(link(machine.id).revoke).not.toHaveBeenCalled();
+  });
+
+  test("an admin can revoke a member's machine", async () => {
+    const { workspace, cookie } = await owner("roles-admin");
+    const admin = await testing.joinWorkspace(env, workspace.id, "admin");
+    const member = await testing.joinWorkspace(env, workspace.id, "member");
+    const { machine } = await enrollAs(member.cookie, workspace.id, "member-mini");
+    expect(await list(cookie)).toEqual([
+      expect.objectContaining({ id: machine.id, canRevoke: true }),
+    ]);
+    expect((await revoke(machine.id, admin.cookie)).status).toBe(200);
+  });
+
+  test("a member revoking a machine that isn't there gets not found", async () => {
+    const { workspace } = await owner("roles-missing");
+    const member = await testing.joinWorkspace(env, workspace.id, "member");
+    expect((await revoke("nope", member.cookie)).status).toBe(404);
   });
 });
 

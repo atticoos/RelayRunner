@@ -90,9 +90,8 @@ export function workspaces() {
     // Any signed-in user can create a workspace and becomes its owner.
     allowUserToCreateOrganization: true,
     creatorRole: "owner",
-    // MVP: one owner per workspace, no invites yet. The member and invitation tables are shaped
-    // for teams; raise this (and add sendInvitationEmail) when teams land.
-    membershipLimit: 1,
+    // Teams (#133): owner, admin and member roles; see roles.ts. Invites land in #135.
+    membershipLimit: 100,
     schema: {
       organization: { modelName: "workspace" },
       member: { modelName: "workspaceMember", fields: { organizationId: "workspaceId" } },

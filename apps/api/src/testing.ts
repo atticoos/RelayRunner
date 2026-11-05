@@ -97,3 +97,17 @@ export function withSetCookies(cookie: string, response: Response) {
   }
   return [...jar].map(([name, value]) => `${name}=${value}`).join("; ");
 }
+
+// A new user added to an existing workspace with the given role, with that workspace active.
+// Stands in for accepting an invite until #135 lands.
+export async function joinWorkspace(env: Env, workspaceId: string, role: "admin" | "member") {
+  const { user, githubToken, cookie } = await signIn(env);
+  await createAuth(env).api.addMember({
+    body: { organizationId: workspaceId, userId: user.id, role },
+  });
+  const active = await call(env, "/auth/organization/set-active", cookie, {
+    organizationId: workspaceId,
+  });
+  expect(active.status).toBe(200);
+  return { user, githubToken, cookie: withSetCookies(cookie, active) };
+}
