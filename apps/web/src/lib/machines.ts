@@ -19,6 +19,8 @@ export type Machine = {
    * null when its own CLI did. Missing from an API that predates pausing.
    */
   paused?: { at: string; by: string | null } | null;
+  /** Whether the signed-in user may revoke it. Missing from an API that predates roles. */
+  canRevoke?: boolean;
   /** Live, from the machine's connection. Online once it has said hello. */
   status?: {
     online: boolean;

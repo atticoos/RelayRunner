@@ -315,6 +315,33 @@ describe("connecting a GitHub org", () => {
   });
 });
 
+describe("who can connect GitHub (#134)", () => {
+  test("an admin can install and claim; a member gets forbidden", async () => {
+    const { workspace } = await owner();
+    const admin = await testing.joinWorkspace(env, workspace.id, "admin");
+    const member = await testing.joinWorkspace(env, workspace.id, "member");
+
+    expect((await call("/github/install", admin.cookie)).status).toBe(302);
+    const install = await call("/github/install", member.cookie);
+    expect(install.status).toBe(403);
+    expect(await install.json()).toEqual({ error: "forbidden" });
+
+    const github = installation();
+    visibleTo.set(admin.githubToken, [github]);
+    expect(await setup(admin.cookie, github.id)).toBe("/settings/github?github=unclaimed");
+    expect((await claim(member.cookie, github.id)).status).toBe(403);
+    expect(await row(github.id)).toMatchObject({ workspace_id: null });
+  });
+
+  test("a member can still see the workspace's installations", async () => {
+    const { workspace } = await owner();
+    const member = await testing.joinWorkspace(env, workspace.id, "member");
+    const response = await call("/workspaces/current", member.cookie);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ role: "member", installations: [] });
+  });
+});
+
 describe("coming back to a dashboard page after the install (next)", () => {
   const device = "/device?user_code=ABCDEFGH&name=my-laptop";
 

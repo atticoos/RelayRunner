@@ -7,6 +7,7 @@ import { createDb, schema } from "../db/index.ts";
 import { isWorkspaceMember } from "../installations.ts";
 import { requireUser } from "../middleware/session.ts";
 import { requireWorkspace } from "../middleware/workspace.ts";
+import { requireManager } from "../roles.ts";
 import { present } from "./github.ts";
 
 // Any member of the workspace in the path. Someone outside it gets a 404, so ids don't leak.
@@ -41,7 +42,8 @@ export const workspaceRoutes = new Hono<AppEnv>()
       .limit(1);
     return c.json({ order: readRunnerOrder(row?.runnerOrder), isDefault: !row?.runnerOrder });
   })
-  .put("/:id/runner-order", requireUser, requireMember, async (c) => {
+  // Owners and admins only; members can read it.
+  .put("/:id/runner-order", requireUser, requireMember, requireManager, async (c) => {
     const parsed = runnerOrderSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) {
       const issues = parsed.error.issues.map(({ path, message }) => ({ path, message }));

@@ -509,11 +509,16 @@ function MachineCard({ machine }: { machine: Machine }) {
                       Copy labels
                     </DropdownMenuItem>
                   )}
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem variant="destructive" onSelect={() => setConfirming(true)}>
-                    <BanIcon aria-hidden />
-                    Revoke…
-                  </DropdownMenuItem>
+                  {/* Members revoke only the machines they enrolled; the API says which. */}
+                  {machine.canRevoke !== false && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem variant="destructive" onSelect={() => setConfirming(true)}>
+                        <BanIcon aria-hidden />
+                        Revoke…
+                      </DropdownMenuItem>
+                    </>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
             </>
