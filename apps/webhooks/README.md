@@ -48,4 +48,4 @@ pnpm run deploy:api    # attaches the queue consumers
 pnpm run deploy:web    # forwards /api/webhooks/* here
 ```
 
-The GitHub App's webhook URL is `https://relayrunner-webhooks.relayrun.workers.dev/api/webhooks/github`, so deliveries reach this Worker directly. The dashboard also forwards `/api/webhooks/*` here, so `<dashboard origin>/api/webhooks/github` works too.
+The GitHub App's webhook URL is `https://relayrunner-webhooks.relayrun.workers.dev/api/webhooks/github`, so deliveries reach this Worker directly. `https://webhooks.relayrunner.app/api/webhooks/github` is the same Worker on its custom domain. The dashboard also forwards `/api/webhooks/*` here, so `<dashboard origin>/api/webhooks/github` works too.

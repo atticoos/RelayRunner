@@ -10,6 +10,9 @@
   // No preview URLs: nothing reaches this Worker by one (dashboard previews bind to production),
   // and each would be another public, unprotected hostname.
   "preview_urls": false,
+  // Custom domain on the interim relayrunner.app zone. The dashboard still reaches this Worker over
+  // its service binding; this host is for direct API calls. /api/dev/* stays behind gateDevOnly.
+  "routes": [{ "pattern": "api.relayrunner.app", "custom_domain": true }],
   // Workers Logs, traces and Issues (errors grouped per Worker). Wrangler deploys overwrite
   // dashboard settings, so these must stay on here. Source maps make Issues' stacks point at
   // the TypeScript source.
