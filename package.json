@@ -25,7 +25,7 @@
     "deploy:webhooks": "pnpm --filter @relayrunner/webhooks run deploy",
     "deploy:api": "pnpm --filter @relayrunner/api run deploy",
     "deploy:web": "pnpm --filter @relayrunner/web run deploy",
-    "deploy:landing": "pnpm --filter ./apps/landing run deploy"
+    "deploy:landing": "pnpm --filter @relayrunner/landing run deploy"
   },
   "type": "module",
   "skills": [

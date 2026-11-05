@@ -1,5 +1,5 @@
 {
-  "name": "@runnerduty/landing",
+  "name": "@relayrunner/landing",
   "private": true,
   "type": "module",
   "scripts": {
@@ -7,7 +7,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "og": "\"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome\" --headless=new --disable-gpu --hide-scrollbars --allow-file-access-from-files --window-size=1200,630 --virtual-time-budget=3000 --screenshot=\"$PWD/public/og-image.png\" \"file://$PWD/og/og-image.html\"",
-    "build:site": "VITE_SITE_URL=https://relayrunner.dev vite build",
+    "build:site": "VITE_SITE_URL=https://relayrunner.app vite build",
     "deploy": "pnpm build:site && wrangler deploy"
   },
   "devDependencies": {
