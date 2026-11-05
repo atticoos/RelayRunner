@@ -100,12 +100,3 @@ export function describeDeviceError(error: unknown) {
       return "Something went wrong. Try again.";
   }
 }
-
-/**
- * The relay input line that targets a machine like this one. `self-hosted` matches every machine,
- * so it's left out unless it's the only label.
- */
-export function machineInput(labels: string[]) {
-  const specific = labels.filter((label) => label.toLowerCase() !== "self-hosted");
-  return `machine: ${(specific.length > 0 ? specific : labels).join(", ")}`;
-}

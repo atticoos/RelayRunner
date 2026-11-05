@@ -27,7 +27,6 @@ import {
   ArrowDownIcon,
   ArrowUpIcon,
   CheckIcon,
-  CopyIcon,
   GripVerticalIcon,
   InfoIcon,
   PlusIcon,
@@ -40,7 +39,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { authDisabled } from "@/lib/auth-client";
-import { listMachines, machineInput, revokeMachine, timeAgo, type Machine } from "@/lib/machines";
+import { listMachines, revokeMachine, timeAgo, type Machine } from "@/lib/machines";
 import { RunnerOrderError, getRunnerOrder, saveRunnerOrder } from "@/lib/runner-order";
 import { cn } from "@/lib/utils";
 
@@ -444,43 +443,38 @@ function MachineCard({ machine }: { machine: Machine }) {
   );
 }
 
-// The labels a job's `machine:` input matches, and a button that copies the line to paste.
+// The labels a job's `machine:` input matches. Clicking one copies it.
 function MachineLabels({ labels }: { labels: string[] }) {
-  const [copied, setCopied] = useState(false);
-  const line = machineInput(labels);
+  const [copied, setCopied] = useState<string | null>(null);
 
-  async function copy() {
+  async function copy(label: string) {
     try {
-      await navigator.clipboard.writeText(line);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      await navigator.clipboard.writeText(label);
+      setCopied(label);
+      setTimeout(() => setCopied((current) => (current === label ? null : current)), 1500);
     } catch {
-      // Clipboard can be blocked (insecure origin, permissions); the button's title shows the line.
+      // Clipboard can be blocked (insecure origin, permissions); the label is still readable.
     }
   }
 
   return (
-    <div className="col-span-2 flex flex-wrap items-center gap-1.5">
-      <ul className="contents" aria-label="Labels">
-        {labels.map((label) => (
-          <li key={label}>
-            <Badge variant="outline" className="font-mono font-normal">
+    <ul className="col-span-2 flex flex-wrap items-center gap-1.5" aria-label="Labels">
+      {labels.map((label) => (
+        <li key={label} className="flex">
+          <Badge asChild variant="outline" className="font-mono font-normal">
+            <button
+              type="button"
+              className="cursor-pointer hover:bg-accent hover:text-accent-foreground"
+              title="Copy label"
+              aria-label={copied === label ? `Copied ${label}` : `Copy ${label}`}
+              onClick={() => void copy(label)}
+            >
+              {copied === label && <CheckIcon />}
               {label}
-            </Badge>
-          </li>
-        ))}
-      </ul>
-      <Button
-        size="sm"
-        variant="ghost"
-        className="h-6 gap-1 px-1.5 text-xs text-muted-foreground"
-        title={line}
-        aria-label={copied ? "Copied" : `Copy ${line}`}
-        onClick={() => void copy()}
-      >
-        {copied ? <CheckIcon /> : <CopyIcon />}
-        {copied ? "Copied" : "Copy input"}
-      </Button>
-    </div>
+            </button>
+          </Badge>
+        </li>
+      ))}
+    </ul>
   );
 }
