@@ -1,16 +1,24 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  // Static assets only: there is no `main`, so no Worker script runs.
-  "name": "relayrunner-web",
+  // Landing page: static assets only. There is no `main`, so no Worker script runs and requests
+  // never bill as Worker invocations.
+  "name": "relayrunner-landing",
   "compatibility_date": "2026-11-03",
+  // The RelayRunner Cloudflare account (separate from Atticus's personal account).
+  "account_id": "b233b6d6fd9eae9e093651bfb043c119",
   "assets": {
     "directory": "./dist",
   },
   "workers_dev": false,
-  "routes": [
-    {
-      "pattern": "relayrunner.dev",
-      "custom_domain": true,
-    },
-  ],
+  // PR preview builds (`wrangler preview` in Workers Builds) get public preview URLs.
+  "preview_urls": true,
+  "observability": {
+    "enabled": true,
+    "logs": { "enabled": true, "invocation_logs": true },
+  },
+  // Apex of the interim domain. relayrunner.app's MX/TXT records (Email Routing, and DMARC for
+  // send.relayrunner.app) live alongside the custom domain's records and are not touched by it.
+  // Add relayrunner.dev here (and point VITE_SITE_URL in package.json at it) once that zone
+  // lives in this account; a custom domain on a zone outside the account fails the deploy.
+  "routes": [{ "pattern": "relayrunner.app", "custom_domain": true }],
 }
