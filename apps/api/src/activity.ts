@@ -4,11 +4,13 @@ import {
   type ActivityItem,
   type ActivityPage,
   type DisconnectReason,
+  type RouteWalk,
 } from "@relayrunner/activity";
 import { and, desc, eq, like, lt } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import { type Db, schema } from "./db/index.ts";
 import { presentJob } from "./jobs.ts";
+import { jobKey, walksForJobs } from "./route-decisions.ts";
 
 const table = schema.activityEvent;
 
@@ -107,9 +109,13 @@ export async function listActivity(
     .orderBy(desc(table.id))
     .limit(ACTIVITY_PAGE_SIZE + 1);
   const page = rows.slice(0, ACTIVITY_PAGE_SIZE);
+  const walks = await walksForJobs(
+    db,
+    page.flatMap((row) => (row.job ? [row.job] : [])),
+  );
   return {
     items: page.flatMap((row) => {
-      const item = presentEvent(row);
+      const item = presentEvent(row, row.job ? (walks.get(jobKey(row.job)) ?? null) : null);
       return item ? [item] : [];
     }),
     nextBefore: rows.length > ACTIVITY_PAGE_SIZE ? page[page.length - 1].event.id : null,
@@ -127,7 +133,7 @@ type Row = {
 
 // Null for a row whose type or data no longer parses (a type that was since removed), so one bad
 // row never breaks the page.
-function presentEvent(row: Row): ActivityItem | null {
+function presentEvent(row: Row, walk: RouteWalk | null): ActivityItem | null {
   const parsed = ActivityEvent.safeParse({ type: row.event.type, data: row.event.data });
   if (!parsed.success) return null;
   const event = parsed.data;
@@ -144,6 +150,6 @@ function presentEvent(row: Row): ActivityItem | null {
       snapshot === null
         ? null
         : { id: row.event.machineId, name: row.eventMachineName ?? snapshot },
-    job: row.job ? presentJob(row.job, row.private, row.jobMachineName) : null,
+    job: row.job ? presentJob(row.job, row.private, row.jobMachineName, walk) : null,
   };
 }

@@ -5,6 +5,8 @@ import type { Env } from "./env.ts";
 import type { ActivityPage } from "@relayrunner/activity";
 import * as testing from "./testing.ts";
 import { processWebhook } from "./webhook-queue.ts";
+import { recordPick } from "./route-decisions.ts";
+import { decideRoute } from "./routing.ts";
 
 let proxy: Awaited<ReturnType<typeof testing.startD1>>["proxy"];
 let env: Env;
@@ -91,6 +93,147 @@ async function activity(cookie: string, query = "") {
     nextBefore: page.nextBefore,
   };
 }
+
+// What a pick in `runId` knew when it answered.
+function pickContext(runId: number, runAttempt = 1) {
+  return {
+    repo: "relayrunner/relayrunner-ci-tests",
+    runId,
+    runAttempt,
+    workflow: "RelayRunner dev",
+    machine: ["macOS"],
+    github: ["ubuntu-latest"],
+  };
+}
+
+describe("Activity: why a job ran where", () => {
+  test("a routed job carries its run's walk down the runner order", async () => {
+    const { cookie, installationId, workspaceId, runId } = await connectedWorkspace();
+    const context = pickContext(runId);
+    const decision = await decideRoute(
+      { steps: [{ key: "machine" }, { key: "github" }] },
+      { ...context, private: true },
+      async () => null,
+    );
+    await recordPick(createDb(env.DB), {
+      workspaceId,
+      repositoryId: 55,
+      context,
+      jobName: "relay",
+      decision,
+      reason: null,
+    });
+    // A redelivered pick keeps the first decision.
+    await recordPick(createDb(env.DB), {
+      workspaceId,
+      repositoryId: 55,
+      context,
+      jobName: "relay",
+      decision: { ...decision, skipped: [] },
+      reason: null,
+    });
+    await processWebhook(
+      env,
+      jobEvent(installationId, { id: runId + 1, runId, name: "pick", labels: ["relayrunner"] }),
+    );
+    await processWebhook(
+      env,
+      jobEvent(installationId, { id: runId + 2, runId, name: "test", labels: ["ubuntu-latest"] }),
+    );
+    // A re-run of failed jobs reuses attempt 1's pick.
+    await processWebhook(
+      env,
+      jobEvent(installationId, {
+        id: runId + 3,
+        runId,
+        runAttempt: 2,
+        name: "lint",
+        labels: ["ubuntu-latest"],
+      }),
+    );
+
+    const walk = {
+      step: "github",
+      skipped: [{ key: "machine", reason: "no_machine" }],
+      notInOrder: [],
+      machine: ["macOS"],
+      github: ["ubuntu-latest"],
+    };
+    const { jobs } = await activity(cookie);
+    expect(jobs.map((job) => [job.name, job.walk])).toEqual([
+      ["lint", walk],
+      ["test", walk],
+    ]);
+  });
+
+  test("a job from before decisions were kept has no walk", async () => {
+    const { cookie, installationId, runId } = await connectedWorkspace();
+    await processWebhook(
+      env,
+      jobEvent(installationId, { id: runId + 1, runId, name: "pick", labels: ["relayrunner"] }),
+    );
+    await processWebhook(
+      env,
+      jobEvent(installationId, { id: runId + 2, runId, name: "test", labels: ["ubuntu-latest"] }),
+    );
+    expect((await activity(cookie)).jobs[0].walk).toBeNull();
+  });
+
+  test("a relay that couldn't route is logged with its reason", async () => {
+    const { cookie, workspaceId, runId } = await connectedWorkspace();
+    const context = pickContext(runId);
+    const decision = await decideRoute(
+      { steps: [{ key: "machine" }] },
+      { ...context, private: true },
+      async () => null,
+    );
+    if (decision.runner !== null) throw new Error("expected no runner");
+    await recordPick(createDb(env.DB), {
+      workspaceId,
+      repositoryId: 55,
+      context,
+      jobName: "relay",
+      decision,
+      reason: decision.reason,
+    });
+    // RelayRunner can't see the repo: no walk, still logged.
+    await recordPick(createDb(env.DB), {
+      workspaceId,
+      repositoryId: null,
+      context: { ...pickContext(runId + 1), repo: "relayrunner/hidden" },
+      jobName: "relay",
+      decision: null,
+      reason: "No runner available: RelayRunner doesn't have access to relayrunner/hidden.",
+    });
+
+    const { items } = await activity(cookie, "?filter=job");
+    expect(items).toMatchObject([
+      {
+        type: "job.unroutable",
+        job: null,
+        data: { repository: "relayrunner/hidden", walk: null },
+      },
+      {
+        type: "job.unroutable",
+        job: null,
+        data: {
+          repository: "relayrunner/relayrunner-ci-tests",
+          runId,
+          runAttempt: 1,
+          workflow: "RelayRunner dev",
+          job: "relay",
+          reason:
+            "No runner available: no local machine with macOS is online and idle; GitHub-hosted isn't in your runner order.",
+          walk: {
+            step: null,
+            skipped: [{ key: "machine", reason: "no_machine" }],
+            notInOrder: ["github"],
+          },
+        },
+      },
+    ]);
+  });
+});
 
 describe("Activity", () => {
   test("lists the job a pick routed, with the runner it selected", async () => {

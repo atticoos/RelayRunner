@@ -1,4 +1,4 @@
-import type { ActivityJob, ActivityRunner } from "@relayrunner/activity";
+import type { ActivityJob, ActivityRunner, RouteWalk } from "@relayrunner/activity";
 import type { WebhookMessage } from "@relayrunner/github-webhooks";
 import { and, eq, isNull, type SQL, sql } from "drizzle-orm";
 import { recordEvent } from "./activity.ts";
@@ -129,6 +129,7 @@ export function presentJob(
   job: typeof table.$inferSelect,
   isPrivate: boolean | null,
   machineName: string | null,
+  walk: RouteWalk | null = null,
 ): ActivityJob {
   return {
     id: job.id,
@@ -141,6 +142,8 @@ export function presentJob(
     name: job.name,
     // Where RelayRunner sent the job: GitHub resolved its runs-on to the pick's answer.
     runner: presentRunner(job, machineName),
+    // Why it went there: how the run's pick walked the runner order.
+    walk,
     runnerName: job.runnerName,
     branch: job.headBranch,
     sha: job.headSha,

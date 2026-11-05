@@ -1,4 +1,4 @@
-import type { ActivityEvent } from "./events.ts";
+import type { ActivityEvent, RouteWalk } from "./events.ts";
 
 // GET /api/activity's response. Types only: the API builds it, the dashboard reads it.
 
@@ -22,6 +22,8 @@ export interface ActivityJob {
   workflow: string | null;
   name: string;
   runner: ActivityRunner;
+  /** How the run's pick walked the runner order, or null for jobs routed before it was recorded. */
+  walk: RouteWalk | null;
   /** The runner that took the job, e.g. "GitHub Actions 3". */
   runnerName: string | null;
   branch: string | null;

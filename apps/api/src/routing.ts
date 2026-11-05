@@ -169,6 +169,10 @@ export function machineRunnerName(machineName: string, routeId: string) {
 export interface JobContext {
   repo: string;
   runId: number;
+  // 1 for a run's first attempt. A full re-run picks again under a new attempt.
+  runAttempt: number;
+  // The workflow's name, or null when missing.
+  workflow: string | null;
   // Labels a machine must all have. Empty when the relay's `machine` input is left out or empty:
   // the job doesn't use machines.
   machine: string[];
@@ -188,9 +192,13 @@ export function jobContext(contextData: unknown): JobContext | null {
   if (typeof repo !== "string" || !repo.includes("/") || !Number.isSafeInteger(runId) || runId <= 0)
     return null;
   const inputs = dictionary(isRecord(contextData) ? contextData.inputs : undefined);
+  const runAttempt = Number(scalar(github.get("run_attempt")));
+  const workflow = scalar(github.get("workflow"));
   return {
     repo,
     runId,
+    runAttempt: Number.isSafeInteger(runAttempt) && runAttempt > 0 ? runAttempt : 1,
+    workflow: typeof workflow === "string" && workflow ? workflow : null,
     machine: parseLabels(scalar(inputs?.get("machine"))),
     github: parseLabels(scalar(inputs?.get("github"))),
   };
@@ -217,27 +225,24 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-// Why a step of the order didn't answer.
-export type SkipReason =
-  // The job left the provider's relay input empty.
-  | "not_configured"
-  // Machines never run a public repo's jobs.
-  | "public_repo"
-  // No online, idle machine has every wanted label.
-  | "no_machine"
-  // `github` names more than one label; a runs-on from an output holds one.
-  | "too_many_labels";
+// Why a step of the order didn't answer: not_configured (the relay left the provider's input
+// empty), public_repo (machines never run a public repo's jobs), no_machine (no online, idle
+// machine has every wanted label), too_many_labels (`github` names more than one label; a runs-on
+// from an output holds one). Shared with the Activity page, which explains each.
+export type { SkipReason } from "@relayrunner/activity";
+import type { SkipReason } from "@relayrunner/activity";
 
 export interface SkippedStep {
   key: RunnerKey;
   reason: SkipReason;
 }
 
+// `notInOrder` lists providers the job configured that the order leaves out, either way, so an
+// ignored input is never silent.
 export type RouteDecision =
   // `step` answered with `runner`, after skipping `skipped` (in order).
-  | { runner: string; step: RunnerKey; skipped: SkippedStep[] }
-  // Nothing fits: fail the relay with `reason`. `notInOrder` lists providers the job configured
-  // that the order leaves out.
+  | { runner: string; step: RunnerKey; skipped: SkippedStep[]; notInOrder: RunnerKey[] }
+  // Nothing fits: fail the relay with `reason`.
   | { runner: null; reason: string; skipped: SkippedStep[]; notInOrder: RunnerKey[] };
 
 export interface RouteRequest {
@@ -257,23 +262,23 @@ export async function decideRoute(
   pickMachine: () => Promise<string | null>,
 ): Promise<RouteDecision> {
   const skipped: SkippedStep[] = [];
+  const inOrder = new Set(order.steps.map((step) => step.key));
+  const notInOrder = RUNNER_KEYS.filter((key) => !inOrder.has(key) && job[key].length > 0);
   for (const { key } of order.steps) {
     if (key === "machine") {
       if (job.machine.length === 0) skipped.push({ key, reason: "not_configured" });
       else if (!job.private) skipped.push({ key, reason: "public_repo" });
       else {
         const label = await pickMachine();
-        if (label) return { runner: label, step: key, skipped };
+        if (label) return { runner: label, step: key, skipped, notInOrder };
         skipped.push({ key, reason: "no_machine" });
       }
     } else if (key === "github") {
       if (job.github.length === 0) skipped.push({ key, reason: "not_configured" });
       else if (job.github.length > 1) skipped.push({ key, reason: "too_many_labels" });
-      else return { runner: job.github[0], step: key, skipped };
+      else return { runner: job.github[0], step: key, skipped, notInOrder };
     }
   }
-  const inOrder = new Set(order.steps.map((step) => step.key));
-  const notInOrder = RUNNER_KEYS.filter((key) => !inOrder.has(key) && job[key].length > 0);
   return { runner: null, reason: noRunnerReason(job, skipped, notInOrder), skipped, notInOrder };
 }
 
