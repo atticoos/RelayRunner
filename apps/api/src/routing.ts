@@ -66,13 +66,37 @@ export interface Candidate {
   state: "idle" | "busy" | null;
 }
 
-/** The first machine that is online, idle and not held by another route, or null. */
-export function chooseMachine(candidates: Candidate[], held: Set<string>): Candidate | null {
-  return (
-    candidates.find(
-      (machine) => machine.online && machine.state === "idle" && !held.has(machine.id),
-    ) ?? null
-  );
+/** When each machine was last picked: the newest route per machine. */
+export function lastPicked(routes: Route[]): Map<string, number> {
+  const picked = new Map<string, number>();
+  for (const route of routes) {
+    const previous = picked.get(route.machineId);
+    if (previous === undefined || route.createdAt > previous)
+      picked.set(route.machineId, route.createdAt);
+  }
+  return picked;
+}
+
+/**
+ * The online, idle machine no route holds that was least recently picked, or null. Machines
+ * never picked come first; ties keep the candidates' order.
+ */
+export function chooseMachine(
+  candidates: Candidate[],
+  held: Set<string>,
+  picked: Map<string, number> = new Map(),
+): Candidate | null {
+  let best: Candidate | null = null;
+  let bestAt = Infinity;
+  for (const machine of candidates) {
+    if (!machine.online || machine.state !== "idle" || held.has(machine.id)) continue;
+    const at = picked.get(machine.id) ?? -Infinity;
+    if (at < bestAt) {
+      best = machine;
+      bestAt = at;
+    }
+  }
+  return best;
 }
 
 export interface QueuedJob {

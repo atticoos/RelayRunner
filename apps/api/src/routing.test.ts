@@ -4,6 +4,7 @@ import {
   chooseMachine,
   holdsMachine,
   jobContext,
+  lastPicked,
   machineRunnerName,
   newRouteId,
   ROUTE_HOLD_MS,
@@ -45,7 +46,7 @@ describe("chooseMachine", () => {
     state,
   });
 
-  test("picks the first online, idle machine no route holds", () => {
+  test("picks an online, idle machine no route holds", () => {
     const picked = chooseMachine(
       [
         machine("offline", false, null),
@@ -60,8 +61,64 @@ describe("chooseMachine", () => {
 
   test("returns null when no machine is free", () => {
     expect(chooseMachine([machine("busy", true, "busy")], new Set())).toBeNull();
+    expect(chooseMachine([machine("held", true, "idle")], new Set(["held"]))).toBeNull();
     expect(chooseMachine([], new Set())).toBeNull();
   });
+
+  test("prefers a machine never picked, then the least recently picked", () => {
+    const candidates = [
+      machine("a", true, "idle"),
+      machine("b", true, "idle"),
+      machine("c", true, "idle"),
+    ];
+    const picked = new Map([
+      ["a", 3_000],
+      ["b", 1_000],
+    ]);
+    expect(chooseMachine(candidates, new Set(), picked)?.id).toBe("c");
+    expect(chooseMachine(candidates.slice(0, 2), new Set(), picked)?.id).toBe("b");
+  });
+
+  test("skips held, busy and offline machines even when picked longest ago", () => {
+    const picked = new Map([
+      ["held", 1],
+      ["busy", 1],
+      ["offline", 1],
+      ["free", 5_000],
+    ]);
+    const candidates = [
+      machine("held", true, "idle"),
+      machine("busy", true, "busy"),
+      machine("offline", false, null),
+      machine("free", true, "idle"),
+    ];
+    expect(chooseMachine(candidates, new Set(["held"]), picked)?.id).toBe("free");
+  });
+
+  test("ties keep the candidates' order", () => {
+    const candidates = [machine("a", true, "idle"), machine("b", true, "idle")];
+    expect(chooseMachine(candidates, new Set())?.id).toBe("a");
+    const picked = new Map([
+      ["a", 2_000],
+      ["b", 2_000],
+    ]);
+    expect(chooseMachine(candidates, new Set(), picked)?.id).toBe("a");
+  });
+});
+
+test("lastPicked keeps each machine's newest route", () => {
+  const picked = lastPicked([
+    { ...route, machineId: "m1", createdAt: 1_000 },
+    { ...route, machineId: "m1", createdAt: 3_000 },
+    { ...route, machineId: "m2", createdAt: 2_000 },
+    { ...route, machineId: "m1", createdAt: 2_500 },
+  ]);
+  expect(picked).toEqual(
+    new Map([
+      ["m1", 3_000],
+      ["m2", 2_000],
+    ]),
+  );
 });
 
 test("a route holds its machine until the job starts or the hold lapses", () => {
