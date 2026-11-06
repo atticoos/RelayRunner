@@ -35,9 +35,3 @@ Coding agents push often, and every push burns GitHub Actions minutes. Private p
 - **Public repositories never run on machines.** Anyone could run code on a machine through a pull request, so RelayRunner skips machines for public repositories' jobs.
 - **Fail fast and say why.** When nothing fits, the relay fails with the reason instead of leaving a job queued.
 - **Built for people and agents.** The CLI has readable output for people and `--json` for agents, and setup is safe to retry.
-
-## Limits today
-
-- The repository's owner must be a GitHub organization. Personal accounts aren't supported yet.
-- One relay routes one job, so matrix jobs can't share a relay.
-- Connected machines run macOS or Linux, on x64 or ARM64. Windows isn't supported yet.
