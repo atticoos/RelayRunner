@@ -1,13 +1,18 @@
 # RelayRunner
 
-RelayRunner is a hosted gateway that routes GitHub Actions jobs to the runners a workspace configures.
+RelayRunner is a hosted gateway that routes GitHub Actions jobs to the runners a workspace configures. See [PRODUCT.md](PRODUCT.md) for what it does and how it works. The reusable `relay` workflow and the free checks live in [relayrunner/actions](https://github.com/relayrunner/actions).
 
 ## Workspace
 
 Use pnpm 11.28.9 (pinned by `packageManager`; Corepack picks it up) and run
 `pnpm install` from the repository root.
 
-- `apps/` holds runnable applications.
+- `apps/` holds runnable applications:
+  - [`api`](apps/api): the gateway's API and routing, a Hono app on a Cloudflare Worker.
+  - [`web`](apps/web): the dashboard.
+  - [`webhooks`](apps/webhooks): receives GitHub webhooks and queues them for the API.
+  - [`cli`](apps/cli): the `relayrunner` CLI that connects a machine.
+  - [`landing`](apps/landing): the landing page.
 - `packages/` holds shared libraries.
 
 ## Development checks
