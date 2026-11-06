@@ -132,7 +132,7 @@ export async function deleteOrgRunner(token: string, org: string, runnerId: numb
 
 /**
  * Post a finished check run on a commit, as the App. A check with the same name on the same
- * commit replaces the earlier one on the pull request.
+ * commit replaces the earlier one on the pull request. Returns the check run's page on GitHub.
  */
 export async function createCheckRun(
   token: string,
@@ -160,6 +160,8 @@ export async function createCheckRun(
     throw new Error(
       `POST /repos/${repo}/check-runs failed with ${response.status}: ${(await response.text()).slice(0, 300)}`,
     );
+  const body = (await response.json()) as { html_url?: string | null };
+  return { url: body.html_url ?? null };
 }
 
 /** A file's text from the repo's default branch, or null when it doesn't exist. */

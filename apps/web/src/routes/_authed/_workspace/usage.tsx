@@ -4,7 +4,14 @@ import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { authDisabled } from "@/lib/auth-client";
-import { getUsage, minutes, money, type UsageReport, type UsageRow } from "@/lib/usage";
+import {
+  type FreeCheckSavings,
+  getUsage,
+  minutes,
+  money,
+  type UsageReport,
+  type UsageRow,
+} from "@/lib/usage";
 
 const RANGES = [7, 30, 90] as const;
 
@@ -55,6 +62,8 @@ function UsagePage() {
           ))}
         </div>
 
+        {report.freeChecks.checks > 0 && <FreeChecks savings={report.freeChecks} />}
+
         {totals.jobs === 0 ? (
           <p className="rounded-xl border bg-card px-4 py-6 text-sm text-muted-foreground">
             No finished jobs in the last {report.days} days. Jobs show up here once the GitHub App
@@ -102,12 +111,7 @@ function UsagePage() {
               caption="Repositories with the most short-job cost"
               head={["Repository", "Jobs", "Under a minute", "Short-job cost"]}
               rows={report.byRepository.map((repo) => [
-                <span key="repo" className="font-mono">
-                  {repo.repository}
-                  {repo.private === false && (
-                    <span className="ml-1.5 font-sans text-muted-foreground">public, free</span>
-                  )}
-                </span>,
+                <RepoName key="repo" repository={repo.repository} isPrivate={repo.private} />,
                 repo.jobs.toLocaleString(),
                 repo.shortJobs.toLocaleString(),
                 money(repo.shortCost),
@@ -124,6 +128,60 @@ function UsagePage() {
         )}
       </div>
     </section>
+  );
+}
+
+// The check runs the GitHub App posted instead of a workflow job: each would have billed a minute.
+function FreeChecks({ savings }: { savings: FreeCheckSavings }) {
+  const { runner } = savings;
+  return (
+    <div className="grid gap-3">
+      <h2 className="font-semibold">Saved by free checks</h2>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <Stat
+          label="Check runs"
+          value={savings.checks.toLocaleString()}
+          detail="posted by the GitHub App, no runner"
+        />
+        <Stat
+          label="Billed minutes saved"
+          value={minutes(savings.savedMinutes)}
+          detail={`one ${runner.label} minute per check`}
+        />
+        <Stat
+          label="Saved"
+          value={money(savings.savedCost)}
+          detail={`at ${money(runner.perMinute)}/min in private repos`}
+        />
+      </div>
+      {savings.byRepository.length > 1 && (
+        <Table
+          caption="Free checks by repository"
+          head={["Repository", "Check runs", "Saved"]}
+          rows={savings.byRepository.map((repo) => [
+            <RepoName key="repo" repository={repo.repository} isPrivate={repo.private} />,
+            repo.checks.toLocaleString(),
+            money(repo.savedCost),
+          ])}
+        />
+      )}
+      <p className="max-w-[62ch] text-sm text-muted-foreground">
+        Each check run stands in for a workflow job that would take a few seconds on ubuntu-latest
+        and still bill a whole minute. Public repos don't pay for standard runners, so their checks
+        save minutes but no money.
+      </p>
+    </div>
+  );
+}
+
+function RepoName({ repository, isPrivate }: { repository: string; isPrivate: boolean | null }) {
+  return (
+    <span className="font-mono">
+      {repository}
+      {isPrivate === false && (
+        <span className="ml-1.5 font-sans text-muted-foreground">public, free</span>
+      )}
+    </span>
   );
 }
 
@@ -228,6 +286,23 @@ function sampleReport(days: number): UsageReport {
     byRepository: [
       { repository: "acme/app", private: true, jobs: 1800, shortJobs: 1100, shortCost: 8.9 },
       { repository: "acme/docs", private: false, jobs: 400, shortJobs: 380, shortCost: 0 },
+    ],
+    freeChecks: sampleChecks(days),
+  };
+}
+
+function sampleChecks(days: number): FreeCheckSavings {
+  const app = Math.round(140 * (days / 30));
+  const docs = Math.round(60 * (days / 30));
+  return {
+    days,
+    runner: { label: "Linux 2-core", perMinute: 0.006 },
+    checks: app + docs,
+    savedMinutes: app + docs,
+    savedCost: app * 0.006,
+    byRepository: [
+      { repository: "acme/app", private: true, checks: app, savedCost: app * 0.006 },
+      { repository: "acme/docs", private: false, checks: docs, savedCost: 0 },
     ],
   };
 }

@@ -4,7 +4,9 @@
 // (src/repo-config.ts).
 
 import type { WebhookMessage } from "@relayrunner/github-webhooks";
+import { createDb } from "./db/index.ts";
 import type { Env } from "./env.ts";
+import { recordFreeCheck } from "./free-checks.ts";
 import { appJwt, createCheckRun, importAppPrivateKey, installationToken } from "./github-app.ts";
 import { checkConventionalTitle } from "./native-checks.ts";
 import { loadRepoConfig, type ConfigResult } from "./repo-config.ts";
@@ -51,7 +53,18 @@ export async function checkPullRequestTitle(env: Env, message: PullRequestMessag
   );
   const config = await loadRepoConfig(token, repo);
   const check = prTitleCheckRun(config, message.pullRequest.title, message.pullRequest.headSha);
-  if (check) await createCheckRun(token, repo, check);
+  if (check) {
+    const { url } = await createCheckRun(token, repo, check);
+    // Logged for Activity and the Usage page's minutes saved.
+    await recordFreeCheck(createDb(env.DB), message.installationId, {
+      check: check.name,
+      repository: message.repository,
+      pullRequest: message.pullRequest.number,
+      headSha: check.headSha,
+      conclusion: check.conclusion,
+      url,
+    });
+  }
   console.log(
     JSON.stringify({
       msg: "relayrunner pr title checked",

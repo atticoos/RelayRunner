@@ -125,11 +125,26 @@ export const ActivityEvent = z.discriminatedUnion("type", [
       walk: RouteWalk.nullable(),
     }),
   }),
+  // The GitHub App posted a free check's result on a pull request (src/pr-title-check.ts), with no
+  // runner and no workflow, so it stands in for an Actions job that would have billed a minute.
+  // `check` is the check run's name, e.g. "PR title"; `url` its page on GitHub.
+  z.object({
+    type: z.literal("check.completed"),
+    data: z.object({
+      check: z.string(),
+      repository: z.string(),
+      repositoryId: z.number(),
+      pullRequest: z.number(),
+      headSha: z.string(),
+      conclusion: z.enum(["success", "failure"]),
+      url: z.string().nullable(),
+    }),
+  }),
 ]);
 
 export type ActivityEvent = z.infer<typeof ActivityEvent>;
 export type ActivityEventType = ActivityEvent["type"];
 
 /** The Activity page's filters: the part of the type before the dot. */
-export const ACTIVITY_FILTERS = ["job", "machine", "member"] as const;
+export const ACTIVITY_FILTERS = ["job", "check", "machine", "member"] as const;
 export type ActivityFilter = (typeof ACTIVITY_FILTERS)[number];
