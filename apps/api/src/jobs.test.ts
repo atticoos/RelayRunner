@@ -225,7 +225,7 @@ describe("Activity: why a job ran where", () => {
           workflow: "RelayRunner dev",
           job: "relay",
           reason:
-            "No runner available: no local machine with macOS is online and idle; GitHub-hosted isn't in your runner order.",
+            "No runner available: no self-hosted machine with macOS is online and idle; GitHub-hosted isn't in your runner order.",
           walk: {
             step: null,
             skipped: [{ key: "machine", reason: "no_machine" }],

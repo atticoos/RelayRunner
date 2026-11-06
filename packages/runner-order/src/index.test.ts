@@ -29,7 +29,7 @@ describe("runnerOrderSchema", () => {
     expect(result.success).toBe(false);
     expect(result.error?.issues[0]).toMatchObject({
       path: ["steps", 2, "key"],
-      message: "Local machines is already in the order.",
+      message: "Self-hosted is already in the order.",
     });
   });
 

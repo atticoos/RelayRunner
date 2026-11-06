@@ -15,7 +15,7 @@
  * keyed on the job's state, not on arrival order.
  */
 import { WEBHOOK_DLQ, type WebhookMessage } from "@relayrunner/github-webhooks";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { archiveDeadLetter, recordLastError } from "./dead-letters.ts";
 import { createDb, schema } from "./db/index.ts";
 import type { Env } from "./env.ts";
@@ -24,6 +24,7 @@ import { recordJobTiming } from "./job-timings.ts";
 import { recordWorkflowJob, setJobMachine } from "./jobs.ts";
 import { checkPullRequestTitle } from "./pr-title-check.ts";
 import { recordRepositoryEvent, removeRepositories, upsertRepositories } from "./repositories.ts";
+import { routingLabelFromLabels } from "./github-runners.ts";
 import { routeIdFromLabels } from "./routing.ts";
 
 // The `runs-on` label that routes a job through RelayRunner.
@@ -143,6 +144,9 @@ export async function processWebhook(env: Env, message: WebhookMessage): Promise
       // A job on a route's `rr-<id>` label: the run's pick chose a machine for it.
       const routeId = routeIdFromLabels(message.job.labels);
       if (routeId) return dispatchRoute(env, message, routeId, lagMs);
+      // A job on an added runner's label: the pick may have chosen that runner for it.
+      const routingLabel = routingLabelFromLabels(message.job.labels);
+      if (routingLabel) return trackRunnerJob(env, message, routingLabel, lagMs);
       if (!isPick) return;
       // On `queued`, wake a PickRunner for the job, which answers it with the Router's route. Other
       // actions are only logged.
@@ -272,6 +276,57 @@ async function dispatchRoute(
   const result = await env.MACHINE_LINK.getByName(route.machineId).run({ route, workspaceId });
   (result === "offline" ? console.warn : console.log)(
     JSON.stringify({ ...log, result, machineId: route.machineId }),
+  );
+}
+
+// Follows a job on a runner added from GitHub. GitHub delivers it to the runner itself, so there is
+// nothing to hand off: `queued` claims the route the pick made (same repo and run), and a later
+// action ends it once the job started, since the runner's own busy status covers it from then on.
+// Either way, the job's Activity row learns which machine ran it. A job that asked for the label
+// by hand, with no route, runs all the same; it just isn't ours to track.
+async function trackRunnerJob(
+  env: Env,
+  message: Extract<WebhookMessage, { event: "workflow_job" }>,
+  routingLabel: string,
+  lagMs: number,
+) {
+  const log = {
+    msg: "relayrunner runner job",
+    action: message.action,
+    deliveryId: message.deliveryId,
+    installationId: message.installationId,
+    repository: message.repository.fullName,
+    jobId: message.job.id,
+    runId: message.job.runId,
+    job: message.job.name,
+    routingLabel,
+    runnerName: message.job.runnerName,
+    conclusion: message.job.conclusion,
+    lagMs,
+  };
+  const db = createDb(env.DB);
+  const [machine] = await db
+    .select({ id: schema.machine.id, workspaceId: schema.machine.workspaceId })
+    .from(schema.machine)
+    .where(and(eq(schema.machine.routingLabel, routingLabel), isNull(schema.machine.revokedAt)))
+    .limit(1);
+  if (!machine) {
+    console.warn(JSON.stringify({ ...log, result: "no_machine" }));
+    return;
+  }
+  const job = {
+    jobId: message.job.id,
+    repositoryId: message.repository.id,
+    runId: message.job.runId,
+  };
+  const router = env.ROUTER.getByName(machine.workspaceId);
+  const route =
+    message.action === "queued"
+      ? await router.claimRunner(machine.id, job)
+      : await router.releaseRunnerJob(machine.id, job);
+  if (route) await setJobMachine(db, message.job.id, machine.id);
+  console.log(
+    JSON.stringify({ ...log, result: route ? "tracked" : "no_route", machineId: machine.id }),
   );
 }
 

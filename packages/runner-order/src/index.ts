@@ -44,7 +44,7 @@ export const DEFAULT_RUNNER_ORDER: RunnerOrder = {
 
 /** How the dashboard names each provider. */
 export const RUNNER_LABELS: Record<RunnerKey, string> = {
-  machine: "Local machines",
+  machine: "Self-hosted",
   github: "GitHub-hosted",
   blacksmith: "Blacksmith",
 };

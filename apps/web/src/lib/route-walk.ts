@@ -68,7 +68,7 @@ function longSkip(
         : "no machine was online and idle";
     }
     case "public_repo":
-      return "public repos never run on local machines";
+      return "public repos never run on self-hosted machines";
     case "too_many_labels":
       return `${key} takes one label, not ${walk[key].join(", ")}`;
     case "not_blacksmith_label":

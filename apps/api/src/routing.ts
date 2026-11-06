@@ -44,6 +44,9 @@ export interface Route {
   state: "reserved" | "dispatched" | "done";
   // The job that claimed the route. Only that job can claim it again (a redelivery).
   jobId?: number;
+  // Set when the route chose a runner added from GitHub: the label the pick answered, which the
+  // runner carries for good. Unset for connected machines, whose route answers `rr-<route id>`.
+  routingLabel?: string;
 }
 
 export function newRouteId() {
@@ -315,11 +318,11 @@ export function noRunnerReason(
       case "not_configured":
         return `\`${key}\` isn't set on this relay`;
       case "public_repo":
-        return "public repos never run on local machines";
+        return "public repos never run on self-hosted machines";
       case "no_machine":
         return job.machine.length === 1 && job.machine[0].toLowerCase() === "self-hosted"
-          ? "no local machine is online and idle"
-          : `no local machine with ${job.machine.join(", ")} is online and idle`;
+          ? "no self-hosted machine is online and idle"
+          : `no self-hosted machine with ${job.machine.join(", ")} is online and idle`;
       case "machine_paused":
         return paused.length === 1
           ? `the only machine that fits, ${paused[0]}, is paused`

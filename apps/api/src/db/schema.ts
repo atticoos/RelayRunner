@@ -197,8 +197,15 @@ export const deviceCode = sqliteTable("device_code", {
   ...timestamps,
 });
 
-// A machine enrolled with `relayrunner connect`. It belongs to one workspace and authenticates
-// with its own token, not a user session. Enrollment runs in two steps (src/machines.ts):
+// A machine RelayRunner can route jobs to. It belongs to one workspace. Two sources:
+// - 'connect': enrolled with `relayrunner connect`; it authenticates with its own token, not a
+//   user session, and runs one-job JIT runners the gateway mints.
+// - 'github': a self-hosted runner its owner already registered in a connected org (#159).
+//   RelayRunner never talks to the machine: it reads the runner's status from GitHub and steers
+//   jobs to it with routing_label, a label it added to the runner on GitHub. token_hash and
+//   enrollment_hash stay null.
+//
+// For 'connect' machines: Enrollment runs in two steps (src/machines.ts):
 // approving the device code in the dashboard creates the row with enrollment_hash set, and the
 // CLI's claim fills in os/arch and token_hash and clears enrollment_hash. Revoking keeps the row
 // so past routes can still name the machine. Pausing (paused_at) keeps it out of routing only.
@@ -225,9 +232,23 @@ export const machine = sqliteTable(
     // pausedBy is the user who paused it, or null when the machine paused itself from its CLI.
     pausedAt: integer("paused_at", { mode: "timestamp_ms" }),
     pausedBy: text("paused_by").references(() => user.id, { onDelete: "set null" }),
+    // 'connect' or 'github' (above).
+    source: text("source").notNull().default("connect"),
+    // 'github' only: the installation whose org the runner is registered in, GitHub's runner id,
+    // the label RelayRunner added to it (`rr-runner-<hex>`), and the runner's labels as last read
+    // from GitHub (JSON array), for when GitHub can't be reached.
+    installationId: integer("installation_id").references(() => githubInstallation.id, {
+      onDelete: "set null",
+    }),
+    githubRunnerId: integer("github_runner_id"),
+    routingLabel: text("routing_label").unique(),
+    githubLabels: text("github_labels"),
     ...timestamps,
   },
-  (table) => [index("machine_workspace_idx").on(table.workspaceId)],
+  (table) => [
+    index("machine_workspace_idx").on(table.workspaceId),
+    index("machine_github_runner_idx").on(table.installationId, table.githubRunnerId),
+  ],
 );
 
 // A GitHub Actions job in a run that RelayRunner routed, for the dashboard's Activity page. A run
