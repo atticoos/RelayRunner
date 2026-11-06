@@ -227,7 +227,7 @@ async function foldJobsNotRun(
 function rawJob(job: NonNullable<ActivityItem["job"]>) {
   return {
     conclusion: job.conclusion,
-    labels: job.runner.type === "github" && job.runner.label ? [job.runner.label] : [],
+    labels: job.runner.type !== "machine" && job.runner.label ? [job.runner.label] : [],
     machineId: job.runner.type === "machine" ? "machine" : null,
   };
 }

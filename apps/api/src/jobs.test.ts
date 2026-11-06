@@ -103,6 +103,7 @@ function pickContext(runId: number, runAttempt = 1) {
     workflow: "RelayRunner dev",
     machine: ["macOS"],
     github: ["ubuntu-latest"],
+    blacksmith: [],
   };
 }
 
@@ -158,6 +159,7 @@ describe("Activity: why a job ran where", () => {
       notInOrder: [],
       machine: ["macOS"],
       github: ["ubuntu-latest"],
+      blacksmith: [],
     };
     const { jobs } = await activity(cookie);
     expect(jobs.map((job) => [job.name, job.walk])).toEqual([
@@ -365,6 +367,27 @@ describe("Activity", () => {
     ]);
     // One event for the job, however many webhooks it got.
     expect((await activity(cookie)).items).toHaveLength(1);
+  });
+
+  test("shows a job on a Blacksmith label as Blacksmith", async () => {
+    const { cookie, installationId, runId } = await connectedWorkspace();
+    await processWebhook(
+      env,
+      jobEvent(installationId, { id: runId + 1, runId, name: "pick", labels: ["relayrunner"] }),
+    );
+    await processWebhook(
+      env,
+      jobEvent(installationId, {
+        id: runId + 2,
+        runId,
+        name: "test",
+        labels: ["blacksmith-2vcpu-ubuntu-2404"],
+      }),
+    );
+    const { jobs } = await activity(cookie);
+    expect(jobs).toMatchObject([
+      { name: "test", runner: { type: "blacksmith", label: "blacksmith-2vcpu-ubuntu-2404" } },
+    ]);
   });
 
   test("names the machine a route sent the job to, never the rr- label", async () => {

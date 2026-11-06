@@ -178,7 +178,7 @@ describe("runner order", () => {
       issues: [{ path: ["steps", 1, "key"], message: "GitHub-hosted is already in the order." }],
     });
 
-    const unknown = await put(workspace.id, jar, { steps: [{ key: "blacksmith" }] });
+    const unknown = await put(workspace.id, jar, { steps: [{ key: "buildkite" }] });
     expect(unknown.status).toBe(400);
 
     const read = await call(`/workspaces/${workspace.id}/runner-order`, jar);

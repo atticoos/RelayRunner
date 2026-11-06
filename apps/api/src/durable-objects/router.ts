@@ -31,6 +31,8 @@ export interface PickedJob {
   machine: string[];
   // The GitHub-hosted label(s) (the relay's `github` input). Empty: don't use GitHub-hosted.
   github: string[];
+  // The Blacksmith label (the relay's `blacksmith` input). Empty: don't use Blacksmith.
+  blacksmith: string[];
   // Public repos never go to a machine: anyone could run code on it with a pull request.
   private: boolean;
 }

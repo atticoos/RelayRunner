@@ -507,7 +507,7 @@ function JobRow({ job, now }: { job: ActivityJob; now: number }) {
               aria-hidden
               className="mr-1 inline size-3 align-[-0.1em] text-muted-foreground"
             />
-            <span className={runner.type === "github" ? "font-mono text-xs" : undefined}>
+            <span className={runner.type !== "machine" ? "font-mono text-xs" : undefined}>
               {runnerName}
             </span>
           </span>
@@ -614,7 +614,7 @@ function samplePage(filter: ActivityFilter | undefined): ActivityPage {
     ...rest,
   });
   const mac = { id: "m1", name: "Atticuss-MacBook-Pro.local" };
-  const relay = { machine: ["self-hosted"], github: ["ubuntu-latest"] };
+  const relay = { machine: ["self-hosted"], github: ["ubuntu-latest"], blacksmith: [] };
   const items: ActivityItem[] = [
     {
       id: 13,
@@ -634,6 +634,7 @@ function samplePage(filter: ActivityFilter | undefined): ActivityPage {
           notInOrder: [],
           machine: ["macOS", "ARM64"],
           github: ["macos-latest"],
+          blacksmith: [],
         },
       }),
     },
@@ -674,6 +675,7 @@ function samplePage(filter: ActivityFilter | undefined): ActivityPage {
           notInOrder: [],
           machine: ["macOS", "ARM64"],
           github: [],
+          blacksmith: [],
         },
       },
       occurredAt: at(0.1),
@@ -690,17 +692,19 @@ function samplePage(filter: ActivityFilter | undefined): ActivityPage {
       actor: null,
       machine: null,
       job: job(5, 3, {
-        runnerName: "GitHub Actions 12",
+        runner: { type: "blacksmith", label: "blacksmith-2vcpu-ubuntu-2404" },
+        runnerName: "blacksmith-2vcpu-ubuntu-2404-x7k2p",
         status: "completed",
         conclusion: "success",
         startedAt: at(2.9),
         completedAt: at(0.7),
         walk: {
-          step: "github",
+          step: "blacksmith",
           skipped: [{ key: "machine", reason: "no_machine" }],
           notInOrder: [],
           machine: ["macOS", "ARM64"],
           github: ["ubuntu-latest"],
+          blacksmith: ["blacksmith-2vcpu-ubuntu-2404"],
         },
       }),
     },

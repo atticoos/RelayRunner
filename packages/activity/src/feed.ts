@@ -4,12 +4,14 @@ import type { ActivityEvent, RouteWalk } from "./events.ts";
 
 /**
  * Where RelayRunner sent a job. A job on a route's `rr-<id>` label went to a machine: `name` is the
- * machine's current name, or null before the route is claimed or once the machine is deleted. Any
- * other job ran on the GitHub label the pick answered, such as `ubuntu-latest`.
+ * machine's current name, or null before the route is claimed or once the machine is deleted. A job
+ * on a `blacksmith-...` label ran on Blacksmith. Any other job ran on the GitHub label the pick
+ * answered, such as `ubuntu-latest`.
  */
 export type ActivityRunner =
   | { type: "machine"; machineId: string | null; name: string | null }
-  | { type: "github"; label: string };
+  | { type: "github"; label: string }
+  | { type: "blacksmith"; label: string };
 
 /** A routed job's current state. */
 export interface ActivityJob {

@@ -2,8 +2,11 @@ import { describe, expect, test } from "vitest";
 import { DEFAULT_RUNNER_ORDER, readRunnerOrder, runnerOrderSchema } from "./index.ts";
 
 describe("runnerOrderSchema", () => {
-  test("accepts either order of the two providers, or one alone", () => {
+  test("accepts the providers in any order, or one alone", () => {
     for (const steps of [
+      [{ key: "blacksmith" }, { key: "machine" }, { key: "github" }],
+      [{ key: "machine" }, { key: "blacksmith" }],
+      [{ key: "blacksmith" }],
       [{ key: "machine" }, { key: "github" }],
       [{ key: "github" }, { key: "machine" }],
       [{ key: "github" }],
@@ -31,7 +34,7 @@ describe("runnerOrderSchema", () => {
   });
 
   test("rejects unknown keys and labels on steps", () => {
-    expect(runnerOrderSchema.safeParse({ steps: [{ key: "blacksmith" }] }).success).toBe(false);
+    expect(runnerOrderSchema.safeParse({ steps: [{ key: "buildkite" }] }).success).toBe(false);
     const labelled = runnerOrderSchema.parse({ steps: [{ key: "github", label: "macos" }] });
     expect(labelled).toEqual({ steps: [{ key: "github" }] });
   });

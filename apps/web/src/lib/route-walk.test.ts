@@ -7,6 +7,7 @@ const walk = (rest: Partial<RouteWalk>): RouteWalk => ({
   notInOrder: [],
   machine: ["self-hosted"],
   github: ["ubuntu-latest"],
+  blacksmith: [],
   ...rest,
 });
 
@@ -52,6 +53,25 @@ describe("walkSummary", () => {
     );
     expect(walkLines(paused(["a", "b"]), "ubuntu-latest")[0]?.text).toBe(
       "every machine with macOS, ARM64 is paused (a, b)",
+    );
+  });
+
+  test("explains a Blacksmith step that couldn't take the job", () => {
+    const bad = walk({
+      skipped: [{ key: "blacksmith", reason: "not_blacksmith_label" }],
+      blacksmith: ["ubuntu-latest"],
+    });
+    expect(walkSummary(bad)).toEqual({ text: "not a Blacksmith label", tone: "fallback" });
+    expect(walkLines(bad, "ubuntu-latest")[0]?.text).toBe(
+      "blacksmith takes a Blacksmith label such as blacksmith-2vcpu-ubuntu-2404, not ubuntu-latest",
+    );
+    const two = walk({
+      skipped: [{ key: "blacksmith", reason: "too_many_labels" }],
+      blacksmith: ["blacksmith-2vcpu-ubuntu-2404", "blacksmith-4vcpu-ubuntu-2404"],
+    });
+    expect(walkSummary(two)?.text).toBe("blacksmith takes one label");
+    expect(walkLines(two, "ubuntu-latest")[0]?.text).toBe(
+      "blacksmith takes one label, not blacksmith-2vcpu-ubuntu-2404, blacksmith-4vcpu-ubuntu-2404",
     );
   });
 

@@ -206,6 +206,7 @@ async function pickRunner(env: Env, installationId: number, contextData: unknown
     runId: context.runId,
     machine: context.machine,
     github: context.github,
+    blacksmith: context.blacksmith,
     private: repo.private,
   });
   return {
@@ -216,6 +217,7 @@ async function pickRunner(env: Env, installationId: number, contextData: unknown
     private: repo.private,
     machine: context.machine,
     github: context.github,
+    blacksmith: context.blacksmith,
     record: {
       workspaceId,
       repositoryId: repo.id,

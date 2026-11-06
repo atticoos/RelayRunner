@@ -3,8 +3,8 @@
 // 1. A `runs-on: relayrunner` pick job is claimed by a PickRunner, which asks the workspace's
 //    Router where the job's run should go. The Router walks the workspace's runner order
 //    (decideRoute). A machine step records a route and answers its one-time label
-//    `rr-<route id>`; a github step answers the job's own `github` label. When nothing fits, the
-//    pick fails the relay job with the reason.
+//    `rr-<route id>`; a github or blacksmith step answers the job's own label for that provider.
+//    When nothing fits, the pick fails the relay job with the reason.
 // 2. The workflow's next job runs on that label, so GitHub queues it as `runs-on: rr-<route id>`.
 // 3. The `queued` webhook for that job claims the route (same repo, same run) and the machine's
 //    MachineLink mints an org JIT runner on the label and sends the machine a `run` message.
@@ -195,6 +195,8 @@ export interface JobContext {
   machine: string[];
   // The GitHub-hosted runner label(s) from the relay's `github` input. Empty when left out.
   github: string[];
+  // The Blacksmith runner label(s) from the relay's `blacksmith` input. Empty when left out.
+  blacksmith: string[];
 }
 
 // Reads the job message's `contextData` (src/pipeline-context.ts). Returns null when
@@ -217,13 +219,15 @@ export function jobContext(contextData: unknown): JobContext | null {
     workflow: typeof workflow === "string" && workflow ? workflow : null,
     machine: parseLabels(scalar(inputs?.get("machine"))),
     github: parseLabels(scalar(inputs?.get("github"))),
+    blacksmith: parseLabels(scalar(inputs?.get("blacksmith"))),
   };
 }
 
 // Why a step of the order didn't answer: not_configured (the relay left the provider's input
 // empty), public_repo (machines never run a public repo's jobs), no_machine (no online, idle
-// machine has every wanted label), too_many_labels (`github` names more than one label; a runs-on
-// from an output holds one). Shared with the Activity page, which explains each.
+// machine has every wanted label), too_many_labels (`github` or `blacksmith` names more than one
+// label; a runs-on from an output holds one), not_blacksmith_label (`blacksmith` names a label
+// Blacksmith doesn't serve, so the job would sit queued). Shared with the Activity page, which explains each.
 export type { SkipReason } from "@relayrunner/activity";
 import type { SkipReason } from "@relayrunner/activity";
 
@@ -248,8 +252,15 @@ export type RouteDecision =
 export interface RouteRequest {
   machine: string[];
   github: string[];
+  blacksmith: string[];
   private: boolean;
 }
+
+// Blacksmith's runner labels all start with this, e.g. `blacksmith-2vcpu-ubuntu-2404`. Blacksmith
+// has no API to ask whether it can take a job, so a Blacksmith step always accepts one with such a
+// label; anything else would queue forever.
+const BLACKSMITH_LABEL = /^blacksmith-/i;
+export const isBlacksmithLabel = (label: string) => BLACKSMITH_LABEL.test(label);
 
 /**
  * Walks the order top to bottom. A step whose provider the job didn't configure is skipped, and a
@@ -280,6 +291,12 @@ export async function decideRoute(
       if (job.github.length === 0) skipped.push({ key, reason: "not_configured" });
       else if (job.github.length > 1) skipped.push({ key, reason: "too_many_labels" });
       else return { runner: job.github[0], step: key, skipped, notInOrder };
+    } else if (key === "blacksmith") {
+      if (job.blacksmith.length === 0) skipped.push({ key, reason: "not_configured" });
+      else if (job.blacksmith.length > 1) skipped.push({ key, reason: "too_many_labels" });
+      else if (!isBlacksmithLabel(job.blacksmith[0]))
+        skipped.push({ key, reason: "not_blacksmith_label" });
+      else return { runner: job.blacksmith[0], step: key, skipped, notInOrder };
     }
   }
   return { runner: null, reason: noRunnerReason(job, skipped, notInOrder), skipped, notInOrder };
@@ -291,8 +308,8 @@ export function noRunnerReason(
   skipped: SkippedStep[],
   notInOrder: RunnerKey[],
 ): string {
-  if (job.machine.length === 0 && job.github.length === 0)
-    return `${NO_RUNNER}: the relay sets neither \`machine\` nor \`github\`.`;
+  if (RUNNER_KEYS.every((key) => job[key].length === 0))
+    return `${NO_RUNNER}: the relay sets none of \`machine\`, \`github\` or \`blacksmith\`.`;
   const parts = skipped.map(({ key, reason, paused = [] }) => {
     switch (reason) {
       case "not_configured":
@@ -308,7 +325,9 @@ export function noRunnerReason(
           ? `the only machine that fits, ${paused[0]}, is paused`
           : `every machine that fits is paused (${paused.join(", ")})`;
       case "too_many_labels":
-        return `\`github\` takes one label, not ${job.github.join(", ")}`;
+        return `\`${key}\` takes one label, not ${job[key].join(", ")}`;
+      case "not_blacksmith_label":
+        return `\`blacksmith\` takes a Blacksmith label such as blacksmith-2vcpu-ubuntu-2404, not ${job.blacksmith.join(", ")}`;
     }
   });
   for (const key of notInOrder) parts.push(`${RUNNER_LABELS[key]} isn't in your runner order`);
