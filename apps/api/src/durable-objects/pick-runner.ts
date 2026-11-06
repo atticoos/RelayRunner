@@ -14,6 +14,7 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import { createDb, schema } from "../db/index.ts";
 import { recordPick, type PickRecord } from "../route-decisions.ts";
 import { jobContext, NO_RUNNER, type RouteDecision } from "../routing.ts";
+import { nativeJob, runChecks } from "../native-checks.ts";
 
 export interface PickWork {
   jobId: number;
@@ -29,6 +30,8 @@ const WAIT_FOR_JOB_MS = 4 * 60_000;
 // on the `relayrunner` label, claims a job, and reports the route as its `runner` output without
 // running any steps. GitHub hands a runner any pending job with its label, so the job it claims
 // may be another repo's in the same org. The route is for the claimed job's own repo and run.
+// A claimed job whose steps are RelayRunner checks (src/native-checks.ts) is answered here instead:
+// the check runs in this object and the job completes as passed or failed, with no route.
 export class PickRunner extends DurableObject<Env> {
   // Idempotent: a redelivered or retried `queued` webhook for the same job does nothing.
   async start(work: PickWork): Promise<void> {
@@ -64,8 +67,31 @@ export class PickRunner extends DurableObject<Env> {
       client = new RunnerClient(decodeJitConfig(jit.encodedJitConfig), await latestRunnerVersion());
       await client.openSession();
       const request = await waitForJob(client);
-      if (request) {
-        const job = await client.claim(request);
+      const claimed = request ? await client.claim(request) : null;
+      const native = claimed ? nativeJob(claimed.message.steps) : { kind: "none" as const };
+      if (claimed && native.kind !== "none") {
+        // A native check: answer it here instead of routing it. Nothing runs on a VM.
+        const result =
+          native.kind === "checks"
+            ? runChecks(native.steps, claimed.message.contextData)
+            : ({ ok: false, reason: native.reason } as const);
+        if (result.ok) await client.complete(claimed, "succeeded");
+        else {
+          const failed = client;
+          await failed
+            .complete(claimed, "failed", { error: result.reason })
+            .catch(() => failed.complete(claimed, "failed"));
+        }
+        outcome = {
+          result: result.ok ? "check_passed" : "check_failed",
+          checks: native.kind === "checks" ? native.steps.map((step) => step.check) : [],
+          reason: result.ok ? undefined : result.reason,
+          claimedJob: claimed.message.jobDisplayName,
+          runnerLabels: jit.labels,
+        };
+        runnerId = undefined; // GitHub removes a JIT runner once its job is done.
+      } else if (claimed) {
+        const job = claimed;
         const { record, ...pick } = await pickRunner(
           this.env,
           work.installationId,

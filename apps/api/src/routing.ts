@@ -220,7 +220,7 @@ export function jobContext(contextData: unknown): JobContext | null {
   };
 }
 
-function dictionary(value: unknown): Map<string, unknown> | null {
+export function dictionary(value: unknown): Map<string, unknown> | null {
   if (!isRecord(value) || !Array.isArray(value.d)) return null;
   const entries = new Map<string, unknown>();
   for (const entry of value.d)
@@ -228,7 +228,7 @@ function dictionary(value: unknown): Map<string, unknown> | null {
   return entries;
 }
 
-function scalar(value: unknown): string | number | undefined {
+export function scalar(value: unknown): string | number | undefined {
   if (typeof value === "string" || typeof value === "number") return value;
   if (isRecord(value)) {
     if (typeof value.s === "string") return value.s;
@@ -237,7 +237,7 @@ function scalar(value: unknown): string | number | undefined {
   return undefined;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 

@@ -33,6 +33,8 @@ interface JobMessage {
   jobDisplayName: string;
   billingOwnerId?: string;
   plan: { planId: string };
+  // The job's steps, as the runner's ActionStep JSON. Only native checks read them.
+  steps?: unknown[];
   // The job's expression contexts (github, needs, ...), as PipelineContextData JSON.
   contextData?: Record<string, unknown>;
   resources: {
