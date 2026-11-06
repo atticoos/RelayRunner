@@ -1,6 +1,6 @@
 /**
  * Operator admin over D1: every user and workspace, and who is an operator. Needs Cloudflare Access
- * and an operator session (middleware/admin.ts). Grant the first operator with SQL
+ * (app.ts) and an operator session. Grant the first operator with SQL
  * (docs/cloudflare-access.md); after that, operators grant each other here.
  */
 import { count, desc, eq, isNotNull } from "drizzle-orm";
@@ -8,15 +8,14 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../app.ts";
 import { createDb, schema } from "../db/index.ts";
-import { requireAccess, requireOperator, who } from "../middleware/admin.ts";
-
-// Global user roles. Null is a regular user.
-export const USER_ROLES = ["operator"] as const;
+import { requireOperator, who } from "../middleware/admin.ts";
+import { requireUser } from "../middleware/session.ts";
+import { USER_ROLES } from "../roles.ts";
 
 const RoleBody = z.object({ role: z.enum(USER_ROLES).nullable() });
 
 export const adminRoutes = new Hono<AppEnv>()
-  .use("*", requireAccess, requireOperator)
+  .use("*", requireUser, requireOperator)
   .get("/users", async (c) => {
     const db = createDb(c.env.DB);
     const users = await db

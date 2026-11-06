@@ -2,8 +2,8 @@ import { vi } from "vitest";
 
 // Test helpers for Access-gated routes: a fake Zero Trust team whose certs `fetch` serves, and
 // JWTs signed by it. Importing this module stubs the global fetch for the certs URL.
-export const ACCESS_TEAM = "relayrunner.cloudflareaccess.com";
-export const ACCESS_AUD = "aud-preview";
+const ACCESS_TEAM = "relayrunner.cloudflareaccess.com";
+const ACCESS_AUD = "aud-preview";
 export const accessEnv = { ACCESS_TEAM_DOMAIN: ACCESS_TEAM, ACCESS_AUD };
 
 const { privateKey, publicKey } = (await crypto.subtle.generateKey(

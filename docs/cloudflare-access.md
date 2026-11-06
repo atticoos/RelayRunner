@@ -26,7 +26,7 @@ Paths under `/admin` and `/api/admin` on the dashboard Worker are for RelayRunne
 
 The Worker checks the JWT in addition to the Access edge check. If the Access app is removed or misconfigured, these paths stay closed.
 
-To add an admin view, put its page under `/admin/` (`apps/web/src/routes/_authed/_workspace/admin.*.tsx`, plus a link in `adminNav`) and its data under `/api/admin/`. The API Worker's own `workers.dev` URL is public. An `/api/admin/*` route in `apps/api` must call `gateAdmin` itself, and must not trust a header set by the dashboard Worker.
+To add an admin view, put its page under `/admin/` (`apps/web/src/routes/_authed/_workspace/admin.*.tsx`, plus a link in `adminNav`) and its data under `/api/admin/`. The API Worker's own `workers.dev` URL is public. `apps/api/src/app.ts` runs `requireAccess` (which calls `gateAdmin`) on all of `/api/admin/*`, so a new admin router there is gated without doing anything. It must not trust a header set by the dashboard Worker. Add `requireUser` and `requireOperator` to routes that touch D1 data.
 
 ## Users and workspaces
 

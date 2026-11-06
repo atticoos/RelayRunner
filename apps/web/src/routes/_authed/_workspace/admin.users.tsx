@@ -23,12 +23,6 @@ export const Route = createFileRoute("/_authed/_workspace/admin/users")({
   ),
 });
 
-// Select items need a non-empty value, so a regular user is "user" here and null in the API.
-const ROLE_OPTIONS = [
-  { value: "user", label: "User" },
-  { value: "operator", label: "Operator" },
-] as const;
-
 function UsersPage() {
   const { user: me } = Route.useRouteContext();
   const [users, setUsers] = useState(Route.useLoaderData().users);
@@ -109,11 +103,9 @@ function UsersPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {ROLE_OPTIONS.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
+                      {/* Select values can't be empty: a regular user is "user" here, null in the API. */}
+                      <SelectItem value="user">User</SelectItem>
+                      <SelectItem value="operator">Operator</SelectItem>
                     </SelectContent>
                   </Select>
                 </td>
