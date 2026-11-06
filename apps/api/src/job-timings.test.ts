@@ -1,8 +1,14 @@
 import type { WebhookMessage, WorkflowJob } from "@relayrunner/github-webhooks";
+import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import { createDb, schema } from "./db/index.ts";
 import type { Env } from "./env.ts";
-import { runnerClass, type UsageReport } from "./job-timings.ts";
+import {
+  JOB_TIMING_RETENTION_DAYS,
+  purgeOldJobTimings,
+  runnerClass,
+  type UsageReport,
+} from "./job-timings.ts";
 import * as testing from "./testing.ts";
 import { processWebhook } from "./webhook-queue.ts";
 
@@ -165,18 +171,39 @@ describe("usage report", () => {
     });
   });
 
-  test("an early `in_progress` never overwrites a finished job", async () => {
+  test("keeps only completed jobs, once each", async () => {
     const { cookie, installationId } = await connectedWorkspace();
     const done = finished(installationId, 10);
-    await processWebhook(env, done);
     if (done.event !== "workflow_job") throw new Error("expected a job");
+    // Still running: not stored.
     await processWebhook(env, {
       ...done,
-      deliveryId: "late",
+      deliveryId: "early",
       action: "in_progress",
       job: { ...done.job, status: "in_progress", conclusion: null, completedAt: null },
     });
+    expect((await usage(cookie)).totals.jobs).toBe(0);
+    await processWebhook(env, done);
+    await processWebhook(env, { ...done, deliveryId: "redelivered" });
     expect((await usage(cookie)).totals).toMatchObject({ jobs: 1, shortJobs: 1 });
+  });
+
+  test("purges timings past retention", async () => {
+    const { cookie, installationId } = await connectedWorkspace();
+    await processWebhook(env, finished(installationId, 10));
+    const old = finished(installationId, 10);
+    if (old.event !== "workflow_job") throw new Error("expected a job");
+    const at = Date.now() - (JOB_TIMING_RETENTION_DAYS + 1) * 86_400_000;
+    old.job.startedAt = new Date(at - 10_000).toISOString();
+    old.job.completedAt = new Date(at).toISOString();
+    await processWebhook(env, old);
+    expect(await purgeOldJobTimings(createDb(env.DB))).toBeGreaterThanOrEqual(1);
+    const rows = await createDb(env.DB)
+      .select({ id: schema.jobTiming.id })
+      .from(schema.jobTiming)
+      .where(eq(schema.jobTiming.installationId, installationId));
+    expect(rows).toHaveLength(1);
+    expect((await usage(cookie)).totals.jobs).toBe(1);
   });
 
   test("another workspace's jobs stay out", async () => {

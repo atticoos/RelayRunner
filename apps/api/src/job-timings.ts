@@ -1,5 +1,5 @@
 import type { WebhookMessage } from "@relayrunner/github-webhooks";
-import { and, eq, gte, isNotNull, ne, type SQL, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, isNotNull, lt, ne, sql } from "drizzle-orm";
 import { type Db, schema } from "./db/index.ts";
 import { findInstallation } from "./installations.ts";
 
@@ -59,16 +59,14 @@ export function runnerClass(labels: string[], runnerGroupName?: string | null): 
   return "other";
 }
 
-// Same ordering as workflow_job: a row only moves to an equal or later status.
-const rank = (status: SQL) =>
-  sql`(case ${status} when 'completed' then 2 when 'in_progress' then 1 else 0 end)`;
-
 /**
- * Stores a workflow_job delivery's timing, for every job in a connected repo, whoever's runner it
- * asked for. Skipped when the installation has no row yet; a later event for the job writes it.
+ * Stores a finished job's timing, for every job in a connected repo, whoever's runner it asked
+ * for. Only `completed` is kept: it carries both the start and finish, so earlier actions would only
+ * add writes. A redelivery is a no-op. Skipped when the installation has no row yet.
  */
 export async function recordJobTiming(db: Db, message: WorkflowJobMessage): Promise<boolean> {
   const { installationId, job, repository } = message;
+  if (job.status !== "completed") return false;
   if (!installationId || !(await findInstallation(db, installationId))) return false;
   await db
     .insert(table)
@@ -90,26 +88,37 @@ export async function recordJobTiming(db: Db, message: WorkflowJobMessage): Prom
       startedAt: parseDate(job.startedAt),
       completedAt: parseDate(job.completedAt),
     })
-    .onConflictDoUpdate({
-      target: table.id,
-      set: {
-        repositoryFullName: sql`excluded.repository_full_name`,
-        workflowName: sql`excluded.workflow_name`,
-        name: sql`excluded.name`,
-        labels: sql`excluded.labels`,
-        // The runner group arrives once a runner takes the job, so a later event can refine it.
-        runnerClass: sql`excluded.runner_class`,
-        status: sql`excluded.status`,
-        conclusion: sql`excluded.conclusion`,
-        runnerName: sql`coalesce(excluded.runner_name, ${table.runnerName})`,
-        runnerGroupName: sql`coalesce(excluded.runner_group_name, ${table.runnerGroupName})`,
-        startedAt: sql`coalesce(excluded.started_at, ${table.startedAt})`,
-        completedAt: sql`coalesce(excluded.completed_at, ${table.completedAt})`,
-        updatedAt: sql`excluded.updated_at`,
-      },
-      setWhere: sql`${rank(sql`${table.status}`)} <= ${rank(sql`excluded.status`)}`,
-    });
+    .onConflictDoNothing({ target: table.id });
   return true;
+}
+
+// How long job timings are kept. The report's longest range is 90 days.
+export const JOB_TIMING_RETENTION_DAYS = 90;
+// Rows deleted per statement, so one purge never runs long. The hourly cron catches up on the rest.
+const PURGE_BATCH = 5_000;
+
+/** Deletes job timings older than the retention window. Returns how many rows went. */
+export async function purgeOldJobTimings(db: Db, now = Date.now()): Promise<number> {
+  const cutoff = new Date(now - JOB_TIMING_RETENTION_DAYS * 86_400_000);
+  let deleted = 0;
+  for (let i = 0; i < 10; i += 1) {
+    const result = await db
+      .delete(table)
+      .where(
+        inArray(
+          table.id,
+          db
+            .select({ id: table.id })
+            .from(table)
+            .where(lt(table.completedAt, cutoff))
+            .limit(PURGE_BATCH),
+        ),
+      );
+    const changes = result.meta.changes ?? 0;
+    deleted += changes;
+    if (changes < PURGE_BATCH) break;
+  }
+  return deleted;
 }
 
 export interface UsageRow {

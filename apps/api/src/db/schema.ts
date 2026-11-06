@@ -278,7 +278,8 @@ export const workflowJob = sqliteTable(
 // How long every job in a connected repo ran, whatever runner took it, for the usage report
 // (src/job-timings.ts): how many jobs finished in under a minute and what GitHub's round-up to whole
 // minutes cost. Unlike workflow_job, this keeps jobs RelayRunner never saw a pick for. Written by
-// every workflow_job webhook; rows go with their installation.
+// each job's `completed` webhook, purged after 90 days by the hourly cron, and gone with the
+// installation.
 export const jobTiming = sqliteTable(
   "job_timing",
   {
@@ -298,7 +299,7 @@ export const jobTiming = sqliteTable(
     // Which GitHub rate the job pays, from its labels and runner group (see runnerClass). Rates
     // are applied when the report is read, so a price change needs no backfill.
     runnerClass: text("runner_class").notNull(),
-    // Same rules as workflow_job.status: only moves forward.
+    // Always 'completed' today; kept so earlier states can be stored later.
     status: text("status").notNull(),
     conclusion: text("conclusion"),
     runnerName: text("runner_name"),
