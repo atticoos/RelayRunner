@@ -94,4 +94,37 @@ describe("toWebhookMessage", () => {
       }),
     ).toBeNull();
   });
+
+  describe("pull_request", () => {
+    const payload = (action: string, extra: Record<string, unknown> = {}) => ({
+      action,
+      installation: { id: 7 },
+      repository: { id: 1, full_name: "acme/app" },
+      pull_request: { number: 3, title: "feat: x", head: { sha: "abc" }, body: "long" },
+      ...extra,
+    });
+
+    test("keeps the number, title and head commit", () => {
+      expect(toWebhookMessage("pull_request", "d", payload("opened"), "t")).toEqual({
+        deliveryId: "d",
+        action: "opened",
+        installationId: 7,
+        receivedAt: "t",
+        event: "pull_request",
+        repository: { id: 1, fullName: "acme/app" },
+        pullRequest: { number: 3, title: "feat: x", headSha: "abc" },
+      });
+    });
+
+    test("drops actions that don't change the title or head commit", () => {
+      expect(toWebhookMessage("pull_request", "d", payload("closed"))).toBeNull();
+      expect(toWebhookMessage("pull_request", "d", payload("labeled"))).toBeNull();
+      expect(
+        toWebhookMessage("pull_request", "d", payload("edited", { changes: { body: {} } })),
+      ).toBeNull();
+      expect(
+        toWebhookMessage("pull_request", "d", payload("edited", { changes: { title: {} } })),
+      ).not.toBeNull();
+    });
+  });
 });

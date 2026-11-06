@@ -23,6 +23,13 @@ export interface WorkflowJob {
   completedAt?: string | null;
 }
 
+// A pull request whose title or head commit changed, for the App's PR title check run.
+export interface PullRequest {
+  number: number;
+  title: string;
+  headSha: string;
+}
+
 export interface InstallationRepo {
   id: number;
   fullName: string;
@@ -66,7 +73,16 @@ export type WebhookMessage =
     })
   // A repo the installation can see was created, renamed, made public or private, transferred,
   // deleted, and so on. For "All repositories" installs it is the only event that reports new repos.
-  | (Base & { event: "repository"; repository: InstallationRepo });
+  | (Base & { event: "repository"; repository: InstallationRepo })
+  | (Base & {
+      event: "pull_request";
+      repository: { id: number; fullName: string };
+      pullRequest: PullRequest;
+    });
+
+// The pull_request actions that give a PR a new title or head commit. `edited` counts only when
+// the title changed (a body edit doesn't need a new check).
+const PULL_REQUEST_ACTIONS = new Set(["opened", "reopened", "synchronize", "edited"]);
 
 // Delivery → queue message, or null when RelayRunner doesn't act on this event (or the payload is
 // missing what it needs). Never throws.
@@ -146,6 +162,29 @@ export function toWebhookMessage(
         ...base,
         event,
         repository: { id: repo.id, fullName: repo.full_name, private: repo.private === true },
+      };
+    }
+    case "pull_request": {
+      const pr = payload.pull_request;
+      const repo = payload.repository;
+      if (
+        !base.action ||
+        !PULL_REQUEST_ACTIONS.has(base.action) ||
+        (base.action === "edited" && !(isRecord(payload.changes) && "title" in payload.changes)) ||
+        !isRecord(pr) ||
+        !isRecord(repo) ||
+        typeof pr.number !== "number" ||
+        typeof pr.title !== "string" ||
+        !isRecord(pr.head) ||
+        typeof pr.head.sha !== "string" ||
+        typeof repo.full_name !== "string"
+      )
+        return null;
+      return {
+        ...base,
+        event,
+        repository: { id: Number(repo.id), fullName: repo.full_name },
+        pullRequest: { number: pr.number, title: pr.title, headSha: pr.head.sha },
       };
     }
     default:

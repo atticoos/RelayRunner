@@ -21,6 +21,7 @@ import { createDb, schema } from "./db/index.ts";
 import type { Env } from "./env.ts";
 import { upsertInstallation } from "./installations.ts";
 import { recordWorkflowJob, setJobMachine } from "./jobs.ts";
+import { checkPullRequestTitle } from "./pr-title-check.ts";
 import { recordRepositoryEvent, removeRepositories, upsertRepositories } from "./repositories.ts";
 import { routeIdFromLabels } from "./routing.ts";
 
@@ -199,6 +200,10 @@ export async function processWebhook(env: Env, message: WebhookMessage): Promise
           lagMs,
         }),
       );
+      return;
+    case "pull_request":
+      // Throws to retry: a check run that never posts leaves the PR without its check.
+      await checkPullRequestTitle(env, message);
       return;
   }
 }
