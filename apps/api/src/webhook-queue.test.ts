@@ -1,15 +1,17 @@
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import { WEBHOOK_DLQ, WEBHOOK_QUEUE, type WebhookMessage } from "@relayrunner/github-webhooks";
 import type { Env } from "./env.ts";
+import { recordJobTiming } from "./job-timings.ts";
 import { recordWorkflowJob, setJobMachine } from "./jobs.ts";
 import { startD1 } from "./testing.ts";
 import * as consumer from "./webhook-queue.ts";
 
-// Storage is covered against a real D1 in jobs.test.ts.
+// Storage is covered against a real D1 in jobs.test.ts and job-timings.test.ts.
 vi.mock("./jobs.ts", () => ({
   recordWorkflowJob: vi.fn(async () => true),
   setJobMachine: vi.fn(async () => {}),
 }));
+vi.mock("./job-timings.ts", () => ({ recordJobTiming: vi.fn(async () => true) }));
 
 const start = vi.fn();
 const getByName = vi.fn(() => ({ start }));
@@ -52,7 +54,7 @@ function workflowJob(labels: string[], action = "queued"): WebhookMessage {
       runAttempt: 1,
       name: "pick",
       workflowName: "RelayRunner dev",
-      status: "queued",
+      status: action,
       conclusion: null,
       labels,
       headBranch: "main",
@@ -118,8 +120,13 @@ describe("webhook queue consumer", () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
     start.mockClear();
     vi.mocked(recordWorkflowJob).mockClear();
+    vi.mocked(recordJobTiming).mockClear();
     await consumer.processWebhook(env, workflowJob(["ubuntu-latest"]));
     expect(recordWorkflowJob).toHaveBeenCalledWith(expect.anything(), expect.anything(), false);
+    expect(recordJobTiming).not.toHaveBeenCalled();
+    // Once finished, its timing is kept for the usage report even though RelayRunner didn't route it.
+    await consumer.processWebhook(env, workflowJob(["ubuntu-latest"], "completed"));
+    expect(recordJobTiming).toHaveBeenCalledOnce();
     expect(log).not.toHaveBeenCalled();
     expect(start).not.toHaveBeenCalled();
     log.mockRestore();

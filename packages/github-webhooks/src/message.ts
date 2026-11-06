@@ -21,6 +21,8 @@ export interface WorkflowJob {
   // Absent on messages from an ingress that predates them.
   startedAt?: string | null;
   completedAt?: string | null;
+  // The runner's group once one took the job. GitHub-hosted runners report "GitHub Actions".
+  runnerGroupName?: string | null;
 }
 
 // A pull request whose title or head commit changed, for the App's PR title check run.
@@ -132,6 +134,7 @@ export function toWebhookMessage(
           headBranch: stringOrNull(job.head_branch),
           headSha: String(job.head_sha ?? ""),
           runnerName: stringOrNull(job.runner_name),
+          runnerGroupName: stringOrNull(job.runner_group_name),
           createdAt: String(job.created_at ?? ""),
           startedAt: stringOrNull(job.started_at),
           completedAt: stringOrNull(job.completed_at),
