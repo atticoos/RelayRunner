@@ -4,7 +4,7 @@ import { and, eq, isNull, type SQL, sql } from "drizzle-orm";
 import { recordEvent } from "./activity.ts";
 import { type Db, schema } from "./db/index.ts";
 import { findInstallation } from "./installations.ts";
-import { routeIdFromLabels } from "./routing.ts";
+import { isBlacksmithLabel, routeIdFromLabels } from "./routing.ts";
 
 type WorkflowJobMessage = Extract<WebhookMessage, { event: "workflow_job" }>;
 
@@ -121,7 +121,10 @@ export function parseDate(value: string | null | undefined) {
 function presentRunner(job: typeof table.$inferSelect, machineName: string | null): ActivityRunner {
   if (job.machineId || routeIdFromLabels(job.labels))
     return { type: "machine", machineId: job.machineId, name: machineName };
-  return { type: "github", label: job.labels.join(", ") };
+  const label = job.labels.join(", ");
+  if (job.labels.length > 0 && job.labels.every(isBlacksmithLabel))
+    return { type: "blacksmith", label };
+  return { type: "github", label };
 }
 
 /** A routed job's current state, for its Activity entry. */

@@ -1,18 +1,19 @@
 import { z } from "zod";
 
 // A workspace's runner order: an ordered allowlist of providers. The Router walks it top to
-// bottom and a job goes to the first provider that the job configures (relay.yml's `machine`
-// and `github` inputs) and that can take it. A provider missing from the order is never picked,
+// bottom and a job goes to the first provider that the job configures (relay.yml's `machine`,
+// `github` and `blacksmith` inputs) and that can take it. A provider missing from the order is never picked,
 // and a job nothing fits fails fast. Labels come from the job, so a step is only a key. Rules
 // per step (e.g. "while included minutes remain", #117) get added to the step objects later.
 
 /** Every provider a step can name, in the order the dashboard offers them. */
-export const RUNNER_KEYS = ["machine", "github"] as const;
+export const RUNNER_KEYS = ["machine", "github", "blacksmith"] as const;
 export type RunnerKey = (typeof RUNNER_KEYS)[number];
 
 export const runnerStepSchema = z.discriminatedUnion("key", [
   z.object({ key: z.literal("machine") }),
   z.object({ key: z.literal("github") }),
+  z.object({ key: z.literal("blacksmith") }),
 ]);
 export type RunnerStep = z.infer<typeof runnerStepSchema>;
 
@@ -45,6 +46,7 @@ export const DEFAULT_RUNNER_ORDER: RunnerOrder = {
 export const RUNNER_LABELS: Record<RunnerKey, string> = {
   machine: "Local machines",
   github: "GitHub-hosted",
+  blacksmith: "Blacksmith",
 };
 
 /**

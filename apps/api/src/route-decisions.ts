@@ -41,6 +41,7 @@ export async function recordPick(db: Db, pick: PickRecord) {
         notInOrder: decision.notInOrder,
         machine: context.machine,
         github: context.github,
+        blacksmith: context.blacksmith,
         reason: decision.runner === null ? decision.reason : null,
       })
       .onConflictDoNothing();
@@ -68,6 +69,7 @@ function walkOf(decision: RouteDecision, context: JobContext): RouteWalk {
     notInOrder: decision.notInOrder,
     machine: context.machine,
     github: context.github,
+    blacksmith: context.blacksmith,
   };
 }
 
@@ -96,6 +98,7 @@ export async function walksForJobs(db: Db, jobs: JobKey[]): Promise<Map<string, 
       notInOrder: best.notInOrder,
       machine: best.machine,
       github: best.github,
+      blacksmith: best.blacksmith,
     });
     if (parsed.success) walks.set(jobKey(job), parsed.data);
   }

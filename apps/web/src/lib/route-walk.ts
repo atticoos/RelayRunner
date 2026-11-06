@@ -22,7 +22,12 @@ function pausedText(paused: string[] = []) {
   return paused.length ? `${paused.length} machines are paused` : "machines are paused";
 }
 
-function shortSkip(walk: RouteWalk, reason: SkipReason, paused?: string[]): string | null {
+function shortSkip(
+  walk: RouteWalk,
+  key: RunnerKey,
+  reason: SkipReason,
+  paused?: string[],
+): string | null {
   switch (reason) {
     case "machine_paused":
       return pausedText(paused);
@@ -33,7 +38,9 @@ function shortSkip(walk: RouteWalk, reason: SkipReason, paused?: string[]): stri
     case "public_repo":
       return "public repo";
     case "too_many_labels":
-      return "github takes one label";
+      return `${key} takes one label`;
+    case "not_blacksmith_label":
+      return "not a Blacksmith label";
     case "not_configured":
       // Leaving a provider out of the relay is a choice, not news.
       return null;
@@ -63,7 +70,9 @@ function longSkip(
     case "public_repo":
       return "public repos never run on local machines";
     case "too_many_labels":
-      return `github takes one label, not ${walk.github.join(", ")}`;
+      return `${key} takes one label, not ${walk[key].join(", ")}`;
+    case "not_blacksmith_label":
+      return `blacksmith takes a Blacksmith label such as blacksmith-2vcpu-ubuntu-2404, not ${walk.blacksmith.join(", ")}`;
     case "not_configured":
       return `the relay doesn't set ${key}`;
   }
@@ -79,11 +88,10 @@ export type WalkTone = "fallback" | "info";
 export function walkSummary(walk: RouteWalk): { text: string; tone: WalkTone } | null {
   const parts: string[] = [];
   let tone: WalkTone = "info";
-  for (const { reason, paused } of walk.skipped) {
-    const text = shortSkip(walk, reason, paused);
+  for (const { key, reason, paused } of walk.skipped) {
+    const text = shortSkip(walk, key, reason, paused);
     if (text) parts.push(text);
-    if (reason === "no_machine" || reason === "machine_paused" || reason === "too_many_labels")
-      tone = "fallback";
+    if (reason !== "not_configured" && reason !== "public_repo") tone = "fallback";
   }
   for (const key of walk.notInOrder) parts.push(`${key} is set but not in your order`);
   return parts.length ? { text: parts.join("; "), tone } : null;

@@ -194,15 +194,6 @@ function RunnersPage() {
             {body(key)}
           </UnusedSection>
         ))}
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-dashed px-4 py-3">
-          <div className="grid gap-0.5">
-            <span className="text-sm font-semibold text-muted-foreground">Blacksmith</span>
-            <span className="text-xs text-muted-foreground">Not available yet.</span>
-          </div>
-          <Badge variant="idle" className="px-1.5 text-[10px] tracking-wider">
-            SOON
-          </Badge>
-        </div>
 
         <p className="text-sm text-muted-foreground">
           Jobs use the first provider here that they configure and that can take them. Jobs nothing
@@ -246,6 +237,8 @@ const keys = (steps: RunnerStep[]) => steps.map((step) => step.key).join(",");
 
 function meta(key: RunnerKey, machines: Machine[]) {
   if (key === "github") return "Runs on the label the job sets in relay.yml's github input.";
+  if (key === "blacksmith")
+    return "Runs on the label the job sets in relay.yml's blacksmith input · needs Blacksmith's GitHub App on the org";
   const active = machines.filter((machine) => !machine.revokedAt);
   const count = active.length;
   const paused = active.filter((machine) => machine.paused).length;

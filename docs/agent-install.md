@@ -64,9 +64,9 @@ org's owners, jobs start reaching this computer once an owner accepts it.
 List the workflows in `.github/workflows/` and the jobs in each. Suggest jobs that can run on
 this computer, and let the user pick. A job is a good fit when:
 
-- it runs on a GitHub-hosted label today, such as `ubuntu-latest`. When the computer is offline
-  or busy, an opted-in job runs on that label, which you pass to the relay's `github` input (see
-  step 5).
+- it runs on a GitHub-hosted label today, such as `ubuntu-latest`, or on a Blacksmith label,
+  such as `blacksmith-2vcpu-ubuntu-2404`. When the computer is offline or busy, an opted-in job
+  runs on that label, which you pass to the relay's `github` or `blacksmith` input (see step 5).
 - it has **no** `strategy.matrix`. Each routed job needs its own relay, so a matrix can't share
   one.
 - it has no `container:` or `services:`, unless this computer is Linux with Docker running.
@@ -120,6 +120,10 @@ the tag pins the version. The relay's inputs say which runners can take the job:
   on the user's machines.
 - `github` is the GitHub-hosted label to use when no machine fits. Put the job's old
   `runs-on` label here, such as `ubuntu-24.04` or `macos-latest`.
+- `blacksmith` is the Blacksmith label to use, such as `blacksmith-2vcpu-ubuntu-2404`. If the
+  job's old `runs-on` starts with `blacksmith-`, put it here instead of in `github`. Blacksmith
+  must also be in the workspace's runner order on the dashboard's Runners page; the user decides
+  where it goes. Blacksmith needs relay `v1.0.0-beta.4` or later.
 
 If no runner fits, the relay fails with the reason, and the job doesn't start.
 

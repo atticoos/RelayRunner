@@ -22,15 +22,18 @@ export const SKIP_REASONS = [
   "no_machine",
   // Every machine with the wanted labels is paused (listed in the step's `paused`).
   "machine_paused",
-  // `github` named more than one label.
+  // `github` or `blacksmith` named more than one label.
   "too_many_labels",
+  // `blacksmith` named a label that isn't Blacksmith's (blacksmith-...), so it would never start.
+  "not_blacksmith_label",
 ] as const;
 export type SkipReason = (typeof SKIP_REASONS)[number];
 
 /**
  * How a pick walked the workspace's runner order. `step` is the provider that took the job (null
  * when nothing fit), `skipped` the earlier steps in order with why, and `notInOrder` the providers
- * the relay set that the order leaves out. `machine` and `github` are the relay's inputs.
+ * the relay set that the order leaves out. `machine`, `github` and `blacksmith` are the relay's
+ * inputs; walks kept before Blacksmith existed read with no `blacksmith` labels.
  */
 export const RouteWalk = z.object({
   step: z.enum(RUNNER_KEYS).nullable(),
@@ -45,6 +48,7 @@ export const RouteWalk = z.object({
   notInOrder: z.array(z.enum(RUNNER_KEYS)),
   machine: z.array(z.string()),
   github: z.array(z.string()),
+  blacksmith: z.array(z.string()).default([]),
 });
 export type RouteWalk = z.infer<typeof RouteWalk>;
 

@@ -244,6 +244,7 @@ describe("jobContext", () => {
       workflow: "RelayRunner dev",
       machine: [],
       github: [],
+      blacksmith: [],
     });
     expect(
       jobContext(
@@ -252,7 +253,15 @@ describe("jobContext", () => {
           ["run_id", { t: 4, n: 5 }],
         ]),
       ),
-    ).toEqual({ repo: "a/b", runId: 5, runAttempt: 1, workflow: null, machine: [], github: [] });
+    ).toEqual({
+      repo: "a/b",
+      runId: 5,
+      runAttempt: 1,
+      workflow: null,
+      machine: [],
+      github: [],
+      blacksmith: [],
+    });
   });
 
   // From a claimed relay job (relay v1.0.0-beta.2, relayrunner-ci-tests run 42078905012): the
@@ -283,6 +292,16 @@ describe("jobContext", () => {
       workflow: null,
       machine: ["self-hosted"],
       github: ["ubuntu-latest"],
+      blacksmith: [],
+    });
+  });
+
+  test("reads the relay's blacksmith input", () => {
+    const inputs = { t: 2, d: [{ k: "blacksmith", v: " blacksmith-2vcpu-ubuntu-2404 " }] };
+    expect(jobContext({ ...claimed, inputs })).toMatchObject({
+      machine: [],
+      github: [],
+      blacksmith: ["blacksmith-2vcpu-ubuntu-2404"],
     });
   });
 
@@ -309,7 +328,12 @@ describe("jobContext", () => {
 describe("decideRoute", () => {
   const machineFirst: RunnerOrder = { steps: [{ key: "machine" }, { key: "github" }] };
   const githubFirst: RunnerOrder = { steps: [{ key: "github" }, { key: "machine" }] };
-  const both = { machine: ["self-hosted"], github: ["ubuntu-latest"], private: true };
+  const both = {
+    machine: ["self-hosted"],
+    github: ["ubuntu-latest"],
+    blacksmith: [],
+    private: true,
+  };
   const free = async () => "rr-0123456789ab";
   const none = async () => null;
 
@@ -406,7 +430,7 @@ describe("decideRoute", () => {
   test("github takes one label", async () => {
     const decision = await decideRoute(
       { steps: [{ key: "github" }] },
-      { machine: [], github: ["ubuntu-latest", "macos-latest"], private: true },
+      { machine: [], github: ["ubuntu-latest", "macos-latest"], blacksmith: [], private: true },
       none,
     );
     expect(decision).toMatchObject({
@@ -438,12 +462,83 @@ describe("decideRoute", () => {
   test("a relay with neither input fails", async () => {
     const decision = await decideRoute(
       machineFirst,
-      { machine: [], github: [], private: true },
+      { machine: [], github: [], blacksmith: [], private: true },
       free,
     );
     expect(decision.runner === null && decision.reason).toBe(
-      "No runner available: the relay sets neither `machine` nor `github`.",
+      "No runner available: the relay sets none of `machine`, `github` or `blacksmith`.",
     );
+  });
+
+  describe("blacksmith", () => {
+    const label = "blacksmith-2vcpu-ubuntu-2404";
+    const all = { ...both, blacksmith: [label] };
+    const order = (...keys: ("machine" | "github" | "blacksmith")[]): RunnerOrder => ({
+      steps: keys.map((key) => ({ key })),
+    });
+
+    test("answers the job's Blacksmith label, public repo or not", async () => {
+      for (const isPrivate of [true, false]) {
+        expect(
+          await decideRoute(order("blacksmith", "github"), { ...all, private: isPrivate }, free),
+        ).toEqual({ runner: label, step: "blacksmith", skipped: [], notInOrder: ["machine"] });
+      }
+    });
+
+    test("takes the job when no machine is free, before github", async () => {
+      expect(await decideRoute(order("machine", "blacksmith", "github"), all, none)).toEqual({
+        runner: label,
+        step: "blacksmith",
+        skipped: [{ key: "machine", reason: "no_machine" }],
+        notInOrder: [],
+      });
+    });
+
+    test("is skipped when the relay doesn't set it, and reported when the order leaves it out", async () => {
+      expect(await decideRoute(order("blacksmith", "github"), both, free)).toEqual({
+        runner: "ubuntu-latest",
+        step: "github",
+        skipped: [{ key: "blacksmith", reason: "not_configured" }],
+        notInOrder: ["machine"],
+      });
+      expect(await decideRoute(order("github"), all, free)).toMatchObject({
+        notInOrder: ["machine", "blacksmith"],
+      });
+    });
+
+    test("takes one label, and only a Blacksmith one", async () => {
+      const two = await decideRoute(
+        order("blacksmith"),
+        { ...both, github: [], machine: [], blacksmith: [label, "blacksmith-4vcpu-ubuntu-2404"] },
+        free,
+      );
+      expect(two).toMatchObject({ skipped: [{ key: "blacksmith", reason: "too_many_labels" }] });
+      expect(two.runner === null && two.reason).toBe(
+        "No runner available: `blacksmith` takes one label, not blacksmith-2vcpu-ubuntu-2404, blacksmith-4vcpu-ubuntu-2404.",
+      );
+
+      const wrong = await decideRoute(
+        order("blacksmith", "github"),
+        { ...both, blacksmith: ["ubuntu-latest"] },
+        free,
+      );
+      expect(wrong).toEqual({
+        runner: "ubuntu-latest",
+        step: "github",
+        skipped: [{ key: "blacksmith", reason: "not_blacksmith_label" }],
+        notInOrder: ["machine"],
+      });
+    });
+
+    test("matches the label prefix ignoring case", async () => {
+      expect(
+        await decideRoute(
+          order("blacksmith"),
+          { ...all, blacksmith: ["Blacksmith-4vcpu-ubuntu-2404"] },
+          free,
+        ),
+      ).toMatchObject({ runner: "Blacksmith-4vcpu-ubuntu-2404", step: "blacksmith" });
+    });
   });
 });
 

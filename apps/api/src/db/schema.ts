@@ -360,9 +360,10 @@ export const routeDecision = sqliteTable(
     repositoryId: integer("repository_id").notNull(),
     runId: integer("run_id").notNull(),
     runAttempt: integer("run_attempt").notNull(),
-    // The provider that took the run ('machine' or 'github'), or null when nothing fit.
+    // The provider that took the run ('machine', 'github' or 'blacksmith'), or null when nothing fit.
     step: text("step"),
-    // What the pick answered: a route's `rr-<id>` or a GitHub label. Null when nothing fit.
+    // What the pick answered: a route's `rr-<id>`, a GitHub or a Blacksmith label. Null when
+    // nothing fit.
     runner: text("runner"),
     // The earlier steps, in order, as [{key, reason}].
     skipped: text("skipped", { mode: "json" })
@@ -370,9 +371,10 @@ export const routeDecision = sqliteTable(
       .notNull(),
     // Providers the relay set that the order leaves out.
     notInOrder: text("not_in_order", { mode: "json" }).$type<string[]>().notNull(),
-    // The relay's `machine` and `github` inputs.
+    // The relay's `machine`, `github` and `blacksmith` inputs.
     machine: text("machine", { mode: "json" }).$type<string[]>().notNull(),
     github: text("github", { mode: "json" }).$type<string[]>().notNull(),
+    blacksmith: text("blacksmith", { mode: "json" }).$type<string[]>().notNull().default([]),
     // The message the relay failed with, when nothing fit.
     reason: text("reason"),
     createdAt: integer("created_at", { mode: "timestamp_ms" })
