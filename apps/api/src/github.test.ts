@@ -1,3 +1,4 @@
+import { generateKeyPairSync } from "node:crypto";
 import { toWebhookMessage } from "@relayrunner/github-webhooks";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import { app } from "./app.ts";
@@ -797,5 +798,118 @@ describe("repository webhooks (queue consumer)", () => {
     );
     await webhook("installation", { action: "deleted", installation: github }, later(2));
     expect(await repos(github.id)).toEqual([]);
+  });
+});
+
+describe("installation rate limits (#166)", () => {
+  const pem = generateKeyPairSync("rsa", { modulusLength: 2048 })
+    .privateKey.export({ type: "pkcs8", format: "pem" })
+    .toString();
+  const appEnv = () =>
+    ({
+      ...env,
+      GITHUB_APP_ID: "5605512",
+      GITHUB_APP_PRIVATE_KEY: { get: async () => pem },
+    }) as Env;
+  const get = (path: string, cookie: string) =>
+    app.request(`/api${path}`, { headers: { cookie } }, appEnv());
+
+  // GitHub as the App sees it: a token per installation, then GET /rate_limit with it.
+  let tokenRequests: number[] = [];
+  let rateLimitStatus = 200;
+  beforeEach(() => {
+    tokenRequests = [];
+    rateLimitStatus = 200;
+    const realFetch = globalThis.fetch;
+    vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input instanceof Request ? input.url : String(input);
+      const minted = url.match(
+        /^https:\/\/api\.github\.com\/app\/installations\/(\d+)\/access_tokens$/,
+      );
+      if (minted) {
+        tokenRequests.push(Number(minted[1]));
+        return Promise.resolve(Response.json({ token: `ghs_${minted[1]}` }, { status: 201 }));
+      }
+      if (url === "https://api.github.com/rate_limit") {
+        const auth = new Headers(init?.headers).get("authorization");
+        if (rateLimitStatus !== 200 || !auth?.startsWith("Bearer ghs_"))
+          return Promise.resolve(new Response("{}", { status: rateLimitStatus }));
+        return Promise.resolve(
+          Response.json({
+            resources: {
+              core: { limit: 5000, used: 120, remaining: 4880, reset: 1_794_000_000 },
+              graphql: { limit: 5000, used: 0, remaining: 5000, reset: 1_794_000_100 },
+              search: { limit: 30, used: 0, remaining: 30, reset: 1_794_000_000 },
+            },
+          }),
+        );
+      }
+      return realFetch(input, init);
+    });
+  });
+
+  async function connected(workspaceId: string | null) {
+    const github = installation();
+    const now = Date.now();
+    await env.DB.prepare(
+      "insert into github_installation (id, workspace_id, account_id, account_login, account_type, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?)",
+    )
+      .bind(
+        github.id,
+        workspaceId,
+        github.account!.id,
+        github.account!.login,
+        "Organization",
+        now,
+        now,
+      )
+      .run();
+    return github.id;
+  }
+
+  test("a member reads the installation's buckets live from GitHub", async () => {
+    const { workspace } = await owner();
+    const id = await connected(workspace.id);
+    const member = await testing.joinWorkspace(env, workspace.id, "member");
+
+    const response = await get(`/github/installations/${id}/rate-limit`, member.cookie);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      core: {
+        limit: 5000,
+        used: 120,
+        remaining: 4880,
+        reset: new Date(1_794_000_000 * 1000).toISOString(),
+      },
+      graphql: {
+        limit: 5000,
+        used: 0,
+        remaining: 5000,
+        reset: new Date(1_794_000_100 * 1000).toISOString(),
+      },
+      actionsRunnerRegistration: null,
+    });
+    expect(tokenRequests).toEqual([id]);
+  });
+
+  test("another workspace's or an unclaimed installation is not found", async () => {
+    const { workspace } = await owner();
+    const other = await owner();
+    const theirs = await connected(workspace.id);
+    const unclaimed = await connected(null);
+    for (const id of [theirs, unclaimed, 0]) {
+      const response = await get(`/github/installations/${id}/rate-limit`, other.cookie);
+      expect(response.status).toBe(404);
+    }
+    expect(tokenRequests).toEqual([]);
+  });
+
+  test("a GitHub failure reads as unavailable", async () => {
+    const { workspace, cookie } = await owner();
+    const id = await connected(workspace.id);
+    rateLimitStatus = 503;
+    const response = await get(`/github/installations/${id}/rate-limit`, cookie);
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({ error: "github_unavailable" });
   });
 });

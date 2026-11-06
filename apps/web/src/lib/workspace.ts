@@ -45,6 +45,20 @@ export async function getUnclaimedInstallations(): Promise<UnclaimedInstallation
   }
 }
 
+/** One GitHub API rate limit bucket. `reset` is when the hourly window starts over. */
+export type RateLimitBucket = { limit: number; used: number; remaining: number; reset: string };
+
+/** GET /api/github/installations/:id/rate-limit: the installation's quota, read live from GitHub. */
+export type RateLimits = {
+  core: RateLimitBucket | null;
+  graphql: RateLimitBucket | null;
+  actionsRunnerRegistration: RateLimitBucket | null;
+};
+
+export function getRateLimits(installationId: number) {
+  return api<RateLimits>(`/github/installations/${installationId}/rate-limit`);
+}
+
 /** Links an unclaimed installation to the active workspace. */
 export function claimInstallation(id: number) {
   return api<{ ok: true }>(`/github/installations/${id}/claim`, { method: "POST" });

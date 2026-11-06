@@ -176,3 +176,49 @@ export async function repoFile(token: string, repo: string, path: string): Promi
     );
   return response.text();
 }
+
+/** One rate limit bucket from GET /rate_limit. `reset` is when the window starts over. */
+export interface RateLimitBucket {
+  limit: number;
+  used: number;
+  remaining: number;
+  reset: Date;
+}
+
+/** The buckets the dashboard shows. A bucket GitHub didn't send is null. */
+export interface RateLimits {
+  core: RateLimitBucket | null;
+  graphql: RateLimitBucket | null;
+  actionsRunnerRegistration: RateLimitBucket | null;
+}
+
+type RawBucket = { limit: number; used: number; remaining: number; reset: number };
+
+/**
+ * The token's primary rate limits. GET /rate_limit doesn't count against them. GitHub doesn't
+ * report secondary limits anywhere.
+ */
+export async function rateLimits(token: string): Promise<RateLimits> {
+  const response = await fetch(`${API}/rate_limit`, { headers: headers(token) });
+  if (!response.ok)
+    throw new Error(
+      `GET /rate_limit failed with ${response.status}: ${(await response.text()).slice(0, 300)}`,
+    );
+  const { resources = {} } = (await response.json()) as {
+    resources?: Record<string, RawBucket | undefined>;
+  };
+  const bucket = (raw: RawBucket | undefined): RateLimitBucket | null =>
+    raw
+      ? {
+          limit: raw.limit,
+          used: raw.used,
+          remaining: raw.remaining,
+          reset: new Date(raw.reset * 1000),
+        }
+      : null;
+  return {
+    core: bucket(resources.core),
+    graphql: bucket(resources.graphql),
+    actionsRunnerRegistration: bucket(resources.actions_runner_registration),
+  };
+}
