@@ -34,21 +34,21 @@ flowchart LR
   end
   R -- "1. queued" --> Q
   Q -- "2. workflow_job webhook" --> P
-  P -- "3. generate-jitconfig<br/>labels + runner_group_id: 1" --> Rec
+  P -- "3. create a runner in the Default group<br/>generate-jitconfig with runner_group_id: 1" --> Rec
   P -- "4. poll for work as that runner" --> Rec
   Q -. "5. offered only if the label matches<br/>and the group allows the repo" .-> Rec
 ```
 
 What exists where, step by step:
 
-| Step          | Your repo                             | GitHub                                                                  | Gateway                                                         |
-| ------------- | ------------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------- |
-| 1. Run starts | `relay` job asks for `relayrunner`    | Relay job queued; no runner has the label yet                           | Nothing                                                         |
-| 2. Webhook    | Waiting                               | Sends `workflow_job` `queued`                                           | Starts a PickRunner for the job id                              |
-| 3. Register   | Waiting                               | New record `relayrunner-pick-<job id>`, label `relayrunner`, in Default | Holds the `encoded_jit_config` credentials                      |
-| 4. Poll       | Waiting                               | Record shows online and idle                                            | Opens a session, long-polls for up to 4 minutes                 |
-| 5. Match      | Waiting                               | Offers the relay if the label matches and Default allows the repo       | Receives the job, or nothing                                    |
-| 6. Answer     | `relay` succeeds with `runner` output | Removes the JIT runner after its one job                                | Claims, routes, completes; or deletes the runner after `no-job` |
+| Step                      | Your repo                             | GitHub                                                                                                | Gateway                                                                                                         |
+| ------------------------- | ------------------------------------- | ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| 1. Run starts             | `relay` job asks for `relayrunner`    | Relay job queued; no runner has the label yet                                                         | Nothing                                                                                                         |
+| 2. Webhook                | Waiting                               | Sends `workflow_job` `queued`                                                                         | Starts a PickRunner for the job id                                                                              |
+| 3. Create runner in group | Waiting                               | **A runner is created in the Default runner group**: `relayrunner-pick-<job id>`, label `relayrunner` | Calls `generate-jitconfig` with `runner_group_id: 1`; gets back the runner's credentials (`encoded_jit_config`) |
+| 4. Poll                   | Waiting                               | Record shows online and idle                                                                          | Opens a session, long-polls for up to 4 minutes                                                                 |
+| 5. Match                  | Waiting                               | Offers the relay if the label matches and Default allows the repo                                     | Receives the job, or nothing                                                                                    |
+| 6. Answer                 | `relay` succeeds with `runner` output | Removes the JIT runner after its one job                                                              | Claims, routes, completes; or deletes the runner after `no-job`                                                 |
 
 Compared with a vanilla self-hosted runner:
 
@@ -112,7 +112,7 @@ sequenceDiagram
 ```
 
 1. **The relay is queued.** GitHub sends a `workflow_job` `queued` webhook for the relay job. The queue consumer sees the `relayrunner` label and starts a `PickRunner` named after the job id. `start()` is idempotent, so a redelivered webhook does nothing.
-2. **It registers a runner.** The PickRunner mints an installation token for the job's installation. It then calls `POST /orgs/{org}/actions/runners/generate-jitconfig` with the name `relayrunner-pick-<job id>`, the labels `["relayrunner"]` and `runner_group_id: 1`. The runner shows in the org's runner list while it waits.
+2. **It creates a runner in the Default runner group.** The PickRunner mints an installation token for the job's installation. It then calls `POST /orgs/{org}/actions/runners/generate-jitconfig` with the name `relayrunner-pick-<job id>`, the labels `["relayrunner"]` and `runner_group_id: 1`. That one call creates the runner inside the Default group; there is no separate step that adds it to a group. The runner shows under Default in the org's runner list while it waits.
 3. **It is the runner.** No VM or runner binary is involved. The Durable Object decodes the JIT config and speaks GitHub's runner protocol itself (`RunnerClient` in `runner-protocol.ts`). It opens a session and long-polls in 60-second polls, for up to 4 minutes.
 4. **It claims a job.** GitHub may offer any queued job in the org that passes the two checks above, including another repo's relay. The route is therefore always taken from the claimed job's own context (repo, run, relay inputs), not from the webhook that woke the PickRunner.
 5. **It answers.** A job made only of `relayrunner/actions/checks/*` steps is run here and completed as passed or failed. Otherwise the workspace's Router walks the runner order (see routing), and the job is completed with output `runner=<label>`, or failed with a reason. The decision is recorded for the Activity page.
