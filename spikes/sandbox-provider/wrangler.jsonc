@@ -1,0 +1,48 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  // Spike (not a product Worker): runs GitHub Actions jobs from relayrunner-ci-tests on
+  // Cloudflare Containers, to learn whether a Sandbox works as a RelayRunner runner provider.
+  // See README.md. Delete once the spike is written up.
+  "name": "relayrunner-sandbox-spike",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-03",
+  "compatibility_flags": ["nodejs_compat"],
+  "account_id": "b233b6d6fd9eae9e093651bfb043c119",
+  "workers_dev": true,
+  "preview_urls": false,
+  "observability": { "enabled": true, "logs": { "enabled": true, "invocation_logs": true } },
+  "vars": {
+    "GITHUB_APP_ID": "5605512",
+    // The org whose JIT runners we mint, and the one repository allowed to ask for them.
+    "SPIKE_ORG": "relayrunner",
+    "SPIKE_REPOSITORY": "relayrunner/relayrunner-ci-tests",
+    // The `aud` the workflow asks GitHub's OIDC provider for.
+    "OIDC_AUDIENCE": "relayrunner-sandbox-spike",
+  },
+  // The same App key the API uses (apps/api/wrangler.jsonc).
+  "secrets_store_secrets": [
+    {
+      "binding": "GITHUB_APP_PRIVATE_KEY",
+      "store_id": "eac3493b9fef4234a832f5f3fdcc8a41",
+      "secret_name": "GITHUB_APP_PRIVATE_KEY",
+    },
+  ],
+  "durable_objects": {
+    "bindings": [{ "name": "SANDBOX_RUNNER", "class_name": "SandboxRunner" }],
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["SandboxRunner"] }],
+  "containers": [
+    {
+      "class_name": "SandboxRunner",
+      "scheduling_policy": "durable_object",
+      // Size is chosen per start (SIZES in src/index.ts): Durable Object-managed containers
+      // don't take instance_type or max_instances here.
+      "images": {
+        // The Actions runner on Ubuntu 24.04.
+        "runner": { "dockerfile": "./images/runner/Dockerfile" },
+        // The same, plus a Docker daemon started before the runner.
+        "dind": { "dockerfile": "./images/dind/Dockerfile" },
+      },
+    },
+  ],
+}
