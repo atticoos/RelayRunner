@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   containerRunnerAllowed,
+  containerRunnerGroupId,
   IDLE_LIMIT_MS,
   MAX_LIFETIME_MS,
   usesContainerRunner,
@@ -48,5 +49,16 @@ describe("watchStep", () => {
     expect(
       watchStep({ running: true, runner: "busy", startedAt, now: at(MAX_LIFETIME_MS + 1) }),
     ).toBe("stop_timeout");
+  });
+});
+
+describe("containerRunnerGroupId", () => {
+  test("picks the Default Public group by name, or falls back", () => {
+    const groups = [
+      { id: 1, name: "Default" },
+      { id: 4, name: "default public" },
+    ];
+    expect(containerRunnerGroupId(groups, 1)).toBe(4);
+    expect(containerRunnerGroupId([{ id: 1, name: "Default" }], 1)).toBe(1);
   });
 });
