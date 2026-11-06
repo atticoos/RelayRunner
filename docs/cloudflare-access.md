@@ -16,7 +16,7 @@ The API and webhooks Workers set `"preview_urls": false`, so they have no previe
 
 ## Admin views
 
-Paths under `/admin` and `/api/admin` on the dashboard Worker are for RelayRunner operators. Operators see an Admin section in the dashboard sidebar. Operators are users whose `role` column in the D1 `user` table is `operator`, which Better Auth puts on `session.user.role`. A grant shows up within five minutes, the session cookie cache's lifetime. Grant it with SQL, for example `wrangler d1 execute relayrunner --remote --command "update user set role = 'operator' where email = '...'"`. That list only decides who sees the links. Access decides who gets in. The old `/dev/*` paths redirect to `/admin/*`.
+Paths under `/admin` and `/api/admin` on the dashboard Worker are for RelayRunner operators. Operators see an Admin section in the dashboard sidebar. Operators are users whose `role` column in the D1 `user` table is `operator`, which Better Auth puts on `session.user.role`. A change shows up within five minutes, the session cookie cache's lifetime. Grant the first operator with SQL, for example `wrangler d1 execute relayrunner --remote --command "update user set role = 'operator' where email = '...'"`. After that, operators grant and revoke each other on `/admin/users`. That list only decides who sees the links and who may use the D1 admin routes. Access decides who gets in. The old `/dev/*` paths redirect to `/admin/*`.
 
 `packages/access` checks the `Cf-Access-Jwt-Assertion` JWT that Access adds to each request it lets through:
 
@@ -27,6 +27,16 @@ Paths under `/admin` and `/api/admin` on the dashboard Worker are for RelayRunne
 The Worker checks the JWT in addition to the Access edge check. If the Access app is removed or misconfigured, these paths stay closed.
 
 To add an admin view, put its page under `/admin/` (`apps/web/src/routes/_authed/_workspace/admin.*.tsx`, plus a link in `adminNav`) and its data under `/api/admin/`. The API Worker's own `workers.dev` URL is public. An `/api/admin/*` route in `apps/api` must call `gateAdmin` itself, and must not trust a header set by the dashboard Worker.
+
+## Users and workspaces
+
+`/admin/users` lists everyone who has signed in, with a Role control (User or Operator). `/admin/workspaces` lists every workspace with its members, their workspace roles and its connected GitHub accounts. Their routes need an operator session as well as Access, so the agents' service token alone can't read or change them:
+
+| Route                        | What it does                                                                                    |
+| ---------------------------- | ----------------------------------------------------------------------------------------------- |
+| `GET /api/admin/users`       | Every user, newest first, with `role` and how many workspaces they belong to.                   |
+| `PATCH /api/admin/users/:id` | Sets `{ "role": "operator" }` or `{ "role": null }`. Operators can't demote themselves. Logged. |
+| `GET /api/admin/workspaces`  | Every workspace, newest first, with its members and their roles, and its GitHub accounts.       |
 
 ## Webhook dead letters
 

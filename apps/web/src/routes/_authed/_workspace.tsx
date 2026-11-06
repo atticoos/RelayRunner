@@ -42,7 +42,11 @@ const nav = [
 ] as const;
 
 // Operators only (user.role = "operator"). Cloudflare Access still gates these pages.
-const adminNav = [{ to: "/admin/webhooks", label: "Webhooks" }] as const;
+const adminNav = [
+  { to: "/admin/users", label: "Users" },
+  { to: "/admin/workspaces", label: "Workspaces" },
+  { to: "/admin/webhooks", label: "Webhooks" },
+] as const;
 
 const navLink =
   "rounded-md px-2.5 py-1.5 text-[15px] text-sidebar-foreground transition-colors hover:text-sidebar-accent-foreground";

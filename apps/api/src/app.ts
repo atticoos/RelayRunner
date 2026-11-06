@@ -1,10 +1,12 @@
 import { Hono } from "hono";
+import type { AccessIdentity } from "@relayrunner/access";
 import type { Auth, Session } from "./auth.ts";
 import type { Db, schema } from "./db/index.ts";
 import type { Env } from "./env.ts";
 import { attachSession } from "./middleware/session.ts";
 import { activityRoutes } from "./routes/activity.ts";
 import { adminWebhookRoutes } from "./routes/admin-webhooks.ts";
+import { adminRoutes } from "./routes/admin.ts";
 import { authRoutes } from "./routes/auth.ts";
 import { githubRoutes } from "./routes/github.ts";
 import { healthRoutes } from "./routes/health.ts";
@@ -24,6 +26,8 @@ export interface AppEnv {
     db: Db;
     workspace: typeof schema.workspace.$inferSelect;
     role: string;
+    // Set by requireAccess on /api/admin/*.
+    accessIdentity: AccessIdentity;
   };
 }
 
@@ -46,5 +50,7 @@ app.route("/activity", activityRoutes);
 app.route("/usage", usageRoutes);
 app.route("/github", githubRoutes);
 app.route("/machines", machineRoutes);
+// Operator admin over D1 (users, workspaces): Access and an operator session.
+app.route("/admin", adminRoutes);
 
 app.notFound((c) => c.json({ error: "not_found" }, 404));

@@ -6,8 +6,7 @@
  * Previews forward /api/* to this production Worker, so replaying from a preview acts on
  * production. Replay goes back through the main queue and consumer, never around them.
  */
-import { gateAdmin, type AccessIdentity } from "@relayrunner/access";
-import { Hono, type MiddlewareHandler } from "hono";
+import { Hono } from "hono";
 import type { AppEnv } from "../app.ts";
 import {
   discardDeadLetter,
@@ -16,22 +15,10 @@ import {
   type DeadLetter,
   type DeadLetterFilter,
 } from "../dead-letters.ts";
+import { requireAccess, who } from "../middleware/admin.ts";
 
 // The most a bulk replay sends at once. Fix the cause first, then replay a slice.
 export const MAX_BULK_REPLAY = 100;
-
-type AdminEnv = AppEnv & { Variables: { accessIdentity: AccessIdentity } };
-
-const requireAccess: MiddlewareHandler<AdminEnv> = async (c, next) => {
-  const gate = await gateAdmin(c.req.raw, c.env);
-  if ("response" in gate) return gate.response;
-  c.set("accessIdentity", gate.identity);
-  await next();
-};
-
-function who(identity: AccessIdentity) {
-  return identity.kind === "user" ? identity.email : identity.clientId;
-}
 
 function filterFrom(input: { event?: unknown; repository?: unknown }): DeadLetterFilter {
   return {
@@ -41,7 +28,7 @@ function filterFrom(input: { event?: unknown; repository?: unknown }): DeadLette
   };
 }
 
-export const adminWebhookRoutes = new Hono<AdminEnv>()
+export const adminWebhookRoutes = new Hono<AppEnv>()
   .use("*", requireAccess)
   .get("/dead-letters", async (c) => {
     const page = await listDeadLetters(c.env.DEAD_LETTERS, {
