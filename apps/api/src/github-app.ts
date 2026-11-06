@@ -168,6 +168,8 @@ export interface OrgRunner {
   os: string;
   status: "online" | "offline";
   busy: boolean;
+  // Takes one job and is removed: a JIT runner, or a provider's autoscaled runner.
+  ephemeral: boolean;
   labels: string[];
 }
 
@@ -178,6 +180,7 @@ export async function listOrgRunners(token: string, org: string): Promise<OrgRun
     os: string;
     status: string;
     busy: boolean;
+    ephemeral?: boolean;
     labels?: { name: string }[];
   }>(token, `/orgs/${org}/actions/runners`, "runners");
   return runners.map((runner) => ({
@@ -186,6 +189,7 @@ export async function listOrgRunners(token: string, org: string): Promise<OrgRun
     os: runner.os,
     status: runner.status === "online" ? "online" : "offline",
     busy: runner.busy,
+    ephemeral: runner.ephemeral ?? false,
     labels: (runner.labels ?? []).map((label) => label.name),
   }));
 }
