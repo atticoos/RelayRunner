@@ -275,6 +275,41 @@ export const workflowJob = sqliteTable(
   ],
 );
 
+// How long every job in a connected repo ran, whatever runner took it, for the usage report
+// (src/job-timings.ts): how many jobs finished in under a minute and what GitHub's round-up to whole
+// minutes cost. Unlike workflow_job, this keeps jobs RelayRunner never saw a pick for. Written by
+// every workflow_job webhook; rows go with their installation.
+export const jobTiming = sqliteTable(
+  "job_timing",
+  {
+    // GitHub's job id.
+    id: integer("id").primaryKey({ autoIncrement: false }),
+    installationId: integer("installation_id")
+      .notNull()
+      .references(() => githubInstallation.id, { onDelete: "cascade" }),
+    repositoryId: integer("repository_id").notNull(),
+    repositoryFullName: text("repository_full_name").notNull(),
+    runId: integer("run_id").notNull(),
+    runAttempt: integer("run_attempt").notNull(),
+    workflowName: text("workflow_name"),
+    name: text("name").notNull(),
+    // The job's runs-on labels, as a JSON array.
+    labels: text("labels", { mode: "json" }).$type<string[]>().notNull(),
+    // Which GitHub rate the job pays, from its labels and runner group (see runnerClass). Rates
+    // are applied when the report is read, so a price change needs no backfill.
+    runnerClass: text("runner_class").notNull(),
+    // Same rules as workflow_job.status: only moves forward.
+    status: text("status").notNull(),
+    conclusion: text("conclusion"),
+    runnerName: text("runner_name"),
+    runnerGroupName: text("runner_group_name"),
+    startedAt: integer("started_at", { mode: "timestamp_ms" }),
+    completedAt: integer("completed_at", { mode: "timestamp_ms" }),
+    ...timestamps,
+  },
+  (table) => [index("job_timing_installation_idx").on(table.installationId, table.completedAt)],
+);
+
 // The workspace's audit log for the Activity page: one append-only row per event, typed by
 // @relayrunner/activity (src/activity.ts writes and reads it). `data` holds the type's own fields
 // as JSON. The id increases with time, so it orders the log and pages it. Rows go with their

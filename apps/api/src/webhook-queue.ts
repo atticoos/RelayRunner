@@ -20,6 +20,7 @@ import { archiveDeadLetter, recordLastError } from "./dead-letters.ts";
 import { createDb, schema } from "./db/index.ts";
 import type { Env } from "./env.ts";
 import { upsertInstallation } from "./installations.ts";
+import { recordJobTiming } from "./job-timings.ts";
 import { recordWorkflowJob, setJobMachine } from "./jobs.ts";
 import { recordRepositoryEvent, removeRepositories, upsertRepositories } from "./repositories.ts";
 import { routeIdFromLabels } from "./routing.ts";
@@ -131,7 +132,10 @@ export async function processWebhook(env: Env, message: WebhookMessage): Promise
       // run's other jobs are stored for the Activity page (they ran where the pick sent them), and
       // every other job the App sees is some other runner's, so recordWorkflowJob drops it.
       const isPick = usesRelayRunner(message.job.labels);
-      await recordWorkflowJob(createDb(env.DB), message, isPick);
+      const db = createDb(env.DB);
+      // Every job's timing, ours or not, for the short-jobs usage report.
+      await recordJobTiming(db, message);
+      await recordWorkflowJob(db, message, isPick);
       // A job on a route's `rr-<id>` label: the run's pick chose a machine for it.
       const routeId = routeIdFromLabels(message.job.labels);
       if (routeId) return dispatchRoute(env, message, routeId, lagMs);

@@ -17,6 +17,7 @@ import { Route as AuthedDeviceRouteImport } from './routes/_authed/device'
 import { Route as DevWebhooksRouteImport } from './routes/dev/webhooks'
 import { Route as AuthedWorkspaceActivityRouteImport } from './routes/_authed/_workspace/activity'
 import { Route as AuthedWorkspaceRunnersRouteImport } from './routes/_authed/_workspace/runners'
+import { Route as AuthedWorkspaceUsageRouteImport } from './routes/_authed/_workspace/usage'
 import { Route as AuthedWorkspaceWorkspaceRouteImport } from './routes/_authed/_workspace/workspace'
 import { Route as AuthedInviteIdRouteImport } from './routes/_authed/invite.$id'
 import { Route as AuthedWorkspacesNewRouteImport } from './routes/_authed/workspaces.new'
@@ -62,6 +63,11 @@ const AuthedWorkspaceActivityRoute = AuthedWorkspaceActivityRouteImport.update({
 const AuthedWorkspaceRunnersRoute = AuthedWorkspaceRunnersRouteImport.update({
   id: '/runners',
   path: '/runners',
+  getParentRoute: () => AuthedWorkspaceRoute,
+} as any)
+const AuthedWorkspaceUsageRoute = AuthedWorkspaceUsageRouteImport.update({
+  id: '/usage',
+  path: '/usage',
   getParentRoute: () => AuthedWorkspaceRoute,
 } as any)
 const AuthedWorkspaceWorkspaceRoute =
@@ -118,6 +124,7 @@ export interface FileRoutesByFullPath {
   '/dev/webhooks': typeof DevWebhooksRoute
   '/activity': typeof AuthedWorkspaceActivityRoute
   '/runners': typeof AuthedWorkspaceRunnersRoute
+  '/usage': typeof AuthedWorkspaceUsageRoute
   '/workspace': typeof AuthedWorkspaceWorkspaceRoute
   '/invite/$id': typeof AuthedInviteIdRoute
   '/workspaces/new': typeof AuthedWorkspacesNewRoute
@@ -134,6 +141,7 @@ export interface FileRoutesByTo {
   '/dev/webhooks': typeof DevWebhooksRoute
   '/activity': typeof AuthedWorkspaceActivityRoute
   '/runners': typeof AuthedWorkspaceRunnersRoute
+  '/usage': typeof AuthedWorkspaceUsageRoute
   '/workspace': typeof AuthedWorkspaceWorkspaceRoute
   '/invite/$id': typeof AuthedInviteIdRoute
   '/workspaces/new': typeof AuthedWorkspacesNewRoute
@@ -153,6 +161,7 @@ export interface FileRoutesById {
   '/dev/webhooks': typeof DevWebhooksRoute
   '/_authed/_workspace/activity': typeof AuthedWorkspaceActivityRoute
   '/_authed/_workspace/runners': typeof AuthedWorkspaceRunnersRoute
+  '/_authed/_workspace/usage': typeof AuthedWorkspaceUsageRoute
   '/_authed/_workspace/workspace': typeof AuthedWorkspaceWorkspaceRoute
   '/_authed/invite/$id': typeof AuthedInviteIdRoute
   '/_authed/workspaces/new': typeof AuthedWorkspacesNewRoute
@@ -171,6 +180,7 @@ export interface FileRouteTypes {
     | '/dev/webhooks'
     | '/activity'
     | '/runners'
+    | '/usage'
     | '/workspace'
     | '/invite/$id'
     | '/workspaces/new'
@@ -187,6 +197,7 @@ export interface FileRouteTypes {
     | '/dev/webhooks'
     | '/activity'
     | '/runners'
+    | '/usage'
     | '/workspace'
     | '/invite/$id'
     | '/workspaces/new'
@@ -205,6 +216,7 @@ export interface FileRouteTypes {
     | '/dev/webhooks'
     | '/_authed/_workspace/activity'
     | '/_authed/_workspace/runners'
+    | '/_authed/_workspace/usage'
     | '/_authed/_workspace/workspace'
     | '/_authed/invite/$id'
     | '/_authed/workspaces/new'
@@ -280,6 +292,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedWorkspaceRunnersRouteImport
       parentRoute: typeof AuthedWorkspaceRoute
     }
+    '/_authed/_workspace/usage': {
+      id: '/_authed/_workspace/usage'
+      path: '/usage'
+      fullPath: '/usage'
+      preLoaderRoute: typeof AuthedWorkspaceUsageRouteImport
+      parentRoute: typeof AuthedWorkspaceRoute
+    }
     '/_authed/_workspace/workspace': {
       id: '/_authed/_workspace/workspace'
       path: '/workspace'
@@ -342,6 +361,7 @@ declare module '@tanstack/react-router' {
 interface AuthedWorkspaceRouteChildren {
   AuthedWorkspaceActivityRoute: typeof AuthedWorkspaceActivityRoute
   AuthedWorkspaceRunnersRoute: typeof AuthedWorkspaceRunnersRoute
+  AuthedWorkspaceUsageRoute: typeof AuthedWorkspaceUsageRoute
   AuthedWorkspaceWorkspaceRoute: typeof AuthedWorkspaceWorkspaceRoute
   AuthedWorkspaceSettingsAccountRoute: typeof AuthedWorkspaceSettingsAccountRoute
   AuthedWorkspaceSettingsGeneralRoute: typeof AuthedWorkspaceSettingsGeneralRoute
@@ -353,6 +373,7 @@ interface AuthedWorkspaceRouteChildren {
 const AuthedWorkspaceRouteChildren: AuthedWorkspaceRouteChildren = {
   AuthedWorkspaceActivityRoute: AuthedWorkspaceActivityRoute,
   AuthedWorkspaceRunnersRoute: AuthedWorkspaceRunnersRoute,
+  AuthedWorkspaceUsageRoute: AuthedWorkspaceUsageRoute,
   AuthedWorkspaceWorkspaceRoute: AuthedWorkspaceWorkspaceRoute,
   AuthedWorkspaceSettingsAccountRoute: AuthedWorkspaceSettingsAccountRoute,
   AuthedWorkspaceSettingsGeneralRoute: AuthedWorkspaceSettingsGeneralRoute,
