@@ -21,7 +21,7 @@ export const user = sqliteTable("user", {
   emailVerified: integer("email_verified", { mode: "boolean" }).notNull().default(false),
   image: text("image"),
   // Global role, separate from per-workspace member roles. "operator" sees the dashboard's Admin
-  // section (src/operators.ts). Null for everyone else. Granted by SQL for now.
+  // section. Null for everyone else. Granted by SQL for now (docs/cloudflare-access.md).
   role: text("role"),
   ...timestamps,
 });

@@ -34,6 +34,9 @@ export function createAuth(env: Env, waitUntil?: (promise: Promise<unknown>) => 
     // Lets preview origins call /api/auth/* (origin check) and be redirect targets.
     trustedOrigins: previewOrigins(env),
     database: drizzleAdapter(createDb(env.DB), { provider: "sqlite", schema }),
+    // Global role (schema.ts): "operator" sees the dashboard's Admin section. On session.user, so
+    // it rides the session cookie cache. Granted by SQL only, never by the user.
+    user: { additionalFields: { role: { type: "string", required: false, input: false } } },
     socialProviders: {
       github: {
         clientId: env.GITHUB_APP_CLIENT_ID,

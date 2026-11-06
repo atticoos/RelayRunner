@@ -8,11 +8,10 @@
  *
  * Operator admin views (/admin/* and /api/admin/*) need a Cloudflare Access JWT
  * (see packages/access). They answer 404 wherever Access isn't configured. The
- * old /dev/* paths redirect to /admin/*.
+ * old /dev/* paths redirect to /admin/* (public/_redirects).
  *
- * `run_worker_first` in wrangler.jsonc sends /api/*, /admin/* and /dev/* here
- * before the assets layer; every other path is answered by assets (with the SPA
- * fallback).
+ * `run_worker_first` in wrangler.jsonc sends /api/* and /admin/* here before the
+ * assets layer; every other path is answered by assets (with the SPA fallback).
  */
 import { gateAdmin, isAdminPath, type AccessEnv } from "@relayrunner/access";
 
@@ -24,15 +23,9 @@ interface Env extends AccessEnv {
 
 export default {
   async fetch(request, env) {
-    const url = new URL(request.url);
-    const { pathname } = url;
+    const { pathname } = new URL(request.url);
     if (pathname.startsWith("/api/webhooks/")) {
       return env.WEBHOOKS.fetch(request);
-    }
-    // Bookmarks and older alert emails still link to /dev/webhooks.
-    if (pathname === "/dev" || pathname.startsWith("/dev/")) {
-      url.pathname = `/admin${pathname.slice("/dev".length)}`;
-      return Response.redirect(url.toString(), 301);
     }
     if (isAdminPath(pathname)) {
       const gate = await gateAdmin(request, env);

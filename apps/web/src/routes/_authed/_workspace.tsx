@@ -3,7 +3,7 @@ import { ArrowLeftIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { WorkspaceMenu } from "@/components/workspace-menu";
 import { authDisabled } from "@/lib/auth-client";
-import { getIsOperator } from "@/lib/me";
+import { isOperator } from "@/lib/roles";
 import { ensureActiveWorkspace, getCurrentWorkspace, type CurrentWorkspace } from "@/lib/workspace";
 
 const devWorkspace: CurrentWorkspace = {
@@ -21,13 +21,12 @@ const devWorkspace: CurrentWorkspace = {
 // to create it, and puts the active workspace in route context.
 export const Route = createFileRoute("/_authed/_workspace")({
   beforeLoad: async ({ context }) => {
-    if (authDisabled || !context.session) return { current: devWorkspace, operator: true };
+    if (authDisabled || !context.session) return { current: devWorkspace };
     if (!(await ensureActiveWorkspace(context.session))) {
       throw redirect({ to: "/workspaces/new" });
     }
     try {
-      const [current, operator] = await Promise.all([getCurrentWorkspace(), getIsOperator()]);
-      return { current, operator };
+      return { current: await getCurrentWorkspace() };
     } catch {
       // The active workspace is gone or no longer ours.
       throw redirect({ to: "/workspaces/new" });
@@ -42,7 +41,7 @@ const nav = [
   { to: "/usage", label: "Usage" },
 ] as const;
 
-// Operators only (user.role = "operator", apps/api/src/operators.ts). Cloudflare Access still gates these pages.
+// Operators only (user.role = "operator"). Cloudflare Access still gates these pages.
 const adminNav = [{ to: "/admin/webhooks", label: "Webhooks" }] as const;
 
 const navLink =
@@ -50,7 +49,7 @@ const navLink =
 const navActive = { className: "bg-sidebar-accent text-sidebar-accent-foreground" };
 
 function WorkspaceLayout() {
-  const { user, current, operator } = Route.useRouteContext();
+  const { user, current } = Route.useRouteContext();
   const inSettings = useMatchRoute()({ to: "/settings", fuzzy: true });
 
   return (
@@ -68,7 +67,7 @@ function WorkspaceLayout() {
                 </Link>
               ))}
             </nav>
-            {operator && (
+            {(authDisabled || isOperator(user)) && (
               <nav aria-label="Admin" className="px-1">
                 <NavGroup label="Admin">
                   {adminNav.map((item) => (
