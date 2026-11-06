@@ -46,6 +46,23 @@ export function isOwnRunner(runner: { labels: string[] }) {
   );
 }
 
+/**
+ * Whether a runner takes one job and goes away, so it can't be added: an ephemeral runner, such as
+ * one a provider like Blacksmith scales up for a job. Blacksmith's runners are also caught by their
+ * `blacksmith-` label in case GitHub doesn't report them as ephemeral.
+ */
+export function isEphemeralRunner(runner: { ephemeral?: boolean; labels: string[] }) {
+  return (
+    runner.ephemeral === true ||
+    runner.labels.some((label) => label.toLowerCase().startsWith("blacksmith-"))
+  );
+}
+
+/** Whether a runner is left out of the picker and the found-runners banner. */
+export function isHiddenRunner(runner: { ephemeral?: boolean; labels: string[] }) {
+  return isOwnRunner(runner) || isEphemeralRunner(runner);
+}
+
 // GitHub reports the OS by name and the architecture only as a default label.
 const OS: Record<string, "linux" | "macos" | "windows"> = {
   linux: "linux",
@@ -142,6 +159,7 @@ export async function fetchGroupAccess(
 /** Why an org runner can't be added, or null when it can. */
 export function cannotAdd(runner: OrgRunner, access: GroupAccess | null | undefined) {
   if (isOwnRunner(runner)) return "own";
+  if (isEphemeralRunner(runner)) return "ephemeral";
   if (access?.restrictedToWorkflows) return "workflows";
   return null;
 }

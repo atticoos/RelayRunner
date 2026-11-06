@@ -5,6 +5,7 @@ import type { Env } from "./env.ts";
 import {
   describeAccess,
   groupAllows,
+  isHiddenRunner,
   isOwnRunner,
   matchLabels,
   routingLabelFromLabels,
@@ -45,6 +46,12 @@ describe("github runner helpers", () => {
     expect(isOwnRunner({ labels: ["self-hosted", "macOS", "rr-runner-0a1b2c3d"] })).toBe(false);
   });
 
+  test("hides one-job runners, such as Blacksmith's", () => {
+    expect(isHiddenRunner({ ephemeral: true, labels: ["self-hosted"] })).toBe(true);
+    expect(isHiddenRunner({ labels: ["blacksmith-2vcpu-ubuntu-2404"] })).toBe(true);
+    expect(isHiddenRunner({ ephemeral: false, labels: ["self-hosted", "macOS"] })).toBe(false);
+  });
+
   test("maps GitHub's OS name and architecture label", () => {
     expect(runnerOs({ os: "macOS" })).toBe("macos");
     expect(runnerOs({ os: "Plan 9" })).toBeNull();
@@ -76,6 +83,7 @@ describe("github runner helpers", () => {
       os: "macOS",
       status: "online" as const,
       busy: false,
+      ephemeral: false,
       labels: ["self-hosted", "macOS", "rr-runner-0a1b2c3d"],
     };
     expect(runnerStatus(mini, access(), 7)).toEqual({
@@ -133,6 +141,7 @@ describe("adding GitHub runners", () => {
     os: string;
     status: string;
     busy: boolean;
+    ephemeral: boolean;
     labels: { name: string }[];
   }[];
   let groups: { id: number; name: string; visibility: string; restricted_to_workflows?: boolean }[];
@@ -143,6 +152,8 @@ describe("adding GitHub runners", () => {
       runner(11, "atticus-mac-mini", "macOS", ["self-hosted", "macOS", "ARM64", "xcode-16"]),
       runner(12, "pick-abc", "Linux", ["relayrunner"]),
       runner(13, "zach-mbp-0a1b2c3d4e5f", "macOS", ["rr-0a1b2c3d4e5f"]),
+      { ...runner(14, "scale-set", "Linux", ["self-hosted", "Linux"]), ephemeral: true },
+      runner(15, "blacksmith-2vcpu-ubuntu-2404-abc", "Linux", ["blacksmith-2vcpu-ubuntu-2404"]),
     ];
     groups = [{ id: 1, name: "Default", visibility: "all" }];
     labelCalls = [];
@@ -178,6 +189,7 @@ describe("adding GitHub runners", () => {
       os,
       status: "online",
       busy: false,
+      ephemeral: false,
       labels: labels.map((name) => ({ name })),
     };
   }
@@ -210,7 +222,7 @@ describe("adding GitHub runners", () => {
     };
   }
 
-  test("lists the org's runners, leaving out RelayRunner's own", async () => {
+  test("lists the org's runners, leaving out RelayRunner's own and one-job runners", async () => {
     const { cookie, installationId } = await setup();
     const response = await testing.call(env, "/machines/github-runners", cookie);
     expect(response.status).toBe(200);

@@ -18,7 +18,7 @@ import {
 import {
   cannotAdd,
   describeAccess,
-  isOwnRunner,
+  isHiddenRunner,
   matchLabels,
   newRoutingLabel,
   readOrgRunners,
@@ -390,7 +390,7 @@ export const machineRoutes = new Hono<AppEnv>()
             installationId: installation.id,
             org: installation.org,
             runners: runners
-              .filter((runner) => !isOwnRunner(runner))
+              .filter((runner) => !isHiddenRunner(runner))
               .map((runner) => {
                 const machine = added.find(
                   (m) => m.installationId === installation.id && m.githubRunnerId === runner.id,

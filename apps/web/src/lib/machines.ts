@@ -64,7 +64,7 @@ export type OrgRunner = {
   /** "Default group · all private repos", or null when unknown. */
   access: string | null;
   /** Why it can't be added: "workflows" when its group only allows selected workflows. */
-  blocked: "workflows" | "own" | null;
+  blocked: "workflows" | "own" | "ephemeral" | null;
   /** The machine it's already added as. */
   machineId: string | null;
 };
