@@ -89,6 +89,9 @@ importers:
       hono:
         specifier: ^4.13.16
         version: 4.13.16
+      yaml:
+        specifier: ^2.9.1
+        version: 2.9.1
       zod:
         specifier: 'catalog:'
         version: 4.6.7
@@ -6743,8 +6746,7 @@ snapshots:
 
   yallist@3.1.1: {}
 
-  yaml@2.9.1:
-    optional: true
+  yaml@2.9.1: {}
 
   youch-core@0.3.3:
     dependencies:

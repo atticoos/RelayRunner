@@ -161,3 +161,16 @@ export async function createCheckRun(
       `POST /repos/${repo}/check-runs failed with ${response.status}: ${(await response.text()).slice(0, 300)}`,
     );
 }
+
+/** A file's text from the repo's default branch, or null when it doesn't exist. */
+export async function repoFile(token: string, repo: string, path: string): Promise<string | null> {
+  const response = await fetch(`${API}/repos/${repo}/contents/${path}`, {
+    headers: { ...headers(token), accept: "application/vnd.github.raw+json" },
+  });
+  if (response.status === 404) return null;
+  if (!response.ok)
+    throw new Error(
+      `GET /repos/${repo}/contents/${path} failed with ${response.status}: ${(await response.text()).slice(0, 300)}`,
+    );
+  return response.text();
+}
