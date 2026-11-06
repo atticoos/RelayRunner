@@ -49,6 +49,10 @@ describe("github runner helpers", () => {
   test("hides one-job runners, such as Blacksmith's", () => {
     expect(isHiddenRunner({ ephemeral: true, labels: ["self-hosted"] })).toBe(true);
     expect(isHiddenRunner({ labels: ["blacksmith-2vcpu-ubuntu-2404"] })).toBe(true);
+    // As GitHub lists Blacksmith's scale-set runners: no labels, not marked ephemeral.
+    expect(
+      isHiddenRunner({ name: "blacksmith-2vcpu-ubuntu-2404-abwomh33pubx36hk", labels: [] }),
+    ).toBe(true);
     expect(isHiddenRunner({ ephemeral: false, labels: ["self-hosted", "macOS"] })).toBe(false);
   });
 
@@ -154,6 +158,7 @@ describe("adding GitHub runners", () => {
       runner(13, "zach-mbp-0a1b2c3d4e5f", "macOS", ["rr-0a1b2c3d4e5f"]),
       { ...runner(14, "scale-set", "Linux", ["self-hosted", "Linux"]), ephemeral: true },
       runner(15, "blacksmith-2vcpu-ubuntu-2404-abc", "Linux", ["blacksmith-2vcpu-ubuntu-2404"]),
+      runner(16, "blacksmith-2vcpu-ubuntu-2404-def", "Linux", []),
     ];
     groups = [{ id: 1, name: "Default", visibility: "all" }];
     labelCalls = [];

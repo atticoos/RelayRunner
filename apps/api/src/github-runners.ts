@@ -48,18 +48,24 @@ export function isOwnRunner(runner: { labels: string[] }) {
 
 /**
  * Whether a runner takes one job and goes away, so it can't be added: an ephemeral runner, such as
- * one a provider like Blacksmith scales up for a job. Blacksmith's runners are also caught by their
- * `blacksmith-` label in case GitHub doesn't report them as ephemeral.
+ * one a provider like Blacksmith scales up for a job. GitHub reports Blacksmith's scale-set runners
+ * with no labels and not as ephemeral, so they're caught by their `blacksmith-` name (or label).
  */
-export function isEphemeralRunner(runner: { ephemeral?: boolean; labels: string[] }) {
+export function isEphemeralRunner(runner: {
+  name?: string;
+  ephemeral?: boolean;
+  labels: string[];
+}) {
+  const blacksmith = (value: string) => value.toLowerCase().startsWith("blacksmith-");
   return (
     runner.ephemeral === true ||
-    runner.labels.some((label) => label.toLowerCase().startsWith("blacksmith-"))
+    (runner.name !== undefined && blacksmith(runner.name)) ||
+    runner.labels.some(blacksmith)
   );
 }
 
 /** Whether a runner is left out of the picker and the found-runners banner. */
-export function isHiddenRunner(runner: { ephemeral?: boolean; labels: string[] }) {
+export function isHiddenRunner(runner: { name?: string; ephemeral?: boolean; labels: string[] }) {
   return isOwnRunner(runner) || isEphemeralRunner(runner);
 }
 
