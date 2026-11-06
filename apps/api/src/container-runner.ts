@@ -17,6 +17,17 @@ export const MAX_LIFETIME_MS = 60 * 60_000;
 // How often the Durable Object checks on its container.
 export const WATCH_INTERVAL_MS = 60_000;
 
+// The runner group container runners join when the org has one by this name: one-job, disposable
+// runners only, so it may allow public repos. Without it they join Default, which in most orgs
+// allows private repos only.
+export const CONTAINER_RUNNER_GROUP = "RelayRunner containers";
+
+/** The id of the group named CONTAINER_RUNNER_GROUP (case-insensitive), or the fallback. */
+export function containerRunnerGroupId(groups: { id: number; name: string }[], fallback: number) {
+  const wanted = CONTAINER_RUNNER_GROUP.toLowerCase();
+  return groups.find((group) => group.name.toLowerCase() === wanted)?.id ?? fallback;
+}
+
 export const usesContainerRunner = (labels: string[]) => hasLabels(labels, [CONTAINER_LABEL]);
 
 /**

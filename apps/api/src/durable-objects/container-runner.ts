@@ -1,6 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import {
   CONTAINER_LABEL,
+  containerRunnerGroupId,
   MAX_LIFETIME_MS,
   WATCH_INTERVAL_MS,
   watchStep,
@@ -14,6 +15,7 @@ import {
   DEFAULT_RUNNER_GROUP_ID,
   deleteOrgRunner,
   generateOrgJitConfig,
+  listOrgRunnerGroups,
   orgRunnerBusy,
 } from "../github-app.ts";
 
@@ -74,7 +76,10 @@ export class ContainerRunner extends DurableObject<Env> {
       const jit = await generateOrgJitConfig(token, org, {
         name: `relayrunner-container-${work.jobId}`,
         labels: [CONTAINER_LABEL],
-        runnerGroupId: Number(this.env.CONTAINER_RUNNER_GROUP_ID) || DEFAULT_RUNNER_GROUP_ID,
+        runnerGroupId: containerRunnerGroupId(
+          await listOrgRunnerGroups(token, org),
+          DEFAULT_RUNNER_GROUP_ID,
+        ),
       });
       try {
         container.start({
@@ -84,6 +89,18 @@ export class ContainerRunner extends DurableObject<Env> {
           env: { RUNNER_JIT_CONFIG: jit.encodedJitConfig },
         });
         await container.setInactivityTimeout(MAX_LIFETIME_MS);
+        // Logs how the container ends while the object is awake (up to 15 minutes); the alarm
+        // covers the rest.
+        this.ctx.waitUntil(
+          container.monitor().then(
+            () => log("exited", work, { lifetimeMs: Date.now() - startedAt }),
+            (error) =>
+              log("error", work, {
+                error: `container stopped: ${errorMessage(error)}`,
+                lifetimeMs: Date.now() - startedAt,
+              }),
+          ),
+        );
       } catch (error) {
         await deleteOrgRunner(token, org, jit.runnerId).catch(() => undefined);
         throw error;

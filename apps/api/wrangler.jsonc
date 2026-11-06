@@ -54,9 +54,6 @@
     // Orgs whose `runs-on: relayrunner-container` jobs get a container runner, comma-separated
     // (src/container-runner.ts). Each container is billed to this account, so it's an allowlist.
     "CONTAINER_RUNNER_ORGS": "relayrunner",
-    // The runner group container runners join. 1 is Default, which allows private repos only
-    // unless an org admin opens it to public ones.
-    "CONTAINER_RUNNER_GROUP_ID": "1",
   },
   // Transactional email through Cloudflare Email Sending (src/email.ts). send.relayrunner.app is
   // onboarded for sending on this account. Set OPERATOR_ALERT_EMAIL with `wrangler secret put` to
@@ -111,6 +108,8 @@
       "class_name": "ContainerRunner",
       "scheduling_policy": "durable_object",
       "images": { "runner": { "dockerfile": "./container/Dockerfile" } },
+      // The runner's own output (registration, the job) in Workers Logs and the Containers page.
+      "observability": { "logs": { "enabled": true } },
     },
   ],
   // GitHub webhooks: apps/webhooks verifies each delivery and enqueues it; this Worker's `queue()`
