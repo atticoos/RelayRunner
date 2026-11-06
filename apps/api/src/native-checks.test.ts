@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   checkConventionalTitle,
   nativeJob,
+  nativeVerdict,
   pullRequestTitle,
   runChecks,
   type CheckStep,
@@ -41,11 +42,11 @@ const prContext = (title: string) => ({
 
 describe("nativeJob", () => {
   test("a job with no RelayRunner check step is routed as a pick", () => {
-    expect(nativeJob([runStep])).toEqual({ kind: "none" });
-    expect(nativeJob(undefined)).toEqual({ kind: "none" });
+    expect(nativeJob([runStep])).toBeNull();
+    expect(nativeJob(undefined)).toBeNull();
     expect(
       nativeJob([{ reference: { type: "repository", name: "actions/checkout", path: "" } }]),
-    ).toEqual({ kind: "none" });
+    ).toBeNull();
   });
 
   test("reads check steps and their literal inputs", () => {
@@ -65,8 +66,8 @@ describe("nativeJob", () => {
 
   test("refuses a job that mixes checks with other steps", () => {
     const job = nativeJob([checkStep("checks/pr-title"), runStep]);
-    expect(job.kind).toBe("unsupported");
-    expect(job.kind === "unsupported" && job.reason).toContain("Step 2 (Run pnpm lint)");
+    expect(job?.kind).toBe("unsupported");
+    expect(job?.kind === "unsupported" && job.reason).toContain("Step 2 (Run pnpm lint)");
   });
 
   test("refuses a check it doesn't know", () => {
@@ -83,7 +84,7 @@ describe("nativeJob", () => {
         map: [{ Key: "types", Value: { type: 3, expr: "vars.TYPES" } }],
       }),
     ]);
-    expect(job.kind).toBe("unsupported");
+    expect(job?.kind).toBe("unsupported");
   });
 });
 
@@ -138,6 +139,26 @@ describe("runChecks", () => {
       ok: false,
       reason:
         "The pr-title check reads the pull request's title, so run it on pull_request events.",
+    });
+  });
+});
+
+describe("nativeVerdict", () => {
+  test("is null for a job that isn't native", () => {
+    expect(nativeVerdict([runStep], prContext("feat: x"))).toBeNull();
+  });
+
+  test("runs the checks and names them", () => {
+    expect(nativeVerdict([checkStep("checks/pr-title")], prContext("feat: x"))).toEqual({
+      checks: ["pr-title"],
+      result: { ok: true },
+    });
+  });
+
+  test("fails a job it can't run natively with the reason", () => {
+    expect(nativeVerdict([checkStep("checks/typecheck")], prContext("feat: x"))).toEqual({
+      checks: [],
+      result: { ok: false, reason: "RelayRunner doesn't run the `typecheck` check natively yet." },
     });
   });
 });

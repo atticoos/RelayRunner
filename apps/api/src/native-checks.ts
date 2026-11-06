@@ -3,62 +3,76 @@
 // `uses: relayrunner/actions/checks/pr-title@v1`. The action also runs as an ordinary action, so
 // the same job still works if it's pointed at any other runner.
 
-import { dictionary, isRecord, scalar } from "./routing.ts";
+import { context, dictionary, isRecord, scalar } from "./pipeline-context.ts";
 
 const CHECKS_REPO = "relayrunner/actions";
 const CHECKS_PATH = "checks/";
 
-export type CheckName = "pr-title";
-const CHECKS: readonly CheckName[] = ["pr-title"];
+const CHECKS = ["pr-title"] as const;
+export type CheckName = (typeof CHECKS)[number];
+const isCheckName = (name: string): name is CheckName =>
+  (CHECKS as readonly string[]).includes(name);
 
 export interface CheckStep {
   check: CheckName;
   inputs: Record<string, string>;
 }
 
-// What a claimed job asks for: nothing native (route it as a pick), checks we can run, or checks
-// we can't run here, with the reason the job fails with.
+// What a native job asks for: checks we can run, or checks we can't run here, with the reason the
+// job fails with.
 export type NativeJob =
-  | { kind: "none" }
   | { kind: "checks"; steps: CheckStep[] }
   | { kind: "unsupported"; reason: string };
 
 export type CheckResult = { ok: true } | { ok: false; reason: string };
 
 /**
- * Reads the job message's steps. A job with no relayrunner check step is not native. A job with
- * one must be all check steps with literal inputs, since a Worker can't run anything else.
+ * Reads the job message's steps. A job with no relayrunner check step is not native (null). A job
+ * with one must be all check steps with literal inputs, since a Worker can't run anything else.
  */
-export function nativeJob(steps: unknown): NativeJob {
-  if (!Array.isArray(steps)) return { kind: "none" };
-  const references = steps.map(checkReference);
-  if (!references.some((reference) => reference !== null)) return { kind: "none" };
+export function nativeJob(steps: unknown): NativeJob | null {
+  if (!Array.isArray(steps)) return null;
+  const parsed = steps.map((step) => ({ step, check: checkReference(step) }));
+  if (parsed.every(({ check }) => check === null)) return null;
 
   const checks: CheckStep[] = [];
-  for (const [index, step] of steps.entries()) {
-    const reference = references[index];
-    if (reference === null)
+  for (const [index, { step, check }] of parsed.entries()) {
+    if (check === null)
       return {
         kind: "unsupported",
         reason: `RelayRunner runs a job natively only when every step is a RelayRunner check. Step ${index + 1} (${stepLabel(step)}) isn't, so move it to another job or route this job with the relay.`,
       };
-    if (!CHECKS.includes(reference as CheckName))
+    if (!isCheckName(check))
       return {
         kind: "unsupported",
-        reason: `RelayRunner doesn't run the \`${reference}\` check natively yet.`,
+        reason: `RelayRunner doesn't run the \`${check}\` check natively yet.`,
       };
     const inputs = literalInputs(isRecord(step) ? step.inputs : undefined);
     if (!inputs)
       return {
         kind: "unsupported",
-        reason: `The \`${reference}\` check takes only literal inputs when RelayRunner runs it natively.`,
+        reason: `The \`${check}\` check takes only literal inputs when RelayRunner runs it natively.`,
       };
-    checks.push({ check: reference as CheckName, inputs });
+    checks.push({ check, inputs });
   }
   return { kind: "checks", steps: checks };
 }
 
-export function runCheck(step: CheckStep, contextData: unknown): CheckResult {
+/**
+ * The verdict for a claimed job: null when it isn't native (route it as a pick), otherwise the
+ * checks it ran and whether they passed. A job we can't run natively fails with the reason.
+ */
+export function nativeVerdict(
+  steps: unknown,
+  contextData: unknown,
+): { checks: CheckName[]; result: CheckResult } | null {
+  const job = nativeJob(steps);
+  if (!job) return null;
+  if (job.kind === "unsupported") return { checks: [], result: { ok: false, reason: job.reason } };
+  return { checks: job.steps.map((step) => step.check), result: runChecks(job.steps, contextData) };
+}
+
+function runCheck(step: CheckStep, contextData: unknown): CheckResult {
   switch (step.check) {
     case "pr-title": {
       const title = pullRequestTitle(contextData);
@@ -83,7 +97,7 @@ export function runChecks(steps: CheckStep[], contextData: unknown): CheckResult
 }
 
 // The types AGENTS.md allows, which are the Conventional Commits defaults from commitlint.
-export const DEFAULT_TYPES = [
+const DEFAULT_TYPES = [
   "feat",
   "fix",
   "docs",
@@ -97,7 +111,7 @@ export const DEFAULT_TYPES = [
   "revert",
 ];
 
-const CONVENTIONAL = /^(?<type>[A-Za-z]+)(?:\((?<scope>[^()\r\n]+)\))?!?: (?<description>\S.*)$/;
+const CONVENTIONAL = /^(?<type>[A-Za-z]+)(?:\([^()\r\n]+\))?!?: \S.*$/;
 const EXAMPLE = "feat(api): add native checks";
 
 /** Whether a title has the Conventional Commits shape `type(scope)!: description`. */
@@ -165,8 +179,7 @@ function literal(token: unknown): string | null {
 
 // `github.event.pull_request.title` from the job's PipelineContextData.
 export function pullRequestTitle(contextData: unknown): string | null {
-  const github = dictionary(isRecord(contextData) ? contextData.github : undefined);
-  const event = dictionary(github?.get("event"));
+  const event = dictionary(context(contextData, "github")?.get("event"));
   const pullRequest = dictionary(event?.get("pull_request"));
   const title = scalar(pullRequest?.get("title"));
   return typeof title === "string" ? title : null;
