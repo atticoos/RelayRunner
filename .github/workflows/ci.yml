@@ -6,13 +6,26 @@ permissions:
   contents: read
 
 jobs:
+  # Routes `check` through RelayRunner itself. The repo is public, so it never gets a machine:
+  # the workspace's runner order picks Blacksmith or GitHub-hosted. Set the RELAYRUNNER_CI repo
+  # variable to `off` to skip the relay and run `check` straight on Blacksmith.
+  relay:
+    if: vars.RELAYRUNNER_CI != 'off'
+    uses: relayrunner/actions/.github/workflows/relay.yml@v1.0.0-beta.4
+    with:
+      blacksmith: blacksmith-2vcpu-ubuntu-2404
+      github: ubuntu-latest
+
   check:
     name: Lint, type-check, and test
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    needs: relay
+    # Runs when the relay picked a runner or was switched off; a failed relay still fails fast.
+    if: ${{ !cancelled() && (needs.relay.result == 'success' || needs.relay.result == 'skipped') }}
+    runs-on: ${{ needs.relay.outputs.runner || 'blacksmith-2vcpu-ubuntu-2404' }}
     env:
       HUSKY: "0"
     steps:
-      - uses: useblacksmith/checkout@v1
+      - uses: actions/checkout@v6
         with:
           persist-credentials: false
       - uses: pnpm/action-setup@v6
