@@ -1,6 +1,6 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { ExternalLink } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,9 +19,12 @@ import { cn } from "@/lib/utils";
 import { githubOutcomes as outcomes, isGitHubOutcome, type GitHubOutcome } from "@/lib/github";
 import {
   claimInstallation,
+  getRateLimits,
   getUnclaimedInstallations,
   needsGitHubSignIn,
   type Installation,
+  type RateLimitBucket,
+  type RateLimits,
   type UnclaimedInstallations,
 } from "@/lib/workspace";
 
@@ -76,7 +79,7 @@ function GitHubSettingsPage() {
             {installations.length === 0 ? (
               <p className="text-sm text-muted-foreground">No GitHub orgs connected yet.</p>
             ) : (
-              <ul className="grid gap-3">
+              <ul className="grid gap-5">
                 {installations.map((installation) => (
                   <ConnectedOrg key={installation.id} installation={installation} />
                 ))}
@@ -117,28 +120,124 @@ function GitHubNotice({ outcome }: { outcome: GitHubOutcome }) {
 function ConnectedOrg({ installation }: { installation: Installation }) {
   const { accountLogin, repositorySelection, suspendedAt, settingsUrl } = installation;
   return (
-    <li className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 text-sm">
-      <OrgName installation={installation}>
-        <span className="text-muted-foreground">
-          {repositorySelection === "all" ? "All repos" : "Selected repos"}
-        </span>
-      </OrgName>
-      <div className="flex items-center gap-2">
-        {suspendedAt ? <Badge variant="run">Suspended</Badge> : <Badge variant="go">Active</Badge>}
-        <Button asChild variant="outline" size="xs">
-          <a
-            href={settingsUrl}
-            target="_blank"
-            rel="noreferrer"
-            aria-label={`${suspendedAt ? "Fix" : "Configure"} ${accountLogin} on GitHub`}
-          >
-            {suspendedAt ? "Fix" : "Configure"}
-            <ExternalLink aria-hidden />
-          </a>
-        </Button>
+    <li className="grid gap-2 text-sm">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5">
+        <OrgName installation={installation}>
+          <span className="text-muted-foreground">
+            {repositorySelection === "all" ? "All repos" : "Selected repos"}
+          </span>
+        </OrgName>
+        <div className="flex items-center gap-2">
+          {suspendedAt ? (
+            <Badge variant="run">Suspended</Badge>
+          ) : (
+            <Badge variant="go">Active</Badge>
+          )}
+          <Button asChild variant="outline" size="xs">
+            <a
+              href={settingsUrl}
+              target="_blank"
+              rel="noreferrer"
+              aria-label={`${suspendedAt ? "Fix" : "Configure"} ${accountLogin} on GitHub`}
+            >
+              {suspendedAt ? "Fix" : "Configure"}
+              <ExternalLink aria-hidden />
+            </a>
+          </Button>
+        </div>
       </div>
+      {/* A suspended installation can't get a token, so there's nothing to read. */}
+      {!suspendedAt && <ApiUsage installationId={installation.id} />}
     </li>
   );
+}
+
+type UsageState = { kind: "loading" } | { kind: "error" } | { kind: "ready"; limits: RateLimits };
+
+/**
+ * How much of the installation's hourly GitHub API quota the App has used (#166). Loaded after the
+ * page so a slow GitHub doesn't hold it up. Secondary limits aren't reported by GitHub at all.
+ */
+function ApiUsage({ installationId }: { installationId: number }) {
+  const [state, setState] = useState<UsageState>({ kind: "loading" });
+  useEffect(() => {
+    if (authDisabled) return setState({ kind: "error" });
+    let live = true;
+    getRateLimits(installationId).then(
+      (limits) => live && setState({ kind: "ready", limits }),
+      () => live && setState({ kind: "error" }),
+    );
+    return () => {
+      live = false;
+    };
+  }, [installationId]);
+
+  if (state.kind === "loading")
+    return <p className="text-xs text-muted-foreground">Reading GitHub API usage…</p>;
+  if (state.kind === "error")
+    return <p className="text-xs text-muted-foreground">Couldn't read GitHub API usage.</p>;
+  const { core, graphql, actionsRunnerRegistration } = state.limits;
+  return (
+    <div className="grid gap-1.5 rounded-lg border bg-well px-3 py-2.5">
+      {core && <UsageMeter label="REST API" bucket={core} />}
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+        {graphql && <UsageFigure label="GraphQL" bucket={graphql} />}
+        {actionsRunnerRegistration && (
+          <UsageFigure label="Runner registrations" bucket={actionsRunnerRegistration} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+const count = (n: number) => n.toLocaleString("en-US");
+
+function UsageMeter({ label, bucket }: { label: string; bucket: RateLimitBucket }) {
+  const share = bucket.limit ? Math.min(1, bucket.used / bucket.limit) : 0;
+  return (
+    <div className="grid gap-1.5">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 text-xs">
+        <span>
+          <span className="text-muted-foreground">{label} </span>
+          <span className="font-mono tabular-nums">
+            {count(bucket.used)} / {count(bucket.limit)}
+          </span>
+          <span className="text-muted-foreground"> this hour</span>
+        </span>
+        <span className="text-muted-foreground">{resetsIn(bucket.reset)}</span>
+      </div>
+      <div
+        role="meter"
+        aria-label={`${label} requests used this hour`}
+        aria-valuemin={0}
+        aria-valuemax={bucket.limit}
+        aria-valuenow={bucket.used}
+        className="h-1.5 overflow-hidden rounded-full bg-raised-2"
+      >
+        <div
+          className={cn("h-full rounded-full", share >= 0.8 ? "bg-run" : "bg-go")}
+          style={{ width: `${Math.max(share * 100, bucket.used ? 1 : 0)}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function UsageFigure({ label, bucket }: { label: string; bucket: RateLimitBucket }) {
+  return (
+    <span>
+      {label}{" "}
+      <span className="font-mono text-foreground tabular-nums">
+        {count(bucket.used)} / {count(bucket.limit)}
+      </span>
+    </span>
+  );
+}
+
+function resetsIn(reset: string, now = Date.now()) {
+  const minutes = Math.ceil((new Date(reset).getTime() - now) / 60_000);
+  if (minutes <= 0) return "Resets now";
+  return `Resets in ${minutes} min`;
 }
 
 function OrgName({ installation, children }: { installation: Installation; children?: ReactNode }) {

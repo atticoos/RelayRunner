@@ -1,8 +1,9 @@
-import { and, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { Hono } from "hono";
 import type { Context } from "hono";
 import type { AppEnv } from "../app.ts";
 import { createDb, schema } from "../db/index.ts";
+import { appJwt, importAppPrivateKey, installationToken, rateLimits } from "../github-app.ts";
 import {
   dashboardPath,
   GitHubError,
@@ -154,6 +155,42 @@ export const githubRoutes = new Hono<AppEnv>()
       return c.json({ error: "installation_in_another_workspace" }, 409);
     }
     return c.json({ ok: true });
+  })
+
+  // How much of the installation's GitHub API quota the App has used this hour (#166). Read live
+  // from GitHub on each call; nothing is stored. Any member of the owning workspace can see it.
+  .get("/installations/:id/rate-limit", requireUser, requireWorkspace, async (c) => {
+    const installationId = Number(c.req.param("id"));
+    if (!Number.isSafeInteger(installationId) || installationId <= 0)
+      return c.json({ error: "not_found" }, 404);
+    const [row] = await c.var.db
+      .select({ id: schema.githubInstallation.id })
+      .from(schema.githubInstallation)
+      .where(
+        and(
+          eq(schema.githubInstallation.id, installationId),
+          eq(schema.githubInstallation.workspaceId, c.var.workspace.id),
+        ),
+      )
+      .limit(1);
+    if (!row) return c.json({ error: "not_found" }, 404);
+
+    try {
+      const key = await importAppPrivateKey(await c.env.GITHUB_APP_PRIVATE_KEY.get());
+      const token = await installationToken(await appJwt(c.env.GITHUB_APP_ID, key), installationId);
+      return c.json(await rateLimits(token));
+    } catch (error) {
+      // A suspended installation can't get a token, and GitHub can be down. Either way the page
+      // just says it couldn't read the usage.
+      console.error(
+        JSON.stringify({
+          msg: "github rate limit read failed",
+          installationId,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      );
+      return c.json({ error: "github_unavailable" }, 502);
+    }
   });
 
 // The installation as GitHub shows it to this user, null if their token can't see it, or 'reauth'
