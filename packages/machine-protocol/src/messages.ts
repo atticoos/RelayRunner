@@ -20,6 +20,26 @@ const routeId = z.string().min(1);
 
 // machine → gateway
 
+// What kind of device the machine is and what it runs on, as the CLI read it. Every part is
+// optional: the CLI sends what it could read cheaply and leaves out the rest.
+export const DeviceKind = z.enum(["laptop", "desktop", "server", "vm", "unknown"]);
+
+const text = z.string().trim().min(1).max(120);
+
+export const Device = z.object({
+  kind: DeviceKind,
+  // A display name, such as "MacBook Pro" or "PowerEdge R650".
+  model: text.optional(),
+  // The raw identifier it came from, such as "Mac15,9" or a DMI product name.
+  modelId: text.optional(),
+  // The CPU, such as "Apple M3 Pro" or "Intel(R) Xeon(R) Gold 6338 CPU @ 2.00GHz".
+  chip: text.optional(),
+  cpuCores: z.number().int().positive().max(100_000).optional(),
+  memoryMb: z.number().int().positive().max(1_000_000_000).optional(),
+  // The OS name and version, such as "macOS 15.1" or "Ubuntu 24.04.1 LTS".
+  osVersion: text.optional(),
+});
+
 // First message after the socket opens. The gateway doesn't route to the machine until it has
 // one.
 export const HelloMessage = z.object({
@@ -30,6 +50,9 @@ export const HelloMessage = z.object({
   arch: z.enum(["x64", "arm64", "arm"]),
   // The actions/runner version installed on the machine, such as "2.329.0".
   runnerVersion: z.string().min(1),
+  // Missing from CLIs older than device reporting. A device the gateway can't read is dropped
+  // rather than failing the hello, so a detection bug never keeps a machine offline.
+  device: Device.optional().catch(undefined),
 });
 
 // Sent whenever the machine's state changes and again on an interval as its heartbeat.
@@ -91,6 +114,8 @@ export const GatewayMessage = z.discriminatedUnion("type", [
   PausedMessage,
 ]);
 
+export type DeviceKind = z.infer<typeof DeviceKind>;
+export type Device = z.infer<typeof Device>;
 export type HelloMessage = z.infer<typeof HelloMessage>;
 export type StatusMessage = z.infer<typeof StatusMessage>;
 export type JobMessage = z.infer<typeof JobMessage>;

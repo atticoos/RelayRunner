@@ -4,6 +4,7 @@ import type { Db } from "./db/index.ts";
 import { schema } from "./db/index.ts";
 import type { Env } from "./env.ts";
 import { matchLabels, parseStoredLabels } from "./github-runners.ts";
+import type { Device } from "@relayrunner/machine-protocol";
 import { machineLabels } from "./routing.ts";
 
 // Machine tokens: what `relayrunner connect` holds after enrolling, and sends on the MachineLink
@@ -70,6 +71,37 @@ export function presentMachine(
     createdAt: machine.createdAt,
     // Null unless paused. `by` is null when the machine's own CLI paused it.
     paused: machine.pausedAt ? { at: machine.pausedAt, by: pausedBy } : null,
+    // What its CLI reported on its last hello, or null when it never did (an older CLI, or a
+    // runner added from GitHub, which doesn't report hardware).
+    device: machine.deviceKind
+      ? {
+          kind: machine.deviceKind,
+          model: machine.deviceModel,
+          modelId: machine.deviceModelId,
+          chip: machine.chip,
+          cpuCores: machine.cpuCores,
+          memoryMb: machine.memoryMb,
+          osVersion: machine.osVersion,
+          reportedAt: machine.deviceReportedAt,
+        }
+      : null,
+  };
+}
+
+/**
+ * The machine columns a hello's device sets. Every column is written, so a part the CLI no
+ * longer reports is cleared rather than left stale.
+ */
+export function deviceColumns(device: Device, now: Date) {
+  return {
+    deviceKind: device.kind,
+    deviceModel: device.model ?? null,
+    deviceModelId: device.modelId ?? null,
+    chip: device.chip ?? null,
+    cpuCores: device.cpuCores ?? null,
+    memoryMb: device.memoryMb ?? null,
+    osVersion: device.osVersion ?? null,
+    deviceReportedAt: now,
   };
 }
 

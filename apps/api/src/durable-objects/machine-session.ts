@@ -36,7 +36,7 @@ export interface SessionState {
   connectedAt: number;
   lastHeardAt: number;
   // Set by the machine's `hello`. Until then the machine isn't online.
-  hello?: Pick<HelloMessage, "os" | "arch" | "runnerVersion">;
+  hello?: Pick<HelloMessage, "os" | "arch" | "runnerVersion" | "device">;
   state?: "idle" | "busy";
 }
 
@@ -71,9 +71,9 @@ export function handleFrame(
     if (session.hello) return reject(session, "invalid_message", "hello was already sent");
     if (message.machineId !== session.machineId)
       return reject(session, "invalid_message", "machineId doesn't match this machine's token");
-    const { os, arch, runnerVersion } = message;
+    const { os, arch, runnerVersion, device } = message;
     // A machine that just said hello has no job from this gateway yet.
-    return { state: { ...heard, hello: { os, arch, runnerVersion }, state: "idle" } };
+    return { state: { ...heard, hello: { os, arch, runnerVersion, device }, state: "idle" } };
   }
 
   if (!session.hello) return reject(session, "invalid_message", "send hello first");
