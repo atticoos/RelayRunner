@@ -8,6 +8,58 @@ The pick runner is how RelayRunner gets hold of a `relay` job. Every relay job a
 
 The pick runner is the piece that decides, so it has to get the job before anything can be chosen. If GitHub never offers the relay job to the pick runner, nothing is routed: no machine, no GitHub-hosted runner, no Blacksmith. The relay job just stays queued.
 
+## What a runner is to GitHub
+
+To GitHub, a self-hosted runner is two things:
+
+1. **A registration record** in the org: a name, labels, and the one runner group it belongs to.
+2. **Whoever holds that record's credentials and asks GitHub for work.** Normally that's GitHub's runner program on a machine. GitHub doesn't check what's on the other end, only that it speaks the runner protocol.
+
+The pick runner uses exactly that. Nothing is provisioned and no VM starts. The gateway makes one API call that creates the record and returns its credentials. The group is a field of that call (`runner_group_id`), so the runner is born in the group and is never added to it later. A Durable Object then holds the credentials and polls GitHub the way the runner program would.
+
+```mermaid
+flowchart LR
+  subgraph repo["Your repo"]
+    R["relay job<br/>runs-on: relayrunner"]
+  end
+  subgraph gh["GitHub org"]
+    Q["Job queue<br/>relay, needs label relayrunner"]
+    subgraph def["Default runner group (private repos only)"]
+      Rec["Runner record<br/>relayrunner-pick-1234<br/>label relayrunner"]
+      Mac["Atticus's Mac<br/>label self-hosted"]
+    end
+  end
+  subgraph gw["Gateway (Cloudflare Worker)"]
+    P["PickRunner Durable Object<br/>holds the JIT credentials"]
+  end
+  R -- "1. queued" --> Q
+  Q -- "2. workflow_job webhook" --> P
+  P -- "3. generate-jitconfig<br/>labels + runner_group_id: 1" --> Rec
+  P -- "4. poll for work as that runner" --> Rec
+  Q -. "5. offered only if the label matches<br/>and the group allows the repo" .-> Rec
+```
+
+What exists where, step by step:
+
+| Step          | Your repo                             | GitHub                                                                  | Gateway                                                         |
+| ------------- | ------------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------- |
+| 1. Run starts | `relay` job asks for `relayrunner`    | Relay job queued; no runner has the label yet                           | Nothing                                                         |
+| 2. Webhook    | Waiting                               | Sends `workflow_job` `queued`                                           | Starts a PickRunner for the job id                              |
+| 3. Register   | Waiting                               | New record `relayrunner-pick-<job id>`, label `relayrunner`, in Default | Holds the `encoded_jit_config` credentials                      |
+| 4. Poll       | Waiting                               | Record shows online and idle                                            | Opens a session, long-polls for up to 4 minutes                 |
+| 5. Match      | Waiting                               | Offers the relay if the label matches and Default allows the repo       | Receives the job, or nothing                                    |
+| 6. Answer     | `relay` succeeds with `runner` output | Removes the JIT runner after its one job                                | Claims, routes, completes; or deletes the runner after `no-job` |
+
+Compared with a vanilla self-hosted runner:
+
+|                      | Vanilla runner (e.g. a Mac)                       | Pick runner                                    |
+| -------------------- | ------------------------------------------------- | ---------------------------------------------- |
+| Registered by        | `./config.sh` with a registration token           | `generate-jitconfig` API call from the gateway |
+| Group chosen         | At config time (Default unless another is picked) | In the API call: `runner_group_id: 1`          |
+| Asks GitHub for jobs | The runner program on the machine                 | A Durable Object in the Worker                 |
+| Lives                | Until removed                                     | One job, or 4 minutes                          |
+| Runs job steps       | Yes                                               | No, it only sets the `runner` output           |
+
 ## Who gets the job: labels and runner groups
 
 GitHub offers a queued job to a self-hosted runner only when **both** of these hold:
