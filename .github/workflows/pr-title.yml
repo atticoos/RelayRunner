@@ -13,5 +13,4 @@ jobs:
   pr-title:
     runs-on: relayrunner
     steps:
-      # The merge commit of relayrunner/actions#4. Move to @v1 once it's released.
-      - uses: relayrunner/actions/checks/pr-title@b69840926b21ff58b9dbc990497ca5f9b3b20c3a
+      - uses: relayrunner/actions/checks/pr-title@v1.0.0-beta.3
