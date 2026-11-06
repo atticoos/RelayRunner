@@ -130,6 +130,17 @@ export async function deleteOrgRunner(token: string, org: string, runnerId: numb
     );
 }
 
+/** Whether an org runner is busy with a job, or null once it's removed (404). */
+export async function orgRunnerBusy(token: string, org: string, runnerId: number) {
+  const response = await fetch(`${API}/orgs/${org}/actions/runners/${runnerId}`, {
+    headers: headers(token),
+  });
+  if (response.status === 404) return null;
+  if (!response.ok)
+    throw new Error(`GET /orgs/${org}/actions/runners/${runnerId} failed with ${response.status}`);
+  return ((await response.json()) as { busy: boolean }).busy;
+}
+
 /** An installation token from the App's id and private key, as the Durable Objects hold them. */
 export async function appInstallationToken(
   env: { GITHUB_APP_ID: string; GITHUB_APP_PRIVATE_KEY: { get(): Promise<string> } },

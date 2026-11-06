@@ -6,6 +6,7 @@ import type { Env } from "./env.ts";
 import { purgeOldJobTimings } from "./job-timings.ts";
 import { handleWebhookBatch } from "./webhook-queue.ts";
 
+export { ContainerRunner } from "./durable-objects/container-runner.ts";
 export { MachineLink } from "./durable-objects/machine-link.ts";
 export { PickRunner } from "./durable-objects/pick-runner.ts";
 export { Router } from "./durable-objects/router.ts";

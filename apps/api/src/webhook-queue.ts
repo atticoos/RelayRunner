@@ -22,6 +22,7 @@ import type { Env } from "./env.ts";
 import { upsertInstallation } from "./installations.ts";
 import { recordJobTiming } from "./job-timings.ts";
 import { recordWorkflowJob, setJobMachine } from "./jobs.ts";
+import { containerRunnerAllowed, usesContainerRunner } from "./container-runner.ts";
 import { checkPullRequestTitle } from "./pr-title-check.ts";
 import { recordRepositoryEvent, removeRepositories, upsertRepositories } from "./repositories.ts";
 import { routingLabelFromLabels } from "./github-runners.ts";
@@ -108,7 +109,7 @@ async function deadLetter(env: Env, msg: Message<WebhookMessage>) {
   }
 }
 
-function errorMessage(error: unknown) {
+export function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
 
@@ -147,6 +148,8 @@ export async function processWebhook(env: Env, message: WebhookMessage): Promise
       // A job on an added runner's label: the pick may have chosen that runner for it.
       const routingLabel = routingLabelFromLabels(message.job.labels);
       if (routingLabel) return trackRunnerJob(env, message, routingLabel, lagMs);
+      // A job that runs in a container: boot one for it on `queued`.
+      if (usesContainerRunner(message.job.labels)) return startContainerRunner(env, message);
       if (!isPick) return;
       // On `queued`, wake a PickRunner for the job, which answers it with the Router's route. Other
       // actions are only logged.
@@ -372,4 +375,33 @@ async function recordInstallation(
   }
   await upsertRepositories(db, installation.id, message.added, observedAt);
   await removeRepositories(db, installation.id, message.removed, observedAt);
+}
+
+// Starts a ContainerRunner for a queued `runs-on: relayrunner-container` job from an allowed org.
+// Other actions are only logged.
+async function startContainerRunner(
+  env: Env,
+  message: Extract<WebhookMessage, { event: "workflow_job" }>,
+) {
+  const org = message.repository.fullName.split("/")[0];
+  const allowed = containerRunnerAllowed(env.CONTAINER_RUNNER_ORGS, org);
+  console.log(
+    JSON.stringify({
+      msg: "relayrunner container job received",
+      action: message.action,
+      deliveryId: message.deliveryId,
+      installationId: message.installationId,
+      repository: message.repository.fullName,
+      jobId: message.job.id,
+      runId: message.job.runId,
+      job: message.job.name,
+      allowed,
+    }),
+  );
+  if (message.action !== "queued" || !message.installationId || !allowed) return;
+  await env.CONTAINER_RUNNER.getByName(String(message.job.id)).start({
+    jobId: message.job.id,
+    installationId: message.installationId,
+    repo: message.repository.fullName,
+  });
 }
