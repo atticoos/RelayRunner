@@ -3,6 +3,7 @@ import { ArrowLeftIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { WorkspaceMenu } from "@/components/workspace-menu";
 import { authDisabled } from "@/lib/auth-client";
+import { isOperator } from "@/lib/roles";
 import { ensureActiveWorkspace, getCurrentWorkspace, type CurrentWorkspace } from "@/lib/workspace";
 
 const devWorkspace: CurrentWorkspace = {
@@ -40,6 +41,13 @@ const nav = [
   { to: "/usage", label: "Usage" },
 ] as const;
 
+// Operators only (user.role = "operator"). Cloudflare Access still gates these pages.
+const adminNav = [
+  { to: "/admin/users", label: "Users" },
+  { to: "/admin/workspaces", label: "Workspaces" },
+  { to: "/admin/webhooks", label: "Webhooks" },
+] as const;
+
 const navLink =
   "rounded-md px-2.5 py-1.5 text-[15px] text-sidebar-foreground transition-colors hover:text-sidebar-accent-foreground";
 const navActive = { className: "bg-sidebar-accent text-sidebar-accent-foreground" };
@@ -63,6 +71,17 @@ function WorkspaceLayout() {
                 </Link>
               ))}
             </nav>
+            {(authDisabled || isOperator(user)) && (
+              <nav aria-label="Admin" className="px-1">
+                <NavGroup label="Admin">
+                  {adminNav.map((item) => (
+                    <Link key={item.to} to={item.to} className={navLink} activeProps={navActive}>
+                      {item.label}
+                    </Link>
+                  ))}
+                </NavGroup>
+              </nav>
+            )}
           </>
         )}
       </aside>
@@ -85,7 +104,7 @@ function SettingsNav({ workspaceName }: { workspaceName: string }) {
         Back to dashboard
       </Link>
       <nav className="flex flex-row flex-wrap gap-x-4 gap-y-3 sm:flex-col">
-        <SettingsGroup label={workspaceName}>
+        <NavGroup label={workspaceName}>
           <Link to="/settings/general" className={navLink} activeProps={navActive}>
             General
           </Link>
@@ -95,18 +114,18 @@ function SettingsNav({ workspaceName }: { workspaceName: string }) {
           <Link to="/settings/members" className={navLink} activeProps={navActive}>
             Members
           </Link>
-        </SettingsGroup>
-        <SettingsGroup label="Account">
+        </NavGroup>
+        <NavGroup label="Account">
           <Link to="/settings/account" className={navLink} activeProps={navActive}>
             Profile
           </Link>
-        </SettingsGroup>
+        </NavGroup>
       </nav>
     </div>
   );
 }
 
-function SettingsGroup({ label, children }: { label: string; children: ReactNode }) {
+function NavGroup({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="grid min-w-0 content-start gap-0.5">
       <span className="truncate px-2.5 pb-1 text-xs text-muted-foreground">{label}</span>

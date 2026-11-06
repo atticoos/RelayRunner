@@ -20,6 +20,9 @@ export const user = sqliteTable("user", {
   email: text("email").notNull().unique(),
   emailVerified: integer("email_verified", { mode: "boolean" }).notNull().default(false),
   image: text("image"),
+  // Global role, separate from per-workspace member roles. "operator" sees the dashboard's Admin
+  // section. Null for everyone else. Granted by SQL for now (docs/cloudflare-access.md).
+  role: text("role"),
   ...timestamps,
 });
 

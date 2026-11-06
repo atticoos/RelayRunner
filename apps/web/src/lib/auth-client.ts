@@ -1,4 +1,4 @@
-import { organizationClient } from "better-auth/client/plugins";
+import { inferAdditionalFields, organizationClient } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
 
 // Better Auth lives in the apps/api Worker, mounted at /api/auth on the same
@@ -6,7 +6,11 @@ import { createAuthClient } from "better-auth/react";
 export const authClient = createAuthClient({
   basePath: "/api/auth",
   // Workspaces are Better Auth organizations (see apps/api/src/auth.ts).
-  plugins: [organizationClient()],
+  plugins: [
+    organizationClient(),
+    // user.role (apps/api/src/auth.ts): "operator" sees the Admin section.
+    inferAdditionalFields({ user: { role: { type: "string", required: false, input: false } } }),
+  ],
 });
 
 export const { useSession, signIn, signOut, organization, useListOrganizations } = authClient;

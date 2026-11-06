@@ -36,10 +36,10 @@ describe("templates", () => {
     const email = renderDeadLetterAlertEmail({
       count: 12,
       threshold: 10,
-      inspectorUrl: "https://app.example/dev/webhooks",
+      inspectorUrl: "https://app.example/admin/webhooks",
     });
     expect(email.subject).toBe("[webhooks] 12 deliveries dead-lettered in the past hour");
-    expect(email.text).toContain("https://app.example/dev/webhooks");
+    expect(email.text).toContain("https://app.example/admin/webhooks");
   });
 
   it("invite links the accept page and escapes names", () => {

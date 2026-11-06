@@ -20,6 +20,16 @@ const call = (path: string, cookie: string, body?: unknown) =>
 const createWorkspace = (cookie: string, name: string, slug: string) =>
   testing.createWorkspace(env, cookie, name, slug);
 
+describe("user role", () => {
+  test("the session carries user.role, which is how the dashboard spots operators", async () => {
+    const { user, cookie } = await signIn();
+    await env.DB.prepare("update user set role = 'operator' where id = ?").bind(user.id).run();
+    const response = await call("/auth/get-session", cookie);
+    const body = (await response.json()) as { user: { role: string | null } };
+    expect(body.user.role).toBe("operator");
+  });
+});
+
 describe("workspaces", () => {
   test("a signed-out request is rejected", async () => {
     const response = await app.request("/api/workspaces/current", {}, env);

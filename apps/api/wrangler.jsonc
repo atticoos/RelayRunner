@@ -11,7 +11,7 @@
   // and each would be another public, unprotected hostname.
   "preview_urls": false,
   // Custom domain on the interim relayrunner.app zone. The dashboard still reaches this Worker over
-  // its service binding; this host is for direct API calls. /api/dev/* stays behind gateDevOnly.
+  // its service binding; this host is for direct API calls. /api/admin/* stays behind gateAdmin.
   "routes": [{ "pattern": "api.relayrunner.app", "custom_domain": true }],
   // Workers Logs, traces and Issues (errors grouped per Worker). Wrangler deploys overwrite
   // dashboard settings, so these must stay on here. Source maps make Issues' stacks point at
@@ -40,10 +40,10 @@
     "GITHUB_APP_SLUG": "relayrunner",
     // The GitHub App's numeric ID, the `iss` of the App JWTs that mint installation tokens.
     "GITHUB_APP_ID": "5605512",
-    // Zero Trust team domain and the Access app AUD whose JWTs /api/dev/* accepts
+    // Zero Trust team domain and the Access app AUD whose JWTs /api/admin/* accepts
     // (packages/access). Dashboard previews forward /api/* here with the Access JWT, so this is
-    // the AUDs of "relayrunner-app previews" and "relayrunner-app dev views"
-    // (app.relayrunner.app/dev and /api/dev), the same as in apps/web/wrangler.jsonc. Requests to
+    // the AUDs of "relayrunner-app previews" and "relayrunner-app admin views"
+    // (app.relayrunner.app/admin and /api/admin), the same as in apps/web/wrangler.jsonc. Requests to
     // this Worker's own URLs, or from the dashboard's workers.dev host, carry no JWT and get 403.
     "ACCESS_TEAM_DOMAIN": "relayrunner.cloudflareaccess.com",
     "ACCESS_AUD": "bc8e87c4c78375b0b1e61b4a2a73354543030492e218d02a28c56bc0f95702f7, 45a666d9534b30a03ef5e04e9ce04da805afa430d00b6bffddeb245aef130460",
@@ -96,7 +96,7 @@
   // GitHub webhooks: apps/webhooks verifies each delivery and enqueues it; this Worker's `queue()`
   // export (src/webhook-queue.ts) processes it. Messages that fail max_retries times (with backoff,
   // about half an hour) move to the DLQ, whose consumer archives them to R2 and only then acks.
-  // The producer is for replays from /api/dev/webhooks. Create both queues once:
+  // The producer is for replays from /api/admin/webhooks. Create both queues once:
   //   wrangler queues create relayrunner-github-webhooks
   //   wrangler queues create relayrunner-github-webhooks-dlq
   "queues": {

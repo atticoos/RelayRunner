@@ -29,3 +29,8 @@ export function canEditMember(
 export function assignableRoles(actorRole: string): Role[] {
   return actorRole === "owner" ? ["member", "admin", "owner"] : ["member", "admin"];
 }
+
+/** A RelayRunner operator (user.role, not a workspace role): sees the sidebar's Admin section. */
+export function isOperator(user: { role?: string | null } | null | undefined) {
+  return user?.role === "operator";
+}

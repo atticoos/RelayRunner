@@ -22,6 +22,6 @@ Format with oxfmt (`pnpm format`) and lint with Oxlint (`pnpm lint`). Run `pnpm 
 
 The `security-audit` skill from [cloudflare/security-audit-skill](https://github.com/cloudflare/security-audit-skill) is a project default, listed under `skills` in `package.json` and pinned in `skills-lock.json`. Load it for a security audit, a vulnerability review, or a pen test. The canonical copy lives in `.agents/skills`, which Codex, Cursor, and Grok read directly; Claude Code reads it through the `.claude/skills/security-audit` symlink. Don't edit the vendored files by hand, since oxfmt and Oxlint skip them to keep them byte-identical to the lock. Update with `npx skills update`.
 
-## Preview URLs and dev-only views
+## Preview URLs and admin views
 
-Dashboard preview URLs and `/dev/*` views sit behind Cloudflare Access. To reach them, send the `CF-Access-Client-Id` and `CF-Access-Client-Secret` headers from `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET`. `GET /dev/access` confirms the token works. See [docs/cloudflare-access.md](docs/cloudflare-access.md).
+Dashboard preview URLs and the operator `/admin/*` views sit behind Cloudflare Access. To reach them, send the `CF-Access-Client-Id` and `CF-Access-Client-Secret` headers from `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET`. `GET /admin/access` confirms the token works. See [docs/cloudflare-access.md](docs/cloudflare-access.md).

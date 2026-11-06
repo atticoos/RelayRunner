@@ -58,7 +58,7 @@ function render(env: Env, args: EmailArgs): RenderedEmail {
     case "dead-letter-alert":
       return renderDeadLetterAlertEmail({
         ...args.context,
-        inspectorUrl: `${dashboard}/dev/webhooks`,
+        inspectorUrl: `${dashboard}/admin/webhooks`,
       });
     case "invite": {
       const { invitationId, ...context } = args.context;
