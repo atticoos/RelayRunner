@@ -129,3 +129,35 @@ export async function deleteOrgRunner(token: string, org: string, runnerId: numb
       `DELETE /orgs/${org}/actions/runners/${runnerId} failed with ${response.status}`,
     );
 }
+
+/**
+ * Post a finished check run on a commit, as the App. A check with the same name on the same
+ * commit replaces the earlier one on the pull request.
+ */
+export async function createCheckRun(
+  token: string,
+  repo: string,
+  check: {
+    name: string;
+    headSha: string;
+    conclusion: "success" | "failure";
+    title: string;
+    summary: string;
+  },
+) {
+  const response = await fetch(`${API}/repos/${repo}/check-runs`, {
+    method: "POST",
+    headers: { ...headers(token), "content-type": "application/json" },
+    body: JSON.stringify({
+      name: check.name,
+      head_sha: check.headSha,
+      status: "completed",
+      conclusion: check.conclusion,
+      output: { title: check.title, summary: check.summary },
+    }),
+  });
+  if (!response.ok)
+    throw new Error(
+      `POST /repos/${repo}/check-runs failed with ${response.status}: ${(await response.text()).slice(0, 300)}`,
+    );
+}
