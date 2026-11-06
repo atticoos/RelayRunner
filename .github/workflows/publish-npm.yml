@@ -8,14 +8,14 @@ permissions:
 
 jobs:
   publish:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: read
       id-token: write
     env:
       HUSKY: "0"
     steps:
-      - uses: actions/checkout@v6
+      - uses: useblacksmith/checkout@v1
         with:
           persist-credentials: false
       - uses: pnpm/action-setup@v6
