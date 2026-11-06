@@ -12,7 +12,7 @@ import {
   importAppPrivateKey,
   installationToken,
 } from "../github-app.ts";
-import { pausedByName } from "../machines.ts";
+import { deviceColumns, pausedByName } from "../machines.ts";
 import { machineRunnerName, routeLabel, type Route } from "../routing.ts";
 import {
   CLOSE,
@@ -75,6 +75,12 @@ export class MachineLink extends DurableObject<Env> {
         type: "machine.connected",
         data: { runnerVersion: outcome.state.hello.runnerVersion ?? null },
       });
+      const device = outcome.state.hello.device;
+      if (device)
+        await db
+          .update(schema.machine)
+          .set(deviceColumns(device, new Date()))
+          .where(eq(schema.machine.id, session.machineId));
       const [machine] = await db
         .select()
         .from(schema.machine)

@@ -1,4 +1,5 @@
 import { ApiError, api } from "@/lib/api";
+import type { MachineDevice } from "./device.ts";
 
 /**
  * A machine jobs can route to (GET /api/machines): enrolled with `relayrunner connect`, or a
@@ -39,6 +40,12 @@ export type Machine = {
     /** GitHub couldn't be asked, so the status reads offline. */
     unreachable: boolean;
   };
+  /**
+   * What the machine's CLI reported on its last hello: the kind of device and its specs. Null
+   * when it never did (an older CLI, or a runner added from GitHub). Missing from an API that
+   * predates it.
+   */
+  device?: MachineDevice | null;
   /** Live, from the machine's connection (or GitHub, for a GitHub runner). */
   status?: {
     online: boolean;

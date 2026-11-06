@@ -10,6 +10,7 @@ import {
   writeCredentials,
   type Credentials,
 } from "./credentials.ts";
+import { detectDevice } from "./device.ts";
 import { ensureRunner, RunnerError, runnerPlatform } from "./install.ts";
 import { runJob } from "./job.ts";
 import { login, LoginError, openBrowser } from "./login.ts";
@@ -75,6 +76,8 @@ async function connectMachine(args: { server?: string; name?: string }) {
   }
 
   const runner = await ensureRunner({ log: (line) => clack.log.info(line) });
+  // What kind of device this is and its specs, for the dashboard's badge. Best effort.
+  const device = await detectDevice();
 
   // First Ctrl-C goes offline and lets a running job's runner exit and clean up (the terminal
   // sends it SIGINT too). A second one exits on the spot.
@@ -89,7 +92,12 @@ async function connectMachine(args: { server?: string; name?: string }) {
   const end = await connect({
     server: credentials.server,
     token: credentials.token,
-    hello: { machineId: credentials.machine.id, ...platform, runnerVersion: runner.version },
+    hello: {
+      machineId: credentials.machine.id,
+      ...platform,
+      runnerVersion: runner.version,
+      device,
+    },
     runJob: (run, report) => runJob(run, { runner, report }),
     onEvent: (event) => {
       if (event.type === "connected") online = true;

@@ -243,6 +243,19 @@ export const machine = sqliteTable(
     githubRunnerId: integer("github_runner_id"),
     routingLabel: text("routing_label").unique(),
     githubLabels: text("github_labels"),
+    // 'connect' only: the device the CLI reported on its last hello (#165). Each part is its own
+    // typed column, never a display string, so routing could match on specs later. Null when the
+    // CLI didn't report it (older CLIs) or couldn't read it.
+    // laptop, desktop, server, vm or unknown.
+    deviceKind: text("device_kind"),
+    // A display name ("MacBook Pro") and the raw identifier it came from ("Mac15,9").
+    deviceModel: text("device_model"),
+    deviceModelId: text("device_model_id"),
+    chip: text("chip"),
+    cpuCores: integer("cpu_cores"),
+    memoryMb: integer("memory_mb"),
+    osVersion: text("os_version"),
+    deviceReportedAt: integer("device_reported_at", { mode: "timestamp_ms" }),
     ...timestamps,
   },
   (table) => [

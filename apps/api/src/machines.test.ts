@@ -1,9 +1,10 @@
 import type { ActivityPage } from "@relayrunner/activity";
+import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import { app } from "./app.ts";
-import { createDb } from "./db/index.ts";
+import { createDb, schema } from "./db/index.ts";
 import type { Env } from "./env.ts";
-import { verifyMachineToken } from "./machines.ts";
+import { deviceColumns, verifyMachineToken } from "./machines.ts";
 import * as testing from "./testing.ts";
 
 let proxy: Awaited<ReturnType<typeof testing.startD1>>["proxy"];
@@ -289,6 +290,43 @@ describe("machines in the dashboard", () => {
       }),
     ]);
     expect(machines[0]).not.toHaveProperty("tokenHash");
+    // Its CLI hasn't reported a device yet.
+    expect(machines[0].device).toBeNull();
+  });
+
+  test("shows the device its CLI reported on hello", async () => {
+    const { cookie, machine } = await enroll("device-ok", "atticus-mbp");
+    const reportedAt = new Date("2026-11-06T17:00:00.000Z");
+    await createDb(env.DB)
+      .update(schema.machine)
+      .set(
+        deviceColumns(
+          {
+            kind: "laptop",
+            model: "MacBook Pro",
+            modelId: "Mac15,9",
+            chip: "Apple M3 Pro",
+            cpuCores: 12,
+            memoryMb: 36864,
+            osVersion: "macOS 15.1",
+          },
+          reportedAt,
+        ),
+      )
+      .where(eq(schema.machine.id, machine.id));
+    const { machines } = (await (await call("/machines", cookie)).json()) as {
+      machines: { device: unknown }[];
+    };
+    expect(machines[0].device).toEqual({
+      kind: "laptop",
+      model: "MacBook Pro",
+      modelId: "Mac15,9",
+      chip: "Apple M3 Pro",
+      cpuCores: 12,
+      memoryMb: 36864,
+      osVersion: "macOS 15.1",
+      reportedAt: reportedAt.toISOString(),
+    });
   });
 
   test("revoking a machine kills its token and hides it", async () => {

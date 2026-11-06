@@ -48,6 +48,20 @@ function rejected(session: SessionState, f: string | ArrayBuffer) {
 }
 
 describe("machine session", () => {
+  test("keeps the device a hello reports, for MachineLink to store", () => {
+    const device = { kind: "laptop", model: "MacBook Pro", cpuCores: 12 } as const;
+    const withDevice = frame({
+      type: "hello",
+      machineId: "m1",
+      os: "macos",
+      arch: "arm64",
+      runnerVersion: "2.329.0",
+      device,
+    });
+    expect(said([withDevice]).hello?.device).toEqual(device);
+    expect(said([hello]).hello?.device).toBeUndefined();
+  });
+
   test("a connected machine isn't online until it says hello", () => {
     expect(statusOf(newSession("m1", 0), 0).online).toBe(false);
     expect(statusOf(said([hello]), 1000)).toEqual({ online: true, state: "idle", connectedAt: 0 });

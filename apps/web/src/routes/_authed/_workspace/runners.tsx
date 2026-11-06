@@ -45,6 +45,7 @@ import {
   GithubRunnersDialog,
   runnerSettingsUrl,
 } from "@/components/add-runner";
+import { DeviceBadge } from "@/components/device-badge";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -539,6 +540,7 @@ function MachineCard({ machine }: { machine: Machine }) {
               GitHub runner
             </Badge>
           )}
+          {!isGithub && machine.device && <DeviceBadge device={machine.device} />}
         </CardTitle>
         {/* Full width under the name and the actions, so a long paused line fits on a phone. */}
         <CardDescription className="col-span-2">
