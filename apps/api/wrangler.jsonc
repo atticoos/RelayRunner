@@ -40,8 +40,6 @@
     "GITHUB_APP_SLUG": "relayrunner",
     // The GitHub App's numeric ID, the `iss` of the App JWTs that mint installation tokens.
     "GITHUB_APP_ID": "5605512",
-    // Repos whose pull requests get the App's "PR title" check run (src/pr-title-check.ts).
-    "PR_TITLE_CHECK_REPOS": "relayrunner/relayrunner",
     // Zero Trust team domain and the Access app AUD whose JWTs /api/admin/* accepts
     // (packages/access). Dashboard previews forward /api/* here with the Access JWT, so this is
     // the AUDs of "relayrunner-app previews" and "relayrunner-app admin views"

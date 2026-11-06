@@ -1,27 +1,36 @@
 // The "PR title" check: the GitHub App posts a check run on each pull request saying whether its
 // title is a Conventional Commit. No runner and no workflow, so it works on public repos and costs
-// no Actions minute. Only repos listed in PR_TITLE_CHECK_REPOS get it for now.
+// no Actions minute. A repo turns it on with `checks: pr-title` in relayrunner.yml
+// (src/repo-config.ts).
 
 import type { WebhookMessage } from "@relayrunner/github-webhooks";
 import type { Env } from "./env.ts";
 import { appJwt, createCheckRun, importAppPrivateKey, installationToken } from "./github-app.ts";
 import { checkConventionalTitle } from "./native-checks.ts";
+import { loadRepoConfig, type ConfigResult } from "./repo-config.ts";
 
 export const PR_TITLE_CHECK_NAME = "PR title";
 
 type PullRequestMessage = Extract<WebhookMessage, { event: "pull_request" }>;
 
-/** Whether `repo` is in the comma-separated PR_TITLE_CHECK_REPOS list. GitHub ignores case. */
-export function checksPullRequestTitles(list: string | undefined, repo: string) {
-  return (list ?? "")
-    .split(",")
-    .map((item) => item.trim().toLowerCase())
-    .includes(repo.toLowerCase());
-}
-
-/** The check run for a title: a pass, or a failure that says how to fix it. */
-export function prTitleCheckRun(title: string, headSha: string) {
-  const result = checkConventionalTitle(title);
+/**
+ * The check run for a title under the repo's config, or null when the repo hasn't turned the
+ * check on. A relayrunner.yml that doesn't parse fails the check with the reason, since the repo
+ * meant to configure something.
+ */
+export function prTitleCheckRun(config: ConfigResult, title: string, headSha: string) {
+  if (config.kind === "none") return null;
+  if (config.kind === "invalid")
+    return {
+      name: PR_TITLE_CHECK_NAME,
+      headSha,
+      conclusion: "failure" as const,
+      title: `${config.path} is invalid`,
+      summary: `RelayRunner couldn't read ${config.path} on the default branch: ${config.error}`,
+    };
+  const { prTitle } = config;
+  if (!prTitle) return null;
+  const result = checkConventionalTitle(title, prTitle.types);
   return {
     name: PR_TITLE_CHECK_NAME,
     headSha,
@@ -33,22 +42,24 @@ export function prTitleCheckRun(title: string, headSha: string) {
 
 /** Posts the check run for a pull request that opened, changed its title or got new commits. */
 export async function checkPullRequestTitle(env: Env, message: PullRequestMessage) {
+  if (!message.installationId) return;
   const repo = message.repository.fullName;
-  if (!message.installationId || !checksPullRequestTitles(env.PR_TITLE_CHECK_REPOS, repo)) return;
   const key = await importAppPrivateKey(await env.GITHUB_APP_PRIVATE_KEY.get());
   const token = await installationToken(
     await appJwt(env.GITHUB_APP_ID, key),
     message.installationId,
   );
-  const check = prTitleCheckRun(message.pullRequest.title, message.pullRequest.headSha);
-  await createCheckRun(token, repo, check);
+  const config = await loadRepoConfig(token, repo);
+  const check = prTitleCheckRun(config, message.pullRequest.title, message.pullRequest.headSha);
+  if (check) await createCheckRun(token, repo, check);
   console.log(
     JSON.stringify({
       msg: "relayrunner pr title checked",
       deliveryId: message.deliveryId,
       repository: repo,
       pullRequest: message.pullRequest.number,
-      conclusion: check.conclusion,
+      config: config.kind === "none" ? null : config.path,
+      conclusion: check?.conclusion ?? "off",
     }),
   );
 }

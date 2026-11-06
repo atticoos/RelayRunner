@@ -40,6 +40,4 @@ export interface Env extends AccessEnv {
   // sign the App JWTs that mint installation tokens. Nothing reads them yet.
   GITHUB_APP_ID: string;
   GITHUB_APP_PRIVATE_KEY: SecretsStoreSecret;
-  // Repos (owner/name, comma-separated) whose pull requests get the App's PR title check run.
-  PR_TITLE_CHECK_REPOS?: string;
 }
