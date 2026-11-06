@@ -7,7 +7,7 @@
 // runner exits the container ends; a hard limit destroys it regardless. The workflow's last job
 // calls /cleanup, which destroys anything left and removes runners that never got a job.
 
-import { DurableObject } from "cloudflare:workers";
+import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
 import {
   DEFAULT_RUNNER_GROUP_ID,
   appJwt,
@@ -309,6 +309,40 @@ async function status(request: Request, env: Env) {
     }),
   );
   return Response.json({ runId: claims.run_id, results });
+}
+
+/**
+ * Step 2: the gateway's runner provider (apps/api/src/providers.ts), over a service binding. The
+ * gateway mints the JIT config and owns routing and capacity; this only starts and stops
+ * containers. Each route gets its own SandboxRunner, named by the route's label.
+ */
+export class SandboxProvider extends WorkerEntrypoint<Env> {
+  async launch(request: {
+    routeId: string;
+    label: string;
+    jitConfig: string;
+    runnerId: number;
+    size: string;
+  }): Promise<{ startMs: number }> {
+    const size: Size = request.size in SIZES ? (request.size as Size) : "4x12";
+    const state = await this.env.SANDBOX_RUNNER.getByName(request.label).launch({
+      label: request.label,
+      jitConfig: request.jitConfig,
+      runnerId: request.runnerId,
+      image: "dind",
+      size,
+    });
+    return { startMs: state.startedAt! - state.requestedAt };
+  }
+
+  /** Destroys the route's container if it's still up, and removes its runner if it never ran. */
+  async cancel(routeId: string): Promise<void> {
+    const { state, stopped } = await this.env.SANDBOX_RUNNER.getByName(`rr-${routeId}`).stop();
+    if (state && stopped)
+      await deleteOrgRunner(await orgToken(this.env), this.env.SPIKE_ORG, state.runnerId).catch(
+        () => {},
+      );
+  }
 }
 
 export default {

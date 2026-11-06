@@ -5,6 +5,10 @@ import {
   chooseMachine,
   decideRoute,
   holdsMachine,
+  holdsSandbox,
+  SANDBOX_CAPACITY,
+  SANDBOX_HOLD_MS,
+  sandboxSize,
   jobContext,
   hasLabels,
   lastPicked,
@@ -244,6 +248,7 @@ describe("jobContext", () => {
       workflow: "RelayRunner dev",
       machine: [],
       github: [],
+      sandbox: [],
     });
     expect(
       jobContext(
@@ -252,7 +257,15 @@ describe("jobContext", () => {
           ["run_id", { t: 4, n: 5 }],
         ]),
       ),
-    ).toEqual({ repo: "a/b", runId: 5, runAttempt: 1, workflow: null, machine: [], github: [] });
+    ).toEqual({
+      repo: "a/b",
+      runId: 5,
+      runAttempt: 1,
+      workflow: null,
+      machine: [],
+      github: [],
+      sandbox: [],
+    });
   });
 
   // From a claimed relay job (relay v1.0.0-beta.2, relayrunner-ci-tests run 42078905012): the
@@ -283,6 +296,7 @@ describe("jobContext", () => {
       workflow: null,
       machine: ["self-hosted"],
       github: ["ubuntu-latest"],
+      sandbox: [],
     });
   });
 
@@ -474,5 +488,108 @@ describe("pausedMatches", () => {
     ).toEqual([]);
     expect(pausedMatches([{ name: "a", labels: mac, paused: true }], ["Windows"])).toEqual([]);
     expect(pausedMatches([], [])).toEqual([]);
+  });
+});
+
+describe("decideRoute: sandbox", () => {
+  const sandboxFirst: RunnerOrder = {
+    steps: [{ key: "sandbox" }, { key: "machine" }, { key: "github" }],
+  };
+  const all = {
+    machine: ["self-hosted"],
+    github: ["ubuntu-latest"],
+    sandbox: ["4x12"],
+    private: true,
+  };
+  const noMachine = async () => null;
+
+  test("a free sandbox slot answers with its route label", async () => {
+    const pickSandbox = vi.fn(async () => "rr-aaaaaaaaaaaa");
+    expect(await decideRoute(sandboxFirst, all, noMachine, pickSandbox)).toEqual({
+      runner: "rr-aaaaaaaaaaaa",
+      step: "sandbox",
+      skipped: [],
+      notInOrder: [],
+    });
+  });
+
+  test("busy or unbound sandboxes fall through with the reason", async () => {
+    expect(
+      await decideRoute(sandboxFirst, all, noMachine, async () => "busy" as const),
+    ).toMatchObject({
+      step: "github",
+      skipped: [
+        { key: "sandbox", reason: "sandbox_busy" },
+        { key: "machine", reason: "no_machine" },
+      ],
+    });
+    expect(await decideRoute(sandboxFirst, all, noMachine)).toMatchObject({
+      step: "github",
+      skipped: [{ key: "sandbox", reason: "sandbox_unavailable" }, { key: "machine" }],
+    });
+  });
+
+  test("public repos and relays without the input never pick a sandbox", async () => {
+    const pickSandbox = vi.fn(async () => "rr-aaaaaaaaaaaa");
+    expect(
+      await decideRoute(sandboxFirst, { ...all, private: false }, noMachine, pickSandbox),
+    ).toMatchObject({ step: "github", skipped: [{ key: "sandbox", reason: "public_repo" }, {}] });
+    expect(
+      await decideRoute(sandboxFirst, { ...all, sandbox: [] }, noMachine, pickSandbox),
+    ).toMatchObject({ step: "github", skipped: [{ reason: "not_configured" }, {}] });
+    expect(pickSandbox).not.toHaveBeenCalled();
+  });
+
+  test("a sandbox input the order leaves out is reported", async () => {
+    const order: RunnerOrder = { steps: [{ key: "github" }] };
+    expect(await decideRoute(order, all, noMachine)).toMatchObject({
+      step: "github",
+      notInOrder: ["machine", "sandbox"],
+    });
+  });
+
+  test("nothing fits: the reason names the sandbox", async () => {
+    const order: RunnerOrder = { steps: [{ key: "sandbox" }] };
+    const decision = await decideRoute(
+      order,
+      { machine: [], github: [], sandbox: ["linux"], private: true },
+      noMachine,
+      async () => "busy" as const,
+    );
+    expect(decision.runner).toBeNull();
+    expect(decision.runner === null && decision.reason).toBe(
+      `No runner available: all ${SANDBOX_CAPACITY} sandboxes are busy.`,
+    );
+  });
+});
+
+describe("sandbox routes", () => {
+  const route = (over: Partial<Route> = {}): Route => ({
+    id: "aaaaaaaaaaaa",
+    provider: "sandbox",
+    machineId: "",
+    machineName: "sandbox",
+    installationId: 1,
+    repo: "a/b",
+    repositoryId: 2,
+    runId: 3,
+    createdAt: 0,
+    state: "reserved",
+    ...over,
+  });
+
+  test("hold a slot until done or an hour, and never hold a machine", () => {
+    expect(holdsSandbox(route(), 1000)).toBe(true);
+    expect(holdsSandbox(route({ state: "done" }), 1000)).toBe(false);
+    expect(holdsSandbox(route(), SANDBOX_HOLD_MS + 1)).toBe(false);
+    expect(holdsMachine(route(), 1000)).toBe(false);
+    expect(holdsSandbox(route({ provider: undefined, machineId: "m" }), 1000)).toBe(false);
+  });
+
+  test("size comes from the relay input, defaulting to 4x12", () => {
+    expect(sandboxSize(["2x8"])).toBe("2x8");
+    expect(sandboxSize(["Standard-2"])).toBe("standard-2");
+    expect(sandboxSize(["linux"])).toBe("4x12");
+    expect(sandboxSize([])).toBe("4x12");
   });
 });

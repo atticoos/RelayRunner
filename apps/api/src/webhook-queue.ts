@@ -22,7 +22,8 @@ import type { Env } from "./env.ts";
 import { upsertInstallation } from "./installations.ts";
 import { recordWorkflowJob, setJobMachine } from "./jobs.ts";
 import { recordRepositoryEvent, removeRepositories, upsertRepositories } from "./repositories.ts";
-import { routeIdFromLabels } from "./routing.ts";
+import { launchSandbox } from "./providers.ts";
+import { isSandboxRoute, routeIdFromLabels } from "./routing.ts";
 
 // The `runs-on` label that routes a job through RelayRunner.
 export const RELAYRUNNER_LABEL = "relayrunner";
@@ -243,6 +244,14 @@ async function dispatchRoute(
     repositoryId: message.repository.id,
     runId: message.job.runId,
   };
+  if (message.action === "completed" && workspaceId) {
+    // A sandbox route's job is over: free its slot and stop what's left of its container.
+    if (await env.ROUTER.getByName(workspaceId).sandboxDone(routeId, job)) {
+      await env.SANDBOX?.cancel(routeId);
+      console.log(JSON.stringify({ ...log, provider: "sandbox" }));
+      return;
+    }
+  }
   if (message.action !== "queued") {
     const machineId = workspaceId
       ? await env.ROUTER.getByName(workspaceId).machineFor(routeId, job)
@@ -254,6 +263,11 @@ async function dispatchRoute(
   const route = workspaceId ? await env.ROUTER.getByName(workspaceId).claim(routeId, job) : null;
   if (!workspaceId || !route) {
     console.warn(JSON.stringify({ ...log, result: "no_route" }));
+    return;
+  }
+  if (isSandboxRoute(route)) {
+    const result = await launchSandbox(env, workspaceId, route);
+    console.log(JSON.stringify({ ...log, result, provider: "sandbox" }));
     return;
   }
   await setJobMachine(db, message.job.id, route.machineId);

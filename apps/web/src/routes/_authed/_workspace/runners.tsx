@@ -246,6 +246,8 @@ const keys = (steps: RunnerStep[]) => steps.map((step) => step.key).join(",");
 
 function meta(key: RunnerKey, machines: Machine[]) {
   if (key === "github") return "Runs on the label the job sets in relay.yml's github input.";
+  if (key === "sandbox")
+    return "Spike: Linux x64 containers on Cloudflare, 3 at a time · relay.yml's sandbox input · never for public repos";
   const active = machines.filter((machine) => !machine.revokedAt);
   const count = active.length;
   const paused = active.filter((machine) => machine.paused).length;

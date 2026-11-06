@@ -7,12 +7,14 @@ import { z } from "zod";
 // per step (e.g. "while included minutes remain", #117) get added to the step objects later.
 
 /** Every provider a step can name, in the order the dashboard offers them. */
-export const RUNNER_KEYS = ["machine", "github"] as const;
+// `sandbox` is the Cloudflare Sandbox spike (spikes/sandbox-provider): never in the default order.
+export const RUNNER_KEYS = ["machine", "github", "sandbox"] as const;
 export type RunnerKey = (typeof RUNNER_KEYS)[number];
 
 export const runnerStepSchema = z.discriminatedUnion("key", [
   z.object({ key: z.literal("machine") }),
   z.object({ key: z.literal("github") }),
+  z.object({ key: z.literal("sandbox") }),
 ]);
 export type RunnerStep = z.infer<typeof runnerStepSchema>;
 
@@ -45,6 +47,7 @@ export const DEFAULT_RUNNER_ORDER: RunnerOrder = {
 export const RUNNER_LABELS: Record<RunnerKey, string> = {
   machine: "Local machines",
   github: "GitHub-hosted",
+  sandbox: "Cloudflare Sandbox",
 };
 
 /**

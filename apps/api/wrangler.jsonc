@@ -77,6 +77,15 @@
       "secret_name": "GITHUB_APP_PRIVATE_KEY",
     },
   ],
+  // The Cloudflare Sandbox spike's runner provider (spikes/sandbox-provider, its SandboxProvider
+  // entrypoint). Deploy that Worker first. Remove this binding when the spike ends.
+  "services": [
+    {
+      "binding": "SANDBOX",
+      "service": "relayrunner-sandbox-spike",
+      "entrypoint": "SandboxProvider",
+    },
+  ],
   "d1_databases": [
     {
       "binding": "DB",

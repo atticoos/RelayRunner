@@ -22,7 +22,7 @@ beforeAll(async () => {
   env = {
     ...d1Env,
     PICK_RUNNER: { getByName: () => ({ start }) },
-    ROUTER: { getByName: () => ({ claim, machineFor }) },
+    ROUTER: { getByName: () => ({ claim, machineFor, sandboxDone: async () => false }) },
     MACHINE_LINK: { getByName: () => ({ run }) },
   } as unknown as Env;
 }, 60_000);
@@ -103,6 +103,7 @@ function pickContext(runId: number, runAttempt = 1) {
     workflow: "RelayRunner dev",
     machine: ["macOS"],
     github: ["ubuntu-latest"],
+    sandbox: [],
   };
 }
 

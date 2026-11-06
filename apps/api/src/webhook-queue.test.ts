@@ -149,7 +149,7 @@ describe("webhook queue consumer", () => {
     const routeEnv = () =>
       ({
         DB: db,
-        ROUTER: { getByName: vi.fn(() => ({ claim, machineFor })) },
+        ROUTER: { getByName: vi.fn(() => ({ claim, machineFor, sandboxDone: async () => false })) },
         MACHINE_LINK: { getByName: vi.fn(() => ({ run })) },
       }) as unknown as Env;
 

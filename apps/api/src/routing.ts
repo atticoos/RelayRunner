@@ -28,6 +28,9 @@ export const ROUTE_TTL_MS = 24 * 60 * 60_000;
 
 export interface Route {
   id: string;
+  // Who runs the route's job. Missing on routes made before sandboxes: a machine.
+  provider?: "machine" | "sandbox";
+  // The machine's id and name; for a sandbox route, "" and "sandbox".
   machineId: string;
   machineName: string;
   installationId: number;
@@ -43,6 +46,31 @@ export interface Route {
   state: "reserved" | "dispatched" | "done";
   // The job that claimed the route. Only that job can claim it again (a redelivery).
   jobId?: number;
+  // Sandbox routes: the size asked for (the relay's `sandbox` input), and when the provider was
+  // asked to launch, so a redelivered `queued` webhook doesn't launch twice.
+  size?: string;
+  launchedAt?: number;
+}
+
+// How many sandboxes one workspace may run at once during the spike.
+export const SANDBOX_CAPACITY = 3;
+// A sandbox route counts against capacity until its job completes, or this long at most.
+export const SANDBOX_HOLD_MS = 60 * 60_000;
+
+export const isSandboxRoute = (route: Route) => route.provider === "sandbox";
+
+/** Whether a sandbox route still takes one of the workspace's sandbox slots. */
+export function holdsSandbox(route: Route, now: number) {
+  return isSandboxRoute(route) && route.state !== "done" && now - route.createdAt < SANDBOX_HOLD_MS;
+}
+
+// Sizes the spike Worker knows (spikes/sandbox-provider SIZES). Anything else in the relay's
+// `sandbox` input, such as `linux`, gets the default.
+export const SANDBOX_SIZES = ["4x12", "2x8", "standard-2"] as const;
+export type SandboxSize = (typeof SANDBOX_SIZES)[number];
+export function sandboxSize(input: string[]): SandboxSize {
+  const asked = input.map((value) => value.toLowerCase());
+  return SANDBOX_SIZES.find((size) => asked.includes(size)) ?? "4x12";
 }
 
 export function newRouteId() {
@@ -63,6 +91,7 @@ export function routeIdFromLabels(labels: string[]): string | null {
 
 /** Whether a route still keeps its machine from being picked for another job. */
 export function holdsMachine(route: Route, now: number) {
+  if (isSandboxRoute(route)) return false;
   return route.state !== "done" && now - route.createdAt < ROUTE_HOLD_MS;
 }
 
@@ -194,6 +223,8 @@ export interface JobContext {
   machine: string[];
   // The GitHub-hosted runner label(s) from the relay's `github` input. Empty when left out.
   github: string[];
+  // The relay's `sandbox` input (a size, or anything such as `linux`). Empty: don't use sandboxes.
+  sandbox: string[];
 }
 
 // The job message carries its expression contexts in `contextData`, as the runner's
@@ -217,6 +248,7 @@ export function jobContext(contextData: unknown): JobContext | null {
     workflow: typeof workflow === "string" && workflow ? workflow : null,
     machine: parseLabels(scalar(inputs?.get("machine"))),
     github: parseLabels(scalar(inputs?.get("github"))),
+    sandbox: parseLabels(scalar(inputs?.get("sandbox"))),
   };
 }
 
@@ -258,6 +290,9 @@ export interface SkippedStep {
 // What the machine step's pick found: a route label, every matching machine paused, or nothing.
 export type MachinePick = string | { paused: string[] } | null;
 
+// What the sandbox step's pick found: a route label, no free slot, or no provider bound.
+export type SandboxPick = string | "busy" | "unavailable";
+
 // `notInOrder` lists providers the job configured that the order leaves out, either way, so an
 // ignored input is never silent.
 export type RouteDecision =
@@ -269,6 +304,8 @@ export type RouteDecision =
 export interface RouteRequest {
   machine: string[];
   github: string[];
+  // Optional so callers that predate sandboxes read as not using them.
+  sandbox?: string[];
   private: boolean;
 }
 
@@ -282,10 +319,11 @@ export async function decideRoute(
   order: RunnerOrder,
   job: RouteRequest,
   pickMachine: () => Promise<MachinePick>,
+  pickSandbox: () => Promise<SandboxPick> = async () => "unavailable",
 ): Promise<RouteDecision> {
   const skipped: SkippedStep[] = [];
   const inOrder = new Set(order.steps.map((step) => step.key));
-  const notInOrder = RUNNER_KEYS.filter((key) => !inOrder.has(key) && job[key].length > 0);
+  const notInOrder = RUNNER_KEYS.filter((key) => !inOrder.has(key) && (job[key]?.length ?? 0) > 0);
   for (const { key } of order.steps) {
     if (key === "machine") {
       if (job.machine.length === 0) skipped.push({ key, reason: "not_configured" });
@@ -301,6 +339,16 @@ export async function decideRoute(
       if (job.github.length === 0) skipped.push({ key, reason: "not_configured" });
       else if (job.github.length > 1) skipped.push({ key, reason: "too_many_labels" });
       else return { runner: job.github[0], step: key, skipped, notInOrder };
+    } else if (key === "sandbox") {
+      // Public repos stay off sandboxes too: anyone could spend our compute with a pull request.
+      if (!job.sandbox?.length) skipped.push({ key, reason: "not_configured" });
+      else if (!job.private) skipped.push({ key, reason: "public_repo" });
+      else {
+        const pick = await pickSandbox();
+        if (pick === "busy") skipped.push({ key, reason: "sandbox_busy" });
+        else if (pick === "unavailable") skipped.push({ key, reason: "sandbox_unavailable" });
+        else return { runner: pick, step: key, skipped, notInOrder };
+      }
     }
   }
   return { runner: null, reason: noRunnerReason(job, skipped, notInOrder), skipped, notInOrder };
@@ -312,14 +360,20 @@ export function noRunnerReason(
   skipped: SkippedStep[],
   notInOrder: RunnerKey[],
 ): string {
-  if (job.machine.length === 0 && job.github.length === 0)
+  if (job.machine.length === 0 && job.github.length === 0 && !job.sandbox?.length)
     return `${NO_RUNNER}: the relay sets neither \`machine\` nor \`github\`.`;
   const parts = skipped.map(({ key, reason, paused = [] }) => {
     switch (reason) {
       case "not_configured":
         return `\`${key}\` isn't set on this relay`;
       case "public_repo":
-        return "public repos never run on local machines";
+        return key === "sandbox"
+          ? "public repos never run on sandboxes"
+          : "public repos never run on local machines";
+      case "sandbox_busy":
+        return `all ${SANDBOX_CAPACITY} sandboxes are busy`;
+      case "sandbox_unavailable":
+        return "sandboxes aren't set up on this gateway";
       case "no_machine":
         return job.machine.length === 1 && job.machine[0].toLowerCase() === "self-hosted"
           ? "no local machine is online and idle"

@@ -24,6 +24,10 @@ export const SKIP_REASONS = [
   "machine_paused",
   // `github` named more than one label.
   "too_many_labels",
+  // Every sandbox the workspace may run at once is busy.
+  "sandbox_busy",
+  // This deployment has no sandbox provider bound.
+  "sandbox_unavailable",
 ] as const;
 export type SkipReason = (typeof SKIP_REASONS)[number];
 
@@ -45,6 +49,8 @@ export const RouteWalk = z.object({
   notInOrder: z.array(z.enum(RUNNER_KEYS)),
   machine: z.array(z.string()),
   github: z.array(z.string()),
+  // The relay's `sandbox` input. Not stored on route decisions yet, so older reads have none.
+  sandbox: z.array(z.string()).optional(),
 });
 export type RouteWalk = z.infer<typeof RouteWalk>;
 

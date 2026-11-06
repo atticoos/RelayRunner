@@ -32,6 +32,10 @@ function shortSkip(walk: RouteWalk, reason: SkipReason, paused?: string[]): stri
     }
     case "public_repo":
       return "public repo";
+    case "sandbox_busy":
+      return "sandboxes busy";
+    case "sandbox_unavailable":
+      return "sandboxes not set up";
     case "too_many_labels":
       return "github takes one label";
     case "not_configured":
@@ -61,7 +65,13 @@ function longSkip(
         : "no machine was online and idle";
     }
     case "public_repo":
-      return "public repos never run on local machines";
+      return key === "sandbox"
+        ? "public repos never run on sandboxes"
+        : "public repos never run on local machines";
+    case "sandbox_busy":
+      return "every sandbox slot was busy";
+    case "sandbox_unavailable":
+      return "sandboxes aren't set up on this gateway";
     case "too_many_labels":
       return `github takes one label, not ${walk.github.join(", ")}`;
     case "not_configured":
@@ -82,7 +92,13 @@ export function walkSummary(walk: RouteWalk): { text: string; tone: WalkTone } |
   for (const { reason, paused } of walk.skipped) {
     const text = shortSkip(walk, reason, paused);
     if (text) parts.push(text);
-    if (reason === "no_machine" || reason === "machine_paused" || reason === "too_many_labels")
+    if (
+      reason === "no_machine" ||
+      reason === "machine_paused" ||
+      reason === "too_many_labels" ||
+      reason === "sandbox_busy" ||
+      reason === "sandbox_unavailable"
+    )
       tone = "fallback";
   }
   for (const key of walk.notInOrder) parts.push(`${key} is set but not in your order`);

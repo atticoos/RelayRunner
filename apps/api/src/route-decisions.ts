@@ -68,6 +68,7 @@ function walkOf(decision: RouteDecision, context: JobContext): RouteWalk {
     notInOrder: decision.notInOrder,
     machine: context.machine,
     github: context.github,
+    sandbox: context.sandbox,
   };
 }
 

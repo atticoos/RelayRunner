@@ -3,6 +3,7 @@ import type { WebhookMessage } from "@relayrunner/github-webhooks";
 import type { MachineLink } from "./durable-objects/machine-link.ts";
 import type { PickRunner } from "./durable-objects/pick-runner.ts";
 import type { Router } from "./durable-objects/router.ts";
+import type { RunnerProvider } from "./providers.ts";
 
 // Bindings from wrangler.jsonc, plus secrets set with `wrangler secret put` (or .dev.vars locally).
 export interface Env extends AccessEnv {
@@ -17,6 +18,9 @@ export interface Env extends AccessEnv {
   PICK_RUNNER: DurableObjectNamespace<PickRunner>;
   ROUTER: DurableObjectNamespace<Router>;
   MACHINE_LINK: DurableObjectNamespace<MachineLink>;
+  // The Cloudflare Sandbox spike's provider (spikes/sandbox-provider, a service binding). Unset:
+  // the runner order's sandbox step never answers.
+  SANDBOX?: RunnerProvider;
 
   // Cloudflare Email Sending (src/email.ts). Optional so local dev and tests run without it.
   EMAIL?: SendEmail;

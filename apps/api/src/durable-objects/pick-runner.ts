@@ -197,6 +197,7 @@ async function pickRunner(env: Env, installationId: number, contextData: unknown
     runId: context.runId,
     machine: context.machine,
     github: context.github,
+    sandbox: context.sandbox,
     private: repo.private,
   });
   return {
