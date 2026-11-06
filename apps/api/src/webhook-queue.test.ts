@@ -147,6 +147,40 @@ describe("webhook queue consumer", () => {
     log.mockRestore();
   });
 
+  test("starts a container runner for a queued relayrunner-container job from an allowed org", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const startContainer = vi.fn();
+    const containers = vi.fn(() => ({ start: startContainer }));
+    const withContainers = (orgs?: string) =>
+      ({
+        ...env,
+        CONTAINER_RUNNER: { getByName: containers },
+        CONTAINER_RUNNER_ORGS: orgs,
+      }) as unknown as Env;
+    await consumer.processWebhook(
+      withContainers("RelayRunner"),
+      workflowJob(["Relayrunner-Container"]),
+    );
+    expect(containers).toHaveBeenLastCalledWith("42");
+    expect(startContainer).toHaveBeenCalledWith({
+      jobId: 42,
+      installationId: 7,
+      repo: "relayrunner/relayrunner",
+    });
+    // Later actions, orgs outside the allowlist and an unset allowlist start nothing.
+    await consumer.processWebhook(
+      withContainers("relayrunner"),
+      workflowJob(["relayrunner-container"], "in_progress"),
+    );
+    await consumer.processWebhook(
+      withContainers("other-org"),
+      workflowJob(["relayrunner-container"]),
+    );
+    await consumer.processWebhook(withContainers(), workflowJob(["relayrunner-container"]));
+    expect(startContainer).toHaveBeenCalledOnce();
+    log.mockRestore();
+  });
+
   describe("route jobs", () => {
     let stop: () => Promise<void>;
     let db: D1Database;

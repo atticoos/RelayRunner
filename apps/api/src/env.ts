@@ -1,5 +1,6 @@
 import type { AccessEnv } from "@relayrunner/access";
 import type { WebhookMessage } from "@relayrunner/github-webhooks";
+import type { ContainerRunner } from "./durable-objects/container-runner.ts";
 import type { MachineLink } from "./durable-objects/machine-link.ts";
 import type { PickRunner } from "./durable-objects/pick-runner.ts";
 import type { Router } from "./durable-objects/router.ts";
@@ -17,6 +18,11 @@ export interface Env extends AccessEnv {
   PICK_RUNNER: DurableObjectNamespace<PickRunner>;
   ROUTER: DurableObjectNamespace<Router>;
   MACHINE_LINK: DurableObjectNamespace<MachineLink>;
+  // Container runners (src/container-runner.ts): the orgs allowed to start them, comma-separated
+  // (unset allows none), and the runner group their runners join (unset: Default).
+  CONTAINER_RUNNER: DurableObjectNamespace<ContainerRunner>;
+  CONTAINER_RUNNER_ORGS?: string;
+  CONTAINER_RUNNER_GROUP_ID?: string;
 
   // Cloudflare Email Sending (src/email.ts). Optional so local dev and tests run without it.
   EMAIL?: SendEmail;
