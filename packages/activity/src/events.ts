@@ -57,7 +57,13 @@ export const ActivityEvent = z.discriminatedUnion("type", [
   // approved it.
   z.object({
     type: z.literal("machine.enrolled"),
-    data: z.object({ ...machineData, os: z.string().nullable(), arch: z.string().nullable() }),
+    data: z.object({
+      ...machineData,
+      os: z.string().nullable(),
+      arch: z.string().nullable(),
+      // "github": a self-hosted runner added from GitHub (#159), not enrolled with the CLI.
+      source: z.enum(["connect", "github"]).optional(),
+    }),
   }),
   // The machine's CLI connected and said hello: it can take jobs.
   z.object({
@@ -83,7 +89,10 @@ export const ActivityEvent = z.discriminatedUnion("type", [
     data: z.object({ ...machineData, via: z.enum(["dashboard", "cli"]) }),
   }),
   // Someone removed the machine from the workspace. Actor: that user.
-  z.object({ type: z.literal("machine.revoked"), data: z.object(machineData) }),
+  z.object({
+    type: z.literal("machine.revoked"),
+    data: z.object({ ...machineData, source: z.enum(["connect", "github"]).optional() }),
+  }),
   // Someone left the workspace (`left`), or an owner or admin removed them. Actor: whoever did it.
   // Each machine they enrolled there is revoked right after, logging its own machine.revoked.
   z.object({

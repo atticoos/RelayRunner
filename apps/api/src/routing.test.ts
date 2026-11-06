@@ -383,7 +383,7 @@ describe("decideRoute", () => {
     expect(pick).not.toHaveBeenCalled();
     expect(decision).toMatchObject({ runner: null, notInOrder: ["machine"] });
     expect(decision.runner === null && decision.reason).toBe(
-      "No runner available: `github` isn't set on this relay; Local machines isn't in your runner order.",
+      "No runner available: `github` isn't set on this relay; Self-hosted isn't in your runner order.",
     );
   });
 
@@ -408,7 +408,7 @@ describe("decideRoute", () => {
       notInOrder: ["github"],
     });
     expect(decision.runner === null && decision.reason).toBe(
-      "No runner available: no local machine with macOS, ARM64 is online and idle; GitHub-hosted isn't in your runner order.",
+      "No runner available: no self-hosted machine with macOS, ARM64 is online and idle; GitHub-hosted isn't in your runner order.",
     );
   });
 
@@ -423,7 +423,7 @@ describe("decideRoute", () => {
     expect(pick).not.toHaveBeenCalled();
     const decision = await decideRoute(machineFirst, { ...both, github: [], private: false }, pick);
     expect(decision.runner === null && decision.reason).toBe(
-      "No runner available: public repos never run on local machines; `github` isn't set on this relay.",
+      "No runner available: public repos never run on self-hosted machines; `github` isn't set on this relay.",
     );
   });
 

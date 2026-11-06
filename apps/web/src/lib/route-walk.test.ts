@@ -122,9 +122,9 @@ test("walkLines walks the order, then the providers outside it", () => {
 test("failureText drops the prefix GitHub shows", () => {
   expect(
     failureText(
-      "No runner available: public repos never run on local machines; `github` isn't set on this relay.",
+      "No runner available: public repos never run on self-hosted machines; `github` isn't set on this relay.",
     ),
-  ).toBe("public repos never run on local machines; github isn't set on this relay");
+  ).toBe("public repos never run on self-hosted machines; github isn't set on this relay");
 });
 
 describe("jobNames", () => {

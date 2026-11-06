@@ -3,6 +3,7 @@ import { recordEvent } from "./activity.ts";
 import type { Db } from "./db/index.ts";
 import { schema } from "./db/index.ts";
 import type { Env } from "./env.ts";
+import { matchLabels, parseStoredLabels } from "./github-runners.ts";
 import { machineLabels } from "./routing.ts";
 
 // Machine tokens: what `relayrunner connect` holds after enrolling, and sends on the MachineLink
@@ -55,8 +56,15 @@ export function presentMachine(
     os: machine.os,
     arch: machine.arch,
     // The labels routing matches a job's `machine` input against, so the dashboard shows exactly
-    // what matches.
-    labels: machineLabels(machine),
+    // what matches. A GitHub runner's are its own GitHub labels, as last read.
+    labels:
+      machine.source === "github"
+        ? matchLabels(parseStoredLabels(machine.githubLabels))
+        : machineLabels(machine),
+    // 'connect' (enrolled with the CLI) or 'github' (added from GitHub).
+    source: machine.source === "github" ? ("github" as const) : ("connect" as const),
+    // The label RelayRunner added to a GitHub runner to route jobs to it.
+    routingLabel: machine.routingLabel,
     lastSeenAt: machine.lastSeenAt,
     revokedAt: machine.revokedAt,
     createdAt: machine.createdAt,
@@ -87,7 +95,10 @@ export async function revokeMachines(env: Env, db: Db, where: SQL, actorUserId: 
     await recordEvent(db, {
       workspaceId: machine.workspaceId,
       type: "machine.revoked",
-      data: { machineName: machine.name },
+      data: {
+        machineName: machine.name,
+        ...(machine.source === "github" ? { source: "github" as const } : {}),
+      },
       machineId: machine.id,
       actorUserId,
     });

@@ -1,5 +1,5 @@
 import { recordEvent } from "../activity.ts";
-import { and, asc, eq, isNotNull, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import { Hono } from "hono";
 import { APIError } from "better-auth/api";
 import { HelloMessage } from "@relayrunner/machine-protocol";
@@ -8,7 +8,24 @@ import type { AppEnv } from "../app.ts";
 import { MACHINE_CLIENT_ID } from "../auth.ts";
 import { createDb, schema } from "../db/index.ts";
 import { isWorkspaceMember } from "../installations.ts";
-import { MACHINE_ID_HEADER } from "../durable-objects/machine-session.ts";
+import { MACHINE_ID_HEADER, OFFLINE } from "../durable-objects/machine-session.ts";
+import {
+  addOrgRunnerLabels,
+  appInstallationToken,
+  removeOrgRunnerLabel,
+  type OrgRunner,
+} from "../github-app.ts";
+import {
+  cannotAdd,
+  describeAccess,
+  isOwnRunner,
+  matchLabels,
+  newRoutingLabel,
+  readOrgRunners,
+  runnerArch,
+  runnerOs,
+  type GroupAccess,
+} from "../github-runners.ts";
 import {
   generateMachineToken,
   normalizeUserCode,
@@ -24,7 +41,7 @@ import type { Env } from "../env.ts";
 import { sendEmail } from "../email.ts";
 import { requireUser, waitUntil } from "../middleware/session.ts";
 import { requireWorkspace } from "../middleware/workspace.ts";
-import { canManage, canRevokeMachine } from "../roles.ts";
+import { canManage, canRevokeMachine, requireManager } from "../roles.ts";
 
 // Enrolling a machine (`relayrunner connect`) with Better Auth's device authorization plugin:
 //
@@ -53,6 +70,11 @@ const ClaimBody = z.object({
   deviceCode: z.string().min(1),
   os: HelloMessage.shape.os,
   arch: HelloMessage.shape.arch,
+});
+
+const AddRunnersBody = z.object({
+  installationId: z.number().int().positive(),
+  runnerIds: z.array(z.number().int().positive()).min(1).max(50),
 });
 
 export const machineRoutes = new Hono<AppEnv>()
@@ -246,9 +268,17 @@ export const machineRoutes = new Hono<AppEnv>()
   })
   .get("/", requireUser, requireWorkspace, async (c) => {
     const rows = await c.var.db
-      .select({ machine: schema.machine, pausedBy: schema.user.name })
+      .select({
+        machine: schema.machine,
+        pausedBy: schema.user.name,
+        org: schema.githubInstallation.accountLogin,
+      })
       .from(schema.machine)
       .leftJoin(schema.user, eq(schema.user.id, schema.machine.pausedBy))
+      .leftJoin(
+        schema.githubInstallation,
+        eq(schema.githubInstallation.id, schema.machine.installationId),
+      )
       .where(
         and(
           eq(schema.machine.workspaceId, c.var.workspace.id),
@@ -257,19 +287,208 @@ export const machineRoutes = new Hono<AppEnv>()
         ),
       )
       .orderBy(asc(schema.machine.name));
-    const machines = rows.map((row) => row.machine);
-    // Live status from each machine's MachineLink. Fine for a handful of machines per workspace.
+    // Runners added from GitHub: one read of each org's runners for their live status.
+    const orgs = new Map<number, string>();
+    for (const row of rows)
+      if (row.machine.source === "github" && row.machine.installationId && row.org)
+        orgs.set(row.machine.installationId, row.org);
+    const github = new Map(
+      await Promise.all(
+        [...orgs].map(
+          async ([installationId, org]) =>
+            [
+              installationId,
+              await readOrgRunners(c.env, installationId, org).catch(() => null),
+            ] as const,
+        ),
+      ),
+    );
+    // Live status from each connected machine's MachineLink. Fine for a handful per workspace.
     const statuses = await Promise.all(
-      machines.map((machine) => c.env.MACHINE_LINK.getByName(machine.id).status()),
+      rows.map(async ({ machine }) => {
+        if (machine.source !== "github") return c.env.MACHINE_LINK.getByName(machine.id).status();
+        const read = machine.installationId ? github.get(machine.installationId) : null;
+        const runner = read?.runners.find((r) => r.id === machine.githubRunnerId);
+        return runner
+          ? {
+              online: runner.status === "online",
+              state: runner.busy ? "busy" : "idle",
+              connectedAt: null,
+            }
+          : OFFLINE;
+      }),
     );
     return c.json({
-      machines: rows.map((row, i) => ({
-        ...presentMachine(row.machine, row.pausedBy),
-        status: statuses[i],
-        // Whether the signed-in user may revoke it (#134), so the dashboard can hide the action.
-        canRevoke: canRevokeMachine(c.var.role, c.var.user!.id, row.machine),
-      })),
+      machines: rows.map((row, i) => {
+        const presented = presentMachine(row.machine, row.pausedBy);
+        if (row.machine.source !== "github")
+          return {
+            ...presented,
+            status: statuses[i],
+            // Whether the signed-in user may revoke it (#134), so the dashboard can hide it.
+            canRevoke: canRevokeMachine(c.var.role, c.var.user!.id, row.machine),
+          };
+        const read = row.machine.installationId ? github.get(row.machine.installationId) : null;
+        const runner = read?.runners.find((r) => r.id === row.machine.githubRunnerId);
+        return {
+          ...presented,
+          labels: runner ? matchLabels(runner.labels) : presented.labels,
+          status: statuses[i],
+          // Runners belong to the org: only owners and admins remove them.
+          canRevoke: canManage(c.var.role),
+          github: {
+            org: row.org,
+            runnerId: row.machine.githubRunnerId,
+            // Which repos its group lets use it, e.g. "Default group · all private repos".
+            access: runner ? describeAccess(read?.access.get(runner.id)) : null,
+            // GitHub answered, and the runner isn't there: removed or re-registered.
+            missing: Boolean(read) && !runner,
+            // GitHub couldn't be asked; the status shown is offline.
+            unreachable: !read,
+          },
+        };
+      }),
     });
+  })
+  // Self-hosted runners already registered in the workspace's connected orgs, for adding them
+  // (#159). Owners and admins only: the runners belong to the org.
+  .get("/github-runners", requireUser, requireWorkspace, requireManager, async (c) => {
+    const installations = await c.var.db
+      .select({ id: schema.githubInstallation.id, org: schema.githubInstallation.accountLogin })
+      .from(schema.githubInstallation)
+      .where(
+        and(
+          eq(schema.githubInstallation.workspaceId, c.var.workspace.id),
+          eq(schema.githubInstallation.accountType, "Organization"),
+          isNull(schema.githubInstallation.suspendedAt),
+        ),
+      )
+      .orderBy(asc(schema.githubInstallation.accountLogin));
+    const added = await c.var.db
+      .select({
+        id: schema.machine.id,
+        installationId: schema.machine.installationId,
+        githubRunnerId: schema.machine.githubRunnerId,
+      })
+      .from(schema.machine)
+      .where(
+        and(
+          eq(schema.machine.workspaceId, c.var.workspace.id),
+          eq(schema.machine.source, "github"),
+          isNull(schema.machine.revokedAt),
+        ),
+      );
+    const orgs = await Promise.all(
+      installations.map(async (installation) => {
+        try {
+          const { runners, access } = await readOrgRunners(
+            c.env,
+            installation.id,
+            installation.org,
+          );
+          return {
+            installationId: installation.id,
+            org: installation.org,
+            runners: runners
+              .filter((runner) => !isOwnRunner(runner))
+              .map((runner) => {
+                const machine = added.find(
+                  (m) => m.installationId === installation.id && m.githubRunnerId === runner.id,
+                );
+                return presentOrgRunner(runner, access.get(runner.id), machine?.id ?? null);
+              }),
+          };
+        } catch (error) {
+          console.warn(
+            JSON.stringify({
+              msg: "github runners unavailable",
+              installationId: installation.id,
+              error: error instanceof Error ? error.message : String(error),
+            }),
+          );
+          return { installationId: installation.id, org: installation.org, error: "unavailable" };
+        }
+      }),
+    );
+    return c.json({ orgs });
+  })
+  // Adds org runners to the workspace: each gets RelayRunner's routing label on GitHub and a
+  // machine row, and routes like a connected machine from then on. Nothing changes on the machine.
+  .post("/github-runners", requireUser, requireWorkspace, requireManager, async (c) => {
+    const parsed = AddRunnersBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: "invalid_request" }, 400);
+    const { installationId, runnerIds } = parsed.data;
+    const { db, workspace, user } = c.var;
+    const [installation] = await db
+      .select({ org: schema.githubInstallation.accountLogin })
+      .from(schema.githubInstallation)
+      .where(
+        and(
+          eq(schema.githubInstallation.id, installationId),
+          eq(schema.githubInstallation.workspaceId, workspace.id),
+          eq(schema.githubInstallation.accountType, "Organization"),
+        ),
+      )
+      .limit(1);
+    if (!installation) return c.json({ error: "not_found" }, 404);
+
+    const { token, runners, access } = await readOrgRunners(
+      c.env,
+      installationId,
+      installation.org,
+    );
+    const existing = await db
+      .select({ githubRunnerId: schema.machine.githubRunnerId })
+      .from(schema.machine)
+      .where(
+        and(
+          eq(schema.machine.installationId, installationId),
+          inArray(schema.machine.githubRunnerId, runnerIds),
+          isNull(schema.machine.revokedAt),
+        ),
+      );
+    const taken = new Set(existing.map((row) => row.githubRunnerId));
+    const added = [];
+    const skipped: { runnerId: number; reason: string }[] = [];
+    for (const runnerId of new Set(runnerIds)) {
+      const runner = runners.find((r) => r.id === runnerId);
+      const reason = !runner
+        ? "not_found"
+        : taken.has(runnerId)
+          ? "already_added"
+          : cannotAdd(runner, access.get(runner.id));
+      if (!runner || reason) {
+        skipped.push({ runnerId, reason: reason ?? "not_found" });
+        continue;
+      }
+      const routingLabel = newRoutingLabel();
+      await addOrgRunnerLabels(token, installation.org, runner.id, [routingLabel]);
+      const [machine] = await db
+        .insert(schema.machine)
+        .values({
+          id: crypto.randomUUID(),
+          workspaceId: workspace.id,
+          name: runner.name,
+          os: runnerOs(runner) ?? "linux",
+          arch: runnerArch(runner),
+          source: "github",
+          installationId,
+          githubRunnerId: runner.id,
+          routingLabel,
+          githubLabels: JSON.stringify([...runner.labels, routingLabel]),
+          createdBy: user!.id,
+        })
+        .returning();
+      await recordEvent(db, {
+        workspaceId: workspace.id,
+        type: "machine.enrolled",
+        data: { machineName: machine.name, os: machine.os, arch: machine.arch, source: "github" },
+        machineId: machine.id,
+        actorUserId: user!.id,
+      });
+      added.push(presentMachine(machine));
+    }
+    return c.json({ added, skipped });
   })
   .delete("/:id", requireUser, requireWorkspace, async (c) => {
     const machineId = c.req.param("id");
@@ -281,12 +500,13 @@ export const machineRoutes = new Hono<AppEnv>()
     );
     // Owners and admins can revoke any machine; members only the ones they enrolled. The check
     // rides in the update so the common case is one query.
-    const [machine] = await revokeMachines(
-      c.env,
-      db,
-      (canManage(role) ? live : and(live, eq(schema.machine.createdBy, user!.id)))!,
-      user!.id,
+    // A runner added from GitHub belongs to the org, so only owners and admins remove it.
+    const mine = and(
+      live,
+      eq(schema.machine.createdBy, user!.id),
+      eq(schema.machine.source, "connect"),
     );
+    const [machine] = await revokeMachines(c.env, db, (canManage(role) ? live : mine)!, user!.id);
     if (!machine) {
       // Nothing changed: tell a member a machine they can see apart from one that isn't there.
       const [exists] = await db
@@ -296,8 +516,64 @@ export const machineRoutes = new Hono<AppEnv>()
         .limit(1);
       return exists ? c.json({ error: "forbidden" }, 403) : c.json({ error: "not_found" }, 404);
     }
+    if (machine.source === "github") await removeRoutingLabel(c.env, db, machine);
     return c.json({ machine: presentMachine(machine) });
   });
+
+// Takes RelayRunner's label off a removed GitHub runner, so jobs can't reach it through the label.
+// Best effort: the machine row is already revoked, so routing never picks it again either way.
+async function removeRoutingLabel(
+  env: Env,
+  db: ReturnType<typeof createDb>,
+  machine: typeof schema.machine.$inferSelect,
+) {
+  if (!machine.installationId || !machine.githubRunnerId || !machine.routingLabel) return;
+  try {
+    const [installation] = await db
+      .select({ org: schema.githubInstallation.accountLogin })
+      .from(schema.githubInstallation)
+      .where(eq(schema.githubInstallation.id, machine.installationId))
+      .limit(1);
+    if (!installation) return;
+    const token = await appInstallationToken(env, machine.installationId);
+    await removeOrgRunnerLabel(
+      token,
+      installation.org,
+      machine.githubRunnerId,
+      machine.routingLabel,
+    );
+  } catch (error) {
+    console.warn(
+      JSON.stringify({
+        msg: "routing label not removed",
+        machineId: machine.id,
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    );
+  }
+}
+
+/** What the add dialog shows of an org runner. */
+function presentOrgRunner(
+  runner: OrgRunner,
+  access: GroupAccess | undefined,
+  machineId: string | null,
+) {
+  return {
+    id: runner.id,
+    name: runner.name,
+    os: runnerOs(runner),
+    arch: runnerArch(runner),
+    status: runner.status,
+    busy: runner.busy,
+    labels: matchLabels(runner.labels),
+    access: describeAccess(access),
+    // Why it can't be added ("workflows": its group only allows selected workflows), or null.
+    blocked: cannotAdd(runner, access),
+    // The machine it's already added as, or null.
+    machineId,
+  };
+}
 
 // Pauses or resumes the machine, tells its open connection, and answers with the machine.
 async function pauseResponse(

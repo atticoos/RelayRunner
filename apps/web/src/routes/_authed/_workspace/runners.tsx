@@ -30,14 +30,21 @@ import {
   CheckIcon,
   CopyIcon,
   EllipsisIcon,
+  ExternalLinkIcon,
   GripVerticalIcon,
   PauseIcon,
   PlayIcon,
   PlusIcon,
+  SearchIcon,
   XIcon,
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
-import { AddRunner } from "@/components/add-runner";
+import {
+  AddRunner,
+  GithubIcon,
+  GithubRunnersDialog,
+  runnerSettingsUrl,
+} from "@/components/add-runner";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -51,6 +58,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { authDisabled } from "@/lib/auth-client";
 import {
+  addableRunners,
+  listGithubRunners,
   listMachines,
   pauseMachine,
   resumeMachine,
@@ -150,15 +159,70 @@ function RunnersPage() {
   const body = (key: RunnerKey) =>
     key === "machine" ? <MachineList machines={loaded.machines} /> : null;
 
+  // Runners in connected orgs that aren't added yet, for the banner. Owners and admins only, since
+  // only they can add them; read once per visit, not on every refresh, since it asks GitHub.
+  const [githubOpen, setGithubOpen] = useState(false);
+  const [found, setFound] = useState<{ count: number; orgs: string[] } | null>(null);
+  const [dismissed, setDismissed] = useState(false);
+  async function findRunners() {
+    if (!editable) return;
+    try {
+      const { orgs } = await listGithubRunners();
+      const addable = addableRunners(orgs);
+      const withRunners = orgs.filter(
+        (org) => "runners" in org && org.runners.some((r) => !r.machineId && !r.blocked),
+      );
+      setFound({ count: addable.length, orgs: withRunners.map((org) => org.org) });
+    } catch {
+      setFound(null);
+    }
+  }
+  useEffect(() => {
+    void findRunners();
+    // Once per visit and workspace.
+  }, [current.workspace.id, editable]);
+
   return (
     <section>
-      <PageHeader title="Runners" action={<AddRunner />}>
+      <GithubRunnersDialog
+        open={githubOpen}
+        onOpenChange={setGithubOpen}
+        onAdded={async () => {
+          await router.invalidate();
+          await findRunners();
+        }}
+      />
+      <PageHeader title="Runners" action={<AddRunner onAddExisting={() => setGithubOpen(true)} />}>
         Jobs try these providers from top to bottom.{" "}
         {editable
           ? "Move a section to change the order."
           : "Owners and admins can change the order."}
       </PageHeader>
       <div className="grid max-w-3xl gap-3">
+        {found && found.count > 0 && !dismissed && (
+          <div className="flex flex-wrap items-center gap-3 rounded-lg border border-go-edge bg-go-soft px-4 py-3">
+            <SearchIcon aria-hidden className="size-4 shrink-0 text-go" />
+            <p className="min-w-0 flex-1 text-sm">
+              We found{" "}
+              <strong>
+                {found.count} self-hosted {found.count === 1 ? "runner" : "runners"}
+              </strong>{" "}
+              in <span className="font-mono">{found.orgs.join(", ")}</span> that RelayRunner isn't
+              using yet.
+            </p>
+            <Button size="sm" variant="outline" onClick={() => setGithubOpen(true)}>
+              Review
+            </Button>
+            <Button
+              size="icon-sm"
+              variant="ghost"
+              aria-label="Dismiss"
+              onClick={() => setDismissed(true)}
+            >
+              <XIcon aria-hidden />
+            </Button>
+          </div>
+        )}
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
           <SortableContext
             items={steps.map((step) => step.key)}
@@ -402,6 +466,9 @@ function MachineCard({ machine }: { machine: Machine }) {
   const [confirming, setConfirming] = useState(false);
   const [pending, setPending] = useState<"revoke" | "pause" | "resume" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // A self-hosted runner added from GitHub: no connection of its own, removed rather than revoked.
+  const github = machine.source === "github" ? (machine.github ?? null) : null;
+  const isGithub = machine.source === "github";
 
   async function act(action: "revoke" | "pause" | "resume") {
     setPending(action);
@@ -413,7 +480,11 @@ function MachineCard({ machine }: { machine: Machine }) {
       await router.invalidate();
       if (action !== "revoke") setPending(null);
     } catch {
-      setError(`Couldn't ${action} the machine. Try again.`);
+      setError(
+        action === "revoke" && github
+          ? "Couldn't remove the runner. Try again."
+          : `Couldn't ${action} the machine. Try again.`,
+      );
       setPending(null);
     }
   }
@@ -429,28 +500,58 @@ function MachineCard({ machine }: { machine: Machine }) {
   // Previews talk to the production API, which may not send status yet: read that as offline.
   const status = machine.status ?? { online: false, state: null, connectedAt: null };
   const paused = machine.paused ?? null;
-  const live = paused
-    ? pausedBadge(status)
-    : machineBadge[status.online ? (status.state ?? "idle") : "offline"];
-  const seen = paused
-    ? pausedLine(paused, status)
-    : status.online
-      ? status.connectedAt && `Connected ${timeAgo(status.connectedAt)}`
-      : machine.lastSeenAt
-        ? `Last seen ${timeAgo(machine.lastSeenAt)}`
-        : "Never connected";
+  const missing = github?.missing ?? false;
+  const live = missing
+    ? ({ variant: "outline", label: "Not found on GitHub" } as const)
+    : paused
+      ? pausedBadge(status)
+      : machineBadge[status.online ? (status.state ?? "idle") : "offline"];
+  const seen = isGithub
+    ? githubLine(github, paused, status)
+    : paused
+      ? pausedLine(paused, status)
+      : status.online
+        ? status.connectedAt && `Connected ${timeAgo(status.connectedAt)}`
+        : machine.lastSeenAt
+          ? `Last seen ${timeAgo(machine.lastSeenAt)}`
+          : "Never connected";
+  const githubUrl =
+    github?.org && github.runnerId
+      ? `${runnerSettingsUrl(github.org)}/${github.runnerId}`
+      : github?.org
+        ? runnerSettingsUrl(github.org)
+        : null;
 
   return (
-    <Card className={cn("py-4", paused && "border-run-edge/60")}>
+    <Card
+      className={cn(
+        "py-4",
+        paused && "border-run-edge/60",
+        missing && "border-destructive/50 bg-destructive/5",
+      )}
+    >
       <CardHeader className="px-4">
-        <CardTitle className="self-center font-mono text-sm font-medium">{machine.name}</CardTitle>
+        <CardTitle className="flex flex-wrap items-center gap-2 self-center">
+          <span className="font-mono text-sm font-medium">{machine.name}</span>
+          {isGithub && (
+            <Badge variant="outline" className="gap-1 font-normal text-muted-foreground">
+              <GithubIcon className="size-3" />
+              GitHub runner
+            </Badge>
+          )}
+        </CardTitle>
         {/* Full width under the name and the actions, so a long paused line fits on a phone. */}
         <CardDescription className="col-span-2">
           {seen || "Your machine"}
           {error && <span className="block text-destructive">{error}</span>}
         </CardDescription>
         <CardAction className="row-span-1 flex items-center gap-2">
-          <Badge variant={live.variant}>{live.label}</Badge>
+          <Badge
+            variant={live.variant}
+            className={cn(missing && "border-destructive/60 text-destructive")}
+          >
+            {live.label}
+          </Badge>
           {confirming ? (
             <>
               <Button
@@ -467,7 +568,13 @@ function MachineCard({ machine }: { machine: Machine }) {
                 disabled={pending !== null}
                 onClick={() => void act("revoke")}
               >
-                {pending === "revoke" ? "Revoking…" : "Revoke"}
+                {pending === "revoke"
+                  ? isGithub
+                    ? "Removing…"
+                    : "Revoking…"
+                  : isGithub
+                    ? "Remove"
+                    : "Revoke"}
               </Button>
             </>
           ) : (
@@ -522,13 +629,30 @@ function MachineCard({ machine }: { machine: Machine }) {
                       Copy labels
                     </DropdownMenuItem>
                   )}
+                  {githubUrl && (
+                    <DropdownMenuItem asChild>
+                      <a href={githubUrl} target="_blank" rel="noreferrer">
+                        <ExternalLinkIcon aria-hidden />
+                        View on GitHub
+                      </a>
+                    </DropdownMenuItem>
+                  )}
                   {/* Members revoke only the machines they enrolled; the API says which. */}
                   {machine.canRevoke !== false && (
                     <>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem variant="destructive" onSelect={() => setConfirming(true)}>
                         <BanIcon aria-hidden />
-                        Revoke…
+                        {isGithub ? (
+                          <span className="grid">
+                            <span>Remove from RelayRunner…</span>
+                            <span className="text-xs text-muted-foreground">
+                              Stays registered on GitHub
+                            </span>
+                          </span>
+                        ) : (
+                          "Revoke…"
+                        )}
                       </DropdownMenuItem>
                     </>
                   )}
@@ -539,11 +663,28 @@ function MachineCard({ machine }: { machine: Machine }) {
         </CardAction>
         {/* Full width under the name and the actions, so the chips have room on a phone. */}
         {machine.labels && machine.labels.length > 0 && (
-          <MachineLabels labels={machine.labels} dimmed={paused !== null} />
+          <MachineLabels
+            labels={machine.labels}
+            routingLabel={machine.routingLabel ?? null}
+            dimmed={paused !== null || missing}
+          />
         )}
       </CardHeader>
     </Card>
   );
+}
+
+// What a GitHub runner's line says: why jobs skip it, or where it lives and what its group allows.
+function githubLine(
+  github: Machine["github"] | null,
+  paused: { at: string; by: string | null } | null,
+  status: { online: boolean; state: "idle" | "busy" | null },
+) {
+  if (github?.missing)
+    return "It was removed or re-registered on GitHub, so jobs skip it. If it was re-registered, add it again.";
+  if (paused) return pausedLine(paused, status);
+  if (github?.unreachable) return "Couldn't reach GitHub for its status";
+  return [github?.org && `In ${github.org}`, github?.access].filter(Boolean).join(" · ");
 }
 
 // A paused machine's badge: still online or not, and whether it's finishing a job.
@@ -567,7 +708,16 @@ function pausedLine(
 }
 
 // The labels a job's `machine:` input matches. Clicking one copies it.
-function MachineLabels({ labels, dimmed = false }: { labels: string[]; dimmed?: boolean }) {
+function MachineLabels({
+  labels,
+  routingLabel = null,
+  dimmed = false,
+}: {
+  labels: string[];
+  /** RelayRunner's own label on a GitHub runner, shown dashed so it reads as ours. */
+  routingLabel?: string | null;
+  dimmed?: boolean;
+}) {
   const [copied, setCopied] = useState<string | null>(null);
 
   async function copy(label: string) {
@@ -601,6 +751,17 @@ function MachineLabels({ labels, dimmed = false }: { labels: string[]; dimmed?: 
           </Badge>
         </li>
       ))}
+      {routingLabel && (
+        <li className="flex">
+          <Badge
+            variant="outline"
+            className="border-dashed font-mono font-normal text-muted-foreground"
+            title="Added by RelayRunner to route jobs to this runner"
+          >
+            {routingLabel}
+          </Badge>
+        </li>
+      )}
     </ul>
   );
 }

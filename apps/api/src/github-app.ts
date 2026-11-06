@@ -130,6 +130,146 @@ export async function deleteOrgRunner(token: string, org: string, runnerId: numb
     );
 }
 
+/** An installation token from the App's id and private key, as the Durable Objects hold them. */
+export async function appInstallationToken(
+  env: { GITHUB_APP_ID: string; GITHUB_APP_PRIVATE_KEY: { get(): Promise<string> } },
+  installationId: number,
+) {
+  const key = await importAppPrivateKey(await env.GITHUB_APP_PRIVATE_KEY.get());
+  return installationToken(await appJwt(env.GITHUB_APP_ID, key), installationId);
+}
+
+// Every page of a list endpoint whose response holds its items under `key`. Capped at 10 pages of
+// 100, far more runners or groups than an org that adds runners by hand has.
+async function listAll<T>(token: string, path: string, key: string): Promise<T[]> {
+  const items: T[] = [];
+  for (let page = 1; page <= 10; page++) {
+    const separator = path.includes("?") ? "&" : "?";
+    const response = await fetch(`${API}${path}${separator}per_page=100&page=${page}`, {
+      headers: headers(token),
+    });
+    if (!response.ok)
+      throw new Error(
+        `GET ${path} failed with ${response.status}: ${(await response.text()).slice(0, 300)}`,
+      );
+    const body = (await response.json()) as Record<string, unknown>;
+    const batch = (body[key] ?? []) as T[];
+    items.push(...batch);
+    if (batch.length < 100) break;
+  }
+  return items;
+}
+
+/** A self-hosted runner registered in an org, as GET /orgs/{org}/actions/runners lists it. */
+export interface OrgRunner {
+  id: number;
+  name: string;
+  // "macOS", "Linux" or "Windows".
+  os: string;
+  status: "online" | "offline";
+  busy: boolean;
+  labels: string[];
+}
+
+export async function listOrgRunners(token: string, org: string): Promise<OrgRunner[]> {
+  const runners = await listAll<{
+    id: number;
+    name: string;
+    os: string;
+    status: string;
+    busy: boolean;
+    labels?: { name: string }[];
+  }>(token, `/orgs/${org}/actions/runners`, "runners");
+  return runners.map((runner) => ({
+    id: runner.id,
+    name: runner.name,
+    os: runner.os,
+    status: runner.status === "online" ? "online" : "offline",
+    busy: runner.busy,
+    labels: (runner.labels ?? []).map((label) => label.name),
+  }));
+}
+
+/** Adds custom labels to an org runner. GitHub keeps them on its side; the machine doesn't change. */
+export async function addOrgRunnerLabels(
+  token: string,
+  org: string,
+  runnerId: number,
+  labels: string[],
+) {
+  const response = await fetch(`${API}/orgs/${org}/actions/runners/${runnerId}/labels`, {
+    method: "POST",
+    headers: { ...headers(token), "content-type": "application/json" },
+    body: JSON.stringify({ labels }),
+  });
+  if (!response.ok)
+    throw new Error(
+      `POST /orgs/${org}/actions/runners/${runnerId}/labels failed with ${response.status}: ${(await response.text()).slice(0, 300)}`,
+    );
+}
+
+/** Removes one custom label from an org runner. A runner or label already gone is fine. */
+export async function removeOrgRunnerLabel(
+  token: string,
+  org: string,
+  runnerId: number,
+  label: string,
+) {
+  const response = await fetch(
+    `${API}/orgs/${org}/actions/runners/${runnerId}/labels/${encodeURIComponent(label)}`,
+    { method: "DELETE", headers: headers(token) },
+  );
+  if (!response.ok && response.status !== 404)
+    throw new Error(
+      `DELETE /orgs/${org}/actions/runners/${runnerId}/labels/${label} failed with ${response.status}`,
+    );
+}
+
+/** An org's runner group: which repos (and workflows) may use the runners in it. */
+export interface RunnerGroup {
+  id: number;
+  name: string;
+  // all: every repo; private: private (and internal) repos; selected: the group's repo list.
+  visibility: "all" | "private" | "selected";
+  restrictedToWorkflows: boolean;
+}
+
+export async function listOrgRunnerGroups(token: string, org: string): Promise<RunnerGroup[]> {
+  const groups = await listAll<{
+    id: number;
+    name: string;
+    visibility: string;
+    restricted_to_workflows?: boolean;
+  }>(token, `/orgs/${org}/actions/runner-groups`, "runner_groups");
+  return groups.map((group) => ({
+    id: group.id,
+    name: group.name,
+    visibility:
+      group.visibility === "all" || group.visibility === "private" ? group.visibility : "selected",
+    restrictedToWorkflows: group.restricted_to_workflows === true,
+  }));
+}
+
+/** The ids of the runners in a runner group. */
+export async function listRunnerGroupRunnerIds(token: string, org: string, groupId: number) {
+  const runners = await listAll<{ id: number }>(
+    token,
+    `/orgs/${org}/actions/runner-groups/${groupId}/runners`,
+    "runners",
+  );
+  return runners.map((runner) => runner.id);
+}
+
+/** The ids of the repos a `selected` runner group lets use its runners. */
+export async function listRunnerGroupRepositoryIds(token: string, org: string, groupId: number) {
+  const repos = await listAll<{ id: number }>(
+    token,
+    `/orgs/${org}/actions/runner-groups/${groupId}/repositories`,
+    "repositories",
+  );
+  return repos.map((repo) => repo.id);
+}
+
 /**
  * Post a finished check run on a commit, as the App. A check with the same name on the same
  * commit replaces the earlier one on the pull request.

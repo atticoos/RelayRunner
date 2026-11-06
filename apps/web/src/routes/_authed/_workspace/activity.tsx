@@ -185,7 +185,8 @@ function sentence(item: ActivityItem) {
   switch (item.type) {
     case "machine.enrolled": {
       const platform = [item.data.os, item.data.arch].filter(Boolean).join(" ");
-      return `enrolled${platform ? ` (${platform})` : ""}`;
+      const verb = item.data.source === "github" ? "was added from GitHub" : "enrolled";
+      return `${verb}${platform ? ` (${platform})` : ""}`;
     }
     case "machine.connected":
       return "connected";
@@ -196,7 +197,7 @@ function sentence(item: ActivityItem) {
     case "machine.resumed":
       return item.data.via === "cli" ? "was resumed from its CLI" : "was resumed";
     case "machine.revoked":
-      return "was revoked";
+      return item.data.source === "github" ? "was removed from RelayRunner" : "was revoked";
     case "job.routed":
       return "routed a job";
     case "job.unroutable":
@@ -461,7 +462,8 @@ function JobRow({ job, now }: { job: ActivityJob; now: number }) {
   // GitHub never sent the job anywhere: a job it needed failed, so its runs-on was never worked
   // out. Usually folded into its relay's "couldn't run" entry; this row is for runs without one.
   const unrouted = runner.type === "github" && !runner.label;
-  const runnerName = runner.type === "machine" ? (runner.name ?? "a local machine") : runner.label;
+  const runnerName =
+    runner.type === "machine" ? (runner.name ?? "a self-hosted machine") : runner.label;
   const summary = walk ? walkSummary(walk) : null;
   const toggle = summary ? { open, onToggle: () => setOpen(!open) } : undefined;
   return (

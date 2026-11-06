@@ -153,10 +153,14 @@ describe("webhook queue consumer", () => {
     const claim = vi.fn();
     const machineFor = vi.fn(async () => null);
     const run = vi.fn(async () => "sent");
+    const claimRunner = vi.fn();
+    const releaseRunnerJob = vi.fn();
     const routeEnv = () =>
       ({
         DB: db,
-        ROUTER: { getByName: vi.fn(() => ({ claim, machineFor })) },
+        ROUTER: {
+          getByName: vi.fn(() => ({ claim, machineFor, claimRunner, releaseRunnerJob })),
+        },
         MACHINE_LINK: { getByName: vi.fn(() => ({ run })) },
       }) as unknown as Env;
 
@@ -175,8 +179,45 @@ describe("webhook queue consumer", () => {
         )
         .bind(now, now)
         .run();
+      await db
+        .prepare(
+          "insert into machine (id, workspace_id, name, os, source, installation_id, github_runner_id, routing_label, created_at, updated_at) values ('gh1', 'w1', 'atticus-mac-mini', 'macos', 'github', 7, 11, 'rr-runner-0a1b2c3d', ?, ?)",
+        )
+        .bind(now, now)
+        .run();
     });
     afterAll(() => stop());
+
+    test("a job on an added runner's label claims the route without minting a runner", async () => {
+      const log = vi.spyOn(console, "log").mockImplementation(() => {});
+      vi.mocked(setJobMachine).mockClear();
+      claimRunner.mockResolvedValueOnce({ id: "0123456789ab", machineId: "gh1" });
+      run.mockClear();
+      const env = routeEnv();
+      await consumer.processWebhook(env, workflowJob(["RR-RUNNER-0a1b2c3d"]));
+      expect(claimRunner).toHaveBeenCalledWith("gh1", { jobId: 42, repositoryId: 1, runId: 9 });
+      expect(run).not.toHaveBeenCalled();
+      expect(setJobMachine).toHaveBeenCalledWith(expect.anything(), 42, "gh1");
+      // Once it starts, the route ends: the runner's own busy status takes over.
+      releaseRunnerJob.mockResolvedValueOnce("gh1");
+      await consumer.processWebhook(env, workflowJob(["rr-runner-0a1b2c3d"], "in_progress"));
+      expect(releaseRunnerJob).toHaveBeenCalledWith("gh1", {
+        jobId: 42,
+        repositoryId: 1,
+        runId: 9,
+      });
+      expect(JSON.parse(log.mock.calls.at(-1)![0])).toMatchObject({ result: "tracked" });
+      log.mockRestore();
+    });
+
+    test("an unknown runner label is left alone", async () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      claimRunner.mockClear();
+      await consumer.processWebhook(routeEnv(), workflowJob(["rr-runner-ffffffff"]));
+      expect(claimRunner).not.toHaveBeenCalled();
+      expect(JSON.parse(warn.mock.calls[0][0])).toMatchObject({ result: "no_machine" });
+      warn.mockRestore();
+    });
 
     test("a queued rr-<id> job claims its route and goes to the route's machine", async () => {
       const log = vi.spyOn(console, "log").mockImplementation(() => {});

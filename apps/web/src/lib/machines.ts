@@ -1,6 +1,9 @@
 import { ApiError, api } from "@/lib/api";
 
-/** A machine enrolled with `relayrunner connect` (GET /api/machines). */
+/**
+ * A machine jobs can route to (GET /api/machines): enrolled with `relayrunner connect`, or a
+ * self-hosted runner added from GitHub.
+ */
 export type Machine = {
   id: string;
   name: string;
@@ -21,7 +24,22 @@ export type Machine = {
   paused?: { at: string; by: string | null } | null;
   /** Whether the signed-in user may revoke it. Missing from an API that predates roles. */
   canRevoke?: boolean;
-  /** Live, from the machine's connection. Online once it has said hello. */
+  /** "github" for a runner added from GitHub. Missing from an API that predates them. */
+  source?: "connect" | "github";
+  /** The label RelayRunner added to a GitHub runner to route jobs to it. */
+  routingLabel?: string | null;
+  /** A GitHub runner's org, its group's access, and whether GitHub still has it. */
+  github?: {
+    org: string | null;
+    runnerId: number | null;
+    /** "Default group · all private repos", or null when unknown. */
+    access: string | null;
+    /** GitHub answered and the runner wasn't there: removed or re-registered. */
+    missing: boolean;
+    /** GitHub couldn't be asked, so the status reads offline. */
+    unreachable: boolean;
+  };
+  /** Live, from the machine's connection (or GitHub, for a GitHub runner). */
   status?: {
     online: boolean;
     state: "idle" | "busy" | null;
@@ -32,6 +50,47 @@ export type Machine = {
 
 export function listMachines() {
   return api<{ machines: Machine[] }>("/machines");
+}
+
+/** A self-hosted runner registered in a connected org (GET /api/machines/github-runners). */
+export type OrgRunner = {
+  id: number;
+  name: string;
+  os: Machine["os"];
+  arch: Machine["arch"];
+  status: "online" | "offline";
+  busy: boolean;
+  labels: string[];
+  /** "Default group · all private repos", or null when unknown. */
+  access: string | null;
+  /** Why it can't be added: "workflows" when its group only allows selected workflows. */
+  blocked: "workflows" | "own" | null;
+  /** The machine it's already added as. */
+  machineId: string | null;
+};
+
+export type OrgRunners =
+  | { installationId: number; org: string; runners: OrgRunner[] }
+  | { installationId: number; org: string; error: string };
+
+/** The connected orgs' self-hosted runners, for adding them. Owners and admins only. */
+export function listGithubRunners() {
+  return api<{ orgs: OrgRunners[] }>("/machines/github-runners");
+}
+
+/** Adds org runners: RelayRunner labels each on GitHub and routes jobs to it from then on. */
+export function addGithubRunners(installationId: number, runnerIds: number[]) {
+  return api<{ added: Machine[]; skipped: { runnerId: number; reason: string }[] }>(
+    "/machines/github-runners",
+    { method: "POST", body: JSON.stringify({ installationId, runnerIds }) },
+  );
+}
+
+/** Runners in connected orgs that could be added and aren't yet. */
+export function addableRunners(orgs: OrgRunners[]) {
+  return orgs.flatMap((org) =>
+    "runners" in org ? org.runners.filter((r) => !r.machineId && !r.blocked) : [],
+  );
 }
 
 /** "just now", "5 minutes ago", "3 days ago". */
