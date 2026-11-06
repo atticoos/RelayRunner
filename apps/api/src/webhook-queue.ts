@@ -8,7 +8,7 @@
  *
  * After max_retries a message moves to `relayrunner-github-webhooks-dlq`. The DLQ consumer archives
  * it to R2 (src/dead-letters.ts) and acks it only once the write succeeds; a failed write leaves it
- * unacked, so the DLQ retries it rather than losing it. `/dev/webhooks` lists and replays them.
+ * unacked, so the DLQ retries it rather than losing it. `/admin/webhooks` lists and replays them.
  *
  * Delivery is at least once and unordered. A redelivery or a queue retry can repeat a message, and
  * `workflow_job` `queued` can arrive after `in_progress`, so processing must be idempotent and

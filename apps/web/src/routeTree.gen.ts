@@ -14,13 +14,14 @@ import { Route as AuthedRouteImport } from './routes/_authed'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthedWorkspaceRouteImport } from './routes/_authed/_workspace'
 import { Route as AuthedDeviceRouteImport } from './routes/_authed/device'
-import { Route as DevWebhooksRouteImport } from './routes/dev/webhooks'
 import { Route as AuthedWorkspaceActivityRouteImport } from './routes/_authed/_workspace/activity'
 import { Route as AuthedWorkspaceRunnersRouteImport } from './routes/_authed/_workspace/runners'
 import { Route as AuthedWorkspaceUsageRouteImport } from './routes/_authed/_workspace/usage'
 import { Route as AuthedWorkspaceWorkspaceRouteImport } from './routes/_authed/_workspace/workspace'
 import { Route as AuthedInviteIdRouteImport } from './routes/_authed/invite.$id'
 import { Route as AuthedWorkspacesNewRouteImport } from './routes/_authed/workspaces.new'
+import { Route as AuthedWorkspaceAdminIndexRouteImport } from './routes/_authed/_workspace/admin.index'
+import { Route as AuthedWorkspaceAdminWebhooksRouteImport } from './routes/_authed/_workspace/admin.webhooks'
 import { Route as AuthedWorkspaceSettingsIndexRouteImport } from './routes/_authed/_workspace/settings.index'
 import { Route as AuthedWorkspaceSettingsAccountRouteImport } from './routes/_authed/_workspace/settings.account'
 import { Route as AuthedWorkspaceSettingsGeneralRouteImport } from './routes/_authed/_workspace/settings.general'
@@ -49,11 +50,6 @@ const AuthedDeviceRoute = AuthedDeviceRouteImport.update({
   id: '/device',
   path: '/device',
   getParentRoute: () => AuthedRoute,
-} as any)
-const DevWebhooksRoute = DevWebhooksRouteImport.update({
-  id: '/dev/webhooks',
-  path: '/dev/webhooks',
-  getParentRoute: () => rootRouteImport,
 } as any)
 const AuthedWorkspaceActivityRoute = AuthedWorkspaceActivityRouteImport.update({
   id: '/activity',
@@ -86,6 +82,18 @@ const AuthedWorkspacesNewRoute = AuthedWorkspacesNewRouteImport.update({
   path: '/workspaces/new',
   getParentRoute: () => AuthedRoute,
 } as any)
+const AuthedWorkspaceAdminIndexRoute =
+  AuthedWorkspaceAdminIndexRouteImport.update({
+    id: '/admin/',
+    path: '/admin/',
+    getParentRoute: () => AuthedWorkspaceRoute,
+  } as any)
+const AuthedWorkspaceAdminWebhooksRoute =
+  AuthedWorkspaceAdminWebhooksRouteImport.update({
+    id: '/admin/webhooks',
+    path: '/admin/webhooks',
+    getParentRoute: () => AuthedWorkspaceRoute,
+  } as any)
 const AuthedWorkspaceSettingsIndexRoute =
   AuthedWorkspaceSettingsIndexRouteImport.update({
     id: '/settings/',
@@ -121,34 +129,36 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/device': typeof AuthedDeviceRoute
-  '/dev/webhooks': typeof DevWebhooksRoute
   '/activity': typeof AuthedWorkspaceActivityRoute
   '/runners': typeof AuthedWorkspaceRunnersRoute
   '/usage': typeof AuthedWorkspaceUsageRoute
   '/workspace': typeof AuthedWorkspaceWorkspaceRoute
   '/invite/$id': typeof AuthedInviteIdRoute
   '/workspaces/new': typeof AuthedWorkspacesNewRoute
+  '/admin/webhooks': typeof AuthedWorkspaceAdminWebhooksRoute
   '/settings/account': typeof AuthedWorkspaceSettingsAccountRoute
   '/settings/general': typeof AuthedWorkspaceSettingsGeneralRoute
   '/settings/github': typeof AuthedWorkspaceSettingsGithubRoute
   '/settings/members': typeof AuthedWorkspaceSettingsMembersRoute
+  '/admin/': typeof AuthedWorkspaceAdminIndexRoute
   '/settings/': typeof AuthedWorkspaceSettingsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/device': typeof AuthedDeviceRoute
-  '/dev/webhooks': typeof DevWebhooksRoute
   '/activity': typeof AuthedWorkspaceActivityRoute
   '/runners': typeof AuthedWorkspaceRunnersRoute
   '/usage': typeof AuthedWorkspaceUsageRoute
   '/workspace': typeof AuthedWorkspaceWorkspaceRoute
   '/invite/$id': typeof AuthedInviteIdRoute
   '/workspaces/new': typeof AuthedWorkspacesNewRoute
+  '/admin/webhooks': typeof AuthedWorkspaceAdminWebhooksRoute
   '/settings/account': typeof AuthedWorkspaceSettingsAccountRoute
   '/settings/general': typeof AuthedWorkspaceSettingsGeneralRoute
   '/settings/github': typeof AuthedWorkspaceSettingsGithubRoute
   '/settings/members': typeof AuthedWorkspaceSettingsMembersRoute
+  '/admin': typeof AuthedWorkspaceAdminIndexRoute
   '/settings': typeof AuthedWorkspaceSettingsIndexRoute
 }
 export interface FileRoutesById {
@@ -158,17 +168,18 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/_authed/_workspace': typeof AuthedWorkspaceRouteWithChildren
   '/_authed/device': typeof AuthedDeviceRoute
-  '/dev/webhooks': typeof DevWebhooksRoute
   '/_authed/_workspace/activity': typeof AuthedWorkspaceActivityRoute
   '/_authed/_workspace/runners': typeof AuthedWorkspaceRunnersRoute
   '/_authed/_workspace/usage': typeof AuthedWorkspaceUsageRoute
   '/_authed/_workspace/workspace': typeof AuthedWorkspaceWorkspaceRoute
   '/_authed/invite/$id': typeof AuthedInviteIdRoute
   '/_authed/workspaces/new': typeof AuthedWorkspacesNewRoute
+  '/_authed/_workspace/admin/webhooks': typeof AuthedWorkspaceAdminWebhooksRoute
   '/_authed/_workspace/settings/account': typeof AuthedWorkspaceSettingsAccountRoute
   '/_authed/_workspace/settings/general': typeof AuthedWorkspaceSettingsGeneralRoute
   '/_authed/_workspace/settings/github': typeof AuthedWorkspaceSettingsGithubRoute
   '/_authed/_workspace/settings/members': typeof AuthedWorkspaceSettingsMembersRoute
+  '/_authed/_workspace/admin/': typeof AuthedWorkspaceAdminIndexRoute
   '/_authed/_workspace/settings/': typeof AuthedWorkspaceSettingsIndexRoute
 }
 export interface FileRouteTypes {
@@ -177,34 +188,36 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/device'
-    | '/dev/webhooks'
     | '/activity'
     | '/runners'
     | '/usage'
     | '/workspace'
     | '/invite/$id'
     | '/workspaces/new'
+    | '/admin/webhooks'
     | '/settings/account'
     | '/settings/general'
     | '/settings/github'
     | '/settings/members'
+    | '/admin/'
     | '/settings/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/login'
     | '/device'
-    | '/dev/webhooks'
     | '/activity'
     | '/runners'
     | '/usage'
     | '/workspace'
     | '/invite/$id'
     | '/workspaces/new'
+    | '/admin/webhooks'
     | '/settings/account'
     | '/settings/general'
     | '/settings/github'
     | '/settings/members'
+    | '/admin'
     | '/settings'
   id:
     | '__root__'
@@ -213,17 +226,18 @@ export interface FileRouteTypes {
     | '/login'
     | '/_authed/_workspace'
     | '/_authed/device'
-    | '/dev/webhooks'
     | '/_authed/_workspace/activity'
     | '/_authed/_workspace/runners'
     | '/_authed/_workspace/usage'
     | '/_authed/_workspace/workspace'
     | '/_authed/invite/$id'
     | '/_authed/workspaces/new'
+    | '/_authed/_workspace/admin/webhooks'
     | '/_authed/_workspace/settings/account'
     | '/_authed/_workspace/settings/general'
     | '/_authed/_workspace/settings/github'
     | '/_authed/_workspace/settings/members'
+    | '/_authed/_workspace/admin/'
     | '/_authed/_workspace/settings/'
   fileRoutesById: FileRoutesById
 }
@@ -231,7 +245,6 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthedRoute: typeof AuthedRouteWithChildren
   LoginRoute: typeof LoginRoute
-  DevWebhooksRoute: typeof DevWebhooksRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -270,13 +283,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/device'
       preLoaderRoute: typeof AuthedDeviceRouteImport
       parentRoute: typeof AuthedRoute
-    }
-    '/dev/webhooks': {
-      id: '/dev/webhooks'
-      path: '/dev/webhooks'
-      fullPath: '/dev/webhooks'
-      preLoaderRoute: typeof DevWebhooksRouteImport
-      parentRoute: typeof rootRouteImport
     }
     '/_authed/_workspace/activity': {
       id: '/_authed/_workspace/activity'
@@ -319,6 +325,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/workspaces/new'
       preLoaderRoute: typeof AuthedWorkspacesNewRouteImport
       parentRoute: typeof AuthedRoute
+    }
+    '/_authed/_workspace/admin/': {
+      id: '/_authed/_workspace/admin/'
+      path: '/admin'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AuthedWorkspaceAdminIndexRouteImport
+      parentRoute: typeof AuthedWorkspaceRoute
+    }
+    '/_authed/_workspace/admin/webhooks': {
+      id: '/_authed/_workspace/admin/webhooks'
+      path: '/admin/webhooks'
+      fullPath: '/admin/webhooks'
+      preLoaderRoute: typeof AuthedWorkspaceAdminWebhooksRouteImport
+      parentRoute: typeof AuthedWorkspaceRoute
     }
     '/_authed/_workspace/settings/': {
       id: '/_authed/_workspace/settings/'
@@ -363,10 +383,12 @@ interface AuthedWorkspaceRouteChildren {
   AuthedWorkspaceRunnersRoute: typeof AuthedWorkspaceRunnersRoute
   AuthedWorkspaceUsageRoute: typeof AuthedWorkspaceUsageRoute
   AuthedWorkspaceWorkspaceRoute: typeof AuthedWorkspaceWorkspaceRoute
+  AuthedWorkspaceAdminWebhooksRoute: typeof AuthedWorkspaceAdminWebhooksRoute
   AuthedWorkspaceSettingsAccountRoute: typeof AuthedWorkspaceSettingsAccountRoute
   AuthedWorkspaceSettingsGeneralRoute: typeof AuthedWorkspaceSettingsGeneralRoute
   AuthedWorkspaceSettingsGithubRoute: typeof AuthedWorkspaceSettingsGithubRoute
   AuthedWorkspaceSettingsMembersRoute: typeof AuthedWorkspaceSettingsMembersRoute
+  AuthedWorkspaceAdminIndexRoute: typeof AuthedWorkspaceAdminIndexRoute
   AuthedWorkspaceSettingsIndexRoute: typeof AuthedWorkspaceSettingsIndexRoute
 }
 
@@ -375,10 +397,12 @@ const AuthedWorkspaceRouteChildren: AuthedWorkspaceRouteChildren = {
   AuthedWorkspaceRunnersRoute: AuthedWorkspaceRunnersRoute,
   AuthedWorkspaceUsageRoute: AuthedWorkspaceUsageRoute,
   AuthedWorkspaceWorkspaceRoute: AuthedWorkspaceWorkspaceRoute,
+  AuthedWorkspaceAdminWebhooksRoute: AuthedWorkspaceAdminWebhooksRoute,
   AuthedWorkspaceSettingsAccountRoute: AuthedWorkspaceSettingsAccountRoute,
   AuthedWorkspaceSettingsGeneralRoute: AuthedWorkspaceSettingsGeneralRoute,
   AuthedWorkspaceSettingsGithubRoute: AuthedWorkspaceSettingsGithubRoute,
   AuthedWorkspaceSettingsMembersRoute: AuthedWorkspaceSettingsMembersRoute,
+  AuthedWorkspaceAdminIndexRoute: AuthedWorkspaceAdminIndexRoute,
   AuthedWorkspaceSettingsIndexRoute: AuthedWorkspaceSettingsIndexRoute,
 }
 
@@ -407,7 +431,6 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthedRoute: AuthedRouteWithChildren,
   LoginRoute: LoginRoute,
-  DevWebhooksRoute: DevWebhooksRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

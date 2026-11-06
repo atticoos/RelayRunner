@@ -1,12 +1,12 @@
 /**
- * Development-only webhook dead-letter routes, behind Cloudflare Access (docs/cloudflare-access.md).
- * This Worker's own workers.dev URL is public, so every route checks the Access JWT itself with
- * `gateDevOnly` and never trusts the dashboard Worker to have done it.
+ * Operator admin routes for webhook dead letters, behind Cloudflare Access
+ * (docs/cloudflare-access.md). This Worker's own workers.dev URL is public, so every route checks
+ * the Access JWT itself with `gateAdmin` and never trusts the dashboard Worker to have done it.
  *
  * Previews forward /api/* to this production Worker, so replaying from a preview acts on
  * production. Replay goes back through the main queue and consumer, never around them.
  */
-import { gateDevOnly, type AccessIdentity } from "@relayrunner/access";
+import { gateAdmin, type AccessIdentity } from "@relayrunner/access";
 import { Hono, type MiddlewareHandler } from "hono";
 import type { AppEnv } from "../app.ts";
 import {
@@ -20,10 +20,10 @@ import {
 // The most a bulk replay sends at once. Fix the cause first, then replay a slice.
 export const MAX_BULK_REPLAY = 100;
 
-type DevEnv = AppEnv & { Variables: { accessIdentity: AccessIdentity } };
+type AdminEnv = AppEnv & { Variables: { accessIdentity: AccessIdentity } };
 
-const requireAccess: MiddlewareHandler<DevEnv> = async (c, next) => {
-  const gate = await gateDevOnly(c.req.raw, c.env);
+const requireAccess: MiddlewareHandler<AdminEnv> = async (c, next) => {
+  const gate = await gateAdmin(c.req.raw, c.env);
   if ("response" in gate) return gate.response;
   c.set("accessIdentity", gate.identity);
   await next();
@@ -41,7 +41,7 @@ function filterFrom(input: { event?: unknown; repository?: unknown }): DeadLette
   };
 }
 
-export const devWebhookRoutes = new Hono<DevEnv>()
+export const adminWebhookRoutes = new Hono<AdminEnv>()
   .use("*", requireAccess)
   .get("/dead-letters", async (c) => {
     const page = await listDeadLetters(c.env.DEAD_LETTERS, {

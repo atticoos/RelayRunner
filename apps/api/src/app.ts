@@ -4,8 +4,8 @@ import type { Db, schema } from "./db/index.ts";
 import type { Env } from "./env.ts";
 import { attachSession } from "./middleware/session.ts";
 import { activityRoutes } from "./routes/activity.ts";
+import { adminWebhookRoutes } from "./routes/admin-webhooks.ts";
 import { authRoutes } from "./routes/auth.ts";
-import { devWebhookRoutes } from "./routes/dev-webhooks.ts";
 import { githubRoutes } from "./routes/github.ts";
 import { healthRoutes } from "./routes/health.ts";
 import { inviteRoutes } from "./routes/invites.ts";
@@ -32,9 +32,9 @@ export const app = new Hono<AppEnv>().basePath("/api");
 
 // Public routes. These never touch auth or D1.
 app.route("/health", healthRoutes);
-// Development-only, behind Cloudflare Access: each route checks the Access JWT itself
+// Operator admin, behind Cloudflare Access: each route checks the Access JWT itself
 // (docs/cloudflare-access.md). Needs no session or D1, so it works while D1 is down.
-app.route("/dev/webhooks", devWebhookRoutes);
+app.route("/admin/webhooks", adminWebhookRoutes);
 
 // Everything below sees c.var.auth, c.var.user and c.var.session.
 app.use("*", attachSession);

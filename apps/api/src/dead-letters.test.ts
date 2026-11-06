@@ -171,11 +171,11 @@ describe("listDeadLetters", () => {
   });
 });
 
-describe("/api/dev/webhooks", () => {
+describe("/api/admin/webhooks", () => {
   async function call(path: string, init: RequestInit = {}, env: Env = base, token = true) {
     const headers = new Headers(init.headers);
     if (token) headers.set("Cf-Access-Jwt-Assertion", await accessJwt());
-    return app.request(`/api/dev/webhooks${path}`, { ...init, headers }, env);
+    return app.request(`/api/admin/webhooks${path}`, { ...init, headers }, env);
   }
 
   const routes: [string, string][] = [
