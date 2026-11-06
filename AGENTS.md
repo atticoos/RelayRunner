@@ -4,6 +4,10 @@
 
 Read [PRODUCT.md](PRODUCT.md) before starting work in this repository. Use it to guide product and implementation decisions.
 
+## Architecture docs
+
+[docs/architecture/](docs/architecture/README.md) explains how the important parts of the system work, for people reviewing what agents build. Each doc lists the code it covers on its **Covers** line. When your change alters behavior a doc describes, update that doc in the same pull request. Refactors and fixes that keep the behavior don't need a doc change. Follow the format in the [README](docs/architecture/README.md#keeping-these-docs-current).
+
 ## Commits and pull requests
 
 Use [Conventional Commits](https://www.conventionalcommits.org/) for every commit message and every pull request title. This applies to each commit you make, not only the squash-merge title, and to cloud agents as much as local ones.
