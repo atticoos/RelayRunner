@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { Link, createFileRoute } from "@tanstack/react-router";
 import {
   Ban,
   ChevronRight,
@@ -19,6 +19,7 @@ import {
   UserMinus,
   UserPlus,
   UserX,
+  Zap,
 } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { PageHeader } from "@/components/page-header";
@@ -33,6 +34,13 @@ import {
   type ActivityPage,
 } from "@/lib/activity";
 import { authDisabled } from "@/lib/auth-client";
+import {
+  getCheckSavings,
+  minutes,
+  money,
+  sampleCheckSavings,
+  type FreeCheckSavings,
+} from "@/lib/usage";
 import { failureText, jobNames, walkLines, walkSummary, type RouteWalk } from "@/lib/route-walk";
 
 // Fast enough that a push shows up within seconds, without a live connection.
@@ -47,6 +55,7 @@ export const Route = createFileRoute("/_authed/_workspace/activity")({
 const FILTERS: { value: ActivityFilter | undefined; label: string }[] = [
   { value: undefined, label: "All" },
   { value: "job", label: "Jobs" },
+  { value: "check", label: "Checks" },
   { value: "machine", label: "Machines" },
   { value: "member", label: "Members" },
 ];
@@ -60,6 +69,17 @@ function ActivityPage() {
   const [olderCursor, setOlderCursor] = useState<number | null>(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  const [savings, setSavings] = useState<FreeCheckSavings | null>(null);
+
+  useEffect(() => {
+    if (authDisabled) {
+      setSavings(sampleCheckSavings(30));
+      return;
+    }
+    getCheckSavings(30)
+      .then(setSavings)
+      .catch(() => undefined); // The log works without it.
+  }, []);
 
   // Refresh the newest page while the tab is visible, and right away when the filter changes.
   // Older pages don't change much, so they're left as loaded.
@@ -114,7 +134,7 @@ function ActivityPage() {
   return (
     <section>
       <PageHeader title="Activity">
-        Routed jobs, machine events and member changes, newest first.
+        Routed jobs, free checks, machine events and member changes, newest first.
       </PageHeader>
       <div className="grid max-w-4xl gap-2">
         <div role="group" aria-label="Show" className="flex gap-1.5">
@@ -130,9 +150,18 @@ function ActivityPage() {
             </Button>
           ))}
         </div>
+        {savings && savings.checks > 0 && (filter === undefined || filter === "check") && (
+          <SavingsBanner savings={savings} />
+        )}
         {items.length === 0 ? (
           <p className="rounded-xl border bg-card px-4 py-6 text-sm text-muted-foreground">
-            {filter === "machine" ? (
+            {filter === "check" ? (
+              <>
+                Nothing yet. Turn on a free check with{" "}
+                <span className="font-mono text-foreground">relayrunner.yml</span> in a connected
+                repo, and its check runs show up here.
+              </>
+            ) : filter === "machine" ? (
               <>Nothing yet. Machines show up here when they enroll, connect or disconnect.</>
             ) : filter === "member" ? (
               <>Nothing yet. Invites and new members show up here.</>
@@ -151,6 +180,8 @@ function ActivityPage() {
                 <JobRow key={item.id} job={item.job} now={now} />
               ) : item.type === "job.unroutable" ? (
                 <UnroutableRow key={item.id} item={item} now={now} />
+              ) : item.type === "check.completed" ? (
+                <CheckRow key={item.id} item={item} now={now} />
               ) : (
                 <EventRow key={item.id} item={item} now={now} />
               ),
@@ -202,6 +233,8 @@ function sentence(item: ActivityItem) {
       return "routed a job";
     case "job.unroutable":
       return "couldn't route a job";
+    case "check.completed":
+      return item.data.conclusion === "success" ? "passed" : "failed";
     case "member.invited":
     case "member.invite_canceled":
     case "member.joined":
@@ -240,6 +273,7 @@ const EVENT_ICONS = {
   "member.removed": UserMinus,
   "job.routed": Laptop,
   "job.unroutable": Ban,
+  "check.completed": CircleCheck,
   "member.invited": UserPlus,
   "member.invite_canceled": UserX,
   "member.joined": UserCheck,
@@ -534,6 +568,84 @@ function JobRow({ job, now }: { job: ActivityJob; now: number }) {
           </>
         )}
         {took && <span className="tabular-nums">{` · ${took}`}</span>}
+      </span>
+    </Row>
+  );
+}
+
+// The last 30 days of free checks, above the log: "Free checks saved 200 billed minutes ($0.84)".
+function SavingsBanner({ savings }: { savings: FreeCheckSavings }) {
+  return (
+    <p className="rounded-xl border bg-card px-4 py-2.5 text-sm">
+      <Zap aria-hidden className="mr-1.5 inline size-3.5 align-[-0.15em] text-go" />
+      Free checks saved{" "}
+      <span className="font-medium tabular-nums">
+        {minutes(savings.checks)} billed {savings.checks === 1 ? "minute" : "minutes"}
+      </span>
+      {savings.savedCost > 0 && <span className="tabular-nums"> ({money(savings.savedCost)})</span>}{" "}
+      <span className="text-muted-foreground">
+        in the last {savings.days} days, one per check run.
+      </span>{" "}
+      <Link to="/usage" className="text-muted-foreground hover:text-foreground hover:underline">
+        See usage
+      </Link>
+    </p>
+  );
+}
+
+// A check the GitHub App posted on a pull request, with no runner: "PR title passed on #12 ·
+// no runner · acme/app". The check opens its run on GitHub, the number opens the pull request.
+function CheckRow({
+  item,
+  now,
+}: {
+  item: Extract<ActivityItem, { type: "check.completed" }>;
+  now: number;
+}) {
+  const { data } = item;
+  const passed = data.conclusion === "success";
+  const Icon = passed ? CircleCheck : CircleX;
+  return (
+    <Row
+      icon={
+        <Icon
+          aria-label={passed ? "Passed" : "Failed"}
+          className={`${ICON} ${passed ? "text-go" : "text-destructive"}`}
+        />
+      }
+      at={item.occurredAt}
+      now={now}
+    >
+      {data.url ? (
+        <a
+          href={data.url}
+          target="_blank"
+          rel="noreferrer"
+          className="font-medium hover:underline"
+          title="Open the check on GitHub"
+        >
+          {data.check}
+        </a>
+      ) : (
+        <span className="font-medium">{data.check}</span>
+      )}{" "}
+      <span className="text-muted-foreground">{sentence(item)} on</span>{" "}
+      <a
+        href={`https://github.com/${data.repository}/pull/${data.pullRequest}`}
+        target="_blank"
+        rel="noreferrer"
+        className="font-medium hover:underline"
+        title="Open the pull request on GitHub"
+      >
+        #{data.pullRequest}
+      </a>{" "}
+      <span className="text-go" title="Posted by the GitHub App: no Actions minute billed">
+        <Zap aria-hidden className="mr-0.5 inline size-3 align-[-0.1em]" />
+        no runner, saved a minute
+      </span>
+      <span className="text-xs text-muted-foreground">
+        {" · "}
+        <span className="font-mono">{data.repository}</span>
       </span>
     </Row>
   );
@@ -834,6 +946,23 @@ function samplePage(filter: ActivityFilter | undefined): ActivityPage {
       data: { email: "ada@example.com", role: "admin" },
       occurredAt: at(45),
       actor: { id: "u1", name: "Atticus White" },
+      machine: null,
+      job: null,
+    },
+    {
+      id: 50,
+      type: "check.completed",
+      data: {
+        check: "PR title",
+        repository: "relayrunner/relayrunner-ci-tests",
+        repositoryId: 1,
+        pullRequest: 42,
+        headSha: "abc123",
+        conclusion: "success",
+        url: "https://github.com/relayrunner/relayrunner-ci-tests/runs/1",
+      },
+      occurredAt: at(2),
+      actor: null,
       machine: null,
       job: null,
     },

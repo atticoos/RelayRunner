@@ -364,6 +364,8 @@ export const activityEvent = sqliteTable(
     // One event per type per job, so a redelivered webhook never logs a job twice. Machine events
     // have no job id, and NULLs never collide.
     uniqueIndex("activity_event_job_idx").on(table.jobId, table.type),
+    // One type over a time range, such as the free checks the Usage page sums.
+    index("activity_event_type_idx").on(table.workspaceId, table.type, table.occurredAt),
   ],
 );
 

@@ -8,7 +8,7 @@ import { routeIdFromLabels } from "./routing.ts";
 type WorkflowJobMessage = Extract<WebhookMessage, { event: "workflow_job" }>;
 
 const table = schema.jobTiming;
-const DAY_MS = 86_400_000;
+export const DAY_MS = 86_400_000;
 
 // GitHub bills a job by the minute, rounded up. A job that finishes in under this is the free-checks
 // opportunity: it pays for a whole minute however little of it ran.
@@ -38,6 +38,14 @@ export const RUNNER_RATES: Record<RunnerClass, { label: string; perMinute: numbe
   "self-hosted": { label: "Self-hosted", perMinute: 0 },
   other: { label: "Other (priced as Linux 2-core)", perMinute: 0.006 },
 };
+
+/**
+ * What a minute costs on a runner class in a repo: standard runners are free in public repos, and
+ * unknown visibility counts as private, so a missing mirror row never hides a cost.
+ */
+export function rateFor(cls: RunnerClass, isPrivate: boolean | null | undefined) {
+  return isPrivate === false ? 0 : RUNNER_RATES[cls].perMinute;
+}
 
 const GITHUB_HOSTED_GROUP = "GitHub Actions";
 
@@ -210,8 +218,7 @@ export async function usageReport(db: Db, workspaceId: string, days = 30): Promi
   const byRepository = new Map<string, UsageReport["byRepository"][number]>();
   for (const row of rows) {
     const cls = runnerClass(row.labels, row.runnerGroupName);
-    // Unknown visibility counts as private, so a missing mirror row never hides a cost.
-    const perMinute = row.private === false ? 0 : RUNNER_RATES[cls].perMinute;
+    const perMinute = rateFor(cls, row.private);
     const runSeconds = Number(row.runMs) / 1000;
     const billedMinutes = Number(row.billedMinutes);
     const shortBilledMinutes = Number(row.shortBilledMinutes);
@@ -271,7 +278,7 @@ function add(into: Counters, sums: Counters) {
 }
 
 // Keeps sub-cent precision (a 1-core minute is $0.002) without float noise.
-function cents(value: number) {
+export function cents(value: number) {
   return Math.round(value * 1000) / 1000;
 }
 

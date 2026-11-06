@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "b1db35d6-18e9-4409-a08d-501aeee2cb46",
-  "prevId": "506aec98-3f63-4eea-a29d-be082fe0a05b",
+  "id": "e7d0147d-94b0-42e6-8a38-331ae6690c8b",
+  "prevId": "a5f95b44-174d-4a6f-8b7b-daaa50f6035a",
   "tables": {
     "account": {
       "name": "account",
@@ -195,6 +195,15 @@
             "type"
           ],
           "isUnique": true
+        },
+        "activity_event_type_idx": {
+          "name": "activity_event_type_idx",
+          "columns": [
+            "workspace_id",
+            "type",
+            "occurred_at"
+          ],
+          "isUnique": false
         }
       },
       "foreignKeys": {
