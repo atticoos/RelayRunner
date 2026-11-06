@@ -53,10 +53,10 @@ describe("watchStep", () => {
 });
 
 describe("containerRunnerGroupId", () => {
-  test("picks the RelayRunner containers group by name, or falls back", () => {
+  test("picks the Default Public group by name, or falls back", () => {
     const groups = [
       { id: 1, name: "Default" },
-      { id: 4, name: "relayrunner containers" },
+      { id: 4, name: "default public" },
     ];
     expect(containerRunnerGroupId(groups, 1)).toBe(4);
     expect(containerRunnerGroupId([{ id: 1, name: "Default" }], 1)).toBe(1);

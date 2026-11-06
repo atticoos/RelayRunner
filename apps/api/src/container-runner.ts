@@ -20,7 +20,7 @@ export const WATCH_INTERVAL_MS = 60_000;
 // The runner group container runners join when the org has one by this name: one-job, disposable
 // runners only, so it may allow public repos. Without it they join Default, which in most orgs
 // allows private repos only.
-export const CONTAINER_RUNNER_GROUP = "RelayRunner containers";
+export const CONTAINER_RUNNER_GROUP = "Default Public";
 
 /** The id of the group named CONTAINER_RUNNER_GROUP (case-insensitive), or the fallback. */
 export function containerRunnerGroupId(groups: { id: number; name: string }[], fallback: number) {
