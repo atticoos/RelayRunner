@@ -21,9 +21,8 @@ export type FreeCheckSavings = {
   days: number;
   /** The runner and rate each check is priced at. */
   runner: { label: string; perMinute: number };
+  /** Check runs, each one billed minute saved, public repos included. */
   checks: number;
-  /** Billed minutes, public repos included. */
-  savedMinutes: number;
   /** USD, after free public-repo minutes. */
   savedCost: number;
   byRepository: {
@@ -46,7 +45,6 @@ export type UsageReport = {
     shortJobs: number;
     shortCost: number;
   }[];
-  freeChecks: FreeCheckSavings;
 };
 
 /** The workspace's finished jobs over the last `days` days. */
@@ -57,6 +55,23 @@ export function getUsage(days = 30) {
 /** The free checks' savings over the last `days` days. */
 export function getCheckSavings(days = 30) {
   return api<FreeCheckSavings>(`/usage/checks?days=${days}`);
+}
+
+/** Example savings for `VITE_AUTH_DISABLED=true` dev builds, which have no API. */
+export function sampleCheckSavings(days: number): FreeCheckSavings {
+  const perMinute = 0.006;
+  const app = Math.round(140 * (days / 30));
+  const docs = Math.round(60 * (days / 30));
+  return {
+    days,
+    runner: { label: "Linux 2-core", perMinute },
+    checks: app + docs,
+    savedCost: app * perMinute,
+    byRepository: [
+      { repository: "acme/app", private: true, checks: app, savedCost: app * perMinute },
+      { repository: "acme/docs", private: false, checks: docs, savedCost: 0 },
+    ],
+  };
 }
 
 /** "$0.074" under a dollar (a minute can cost $0.002), "$12.40" above. */

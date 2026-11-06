@@ -34,7 +34,13 @@ import {
   type ActivityPage,
 } from "@/lib/activity";
 import { authDisabled } from "@/lib/auth-client";
-import { getCheckSavings, minutes, money, type FreeCheckSavings } from "@/lib/usage";
+import {
+  getCheckSavings,
+  minutes,
+  money,
+  sampleCheckSavings,
+  type FreeCheckSavings,
+} from "@/lib/usage";
 import { failureText, jobNames, walkLines, walkSummary, type RouteWalk } from "@/lib/route-walk";
 
 // Fast enough that a push shows up within seconds, without a live connection.
@@ -67,7 +73,7 @@ function ActivityPage() {
 
   useEffect(() => {
     if (authDisabled) {
-      setSavings(sampleSavings);
+      setSavings(sampleCheckSavings(30));
       return;
     }
     getCheckSavings(30)
@@ -572,12 +578,11 @@ function SavingsBanner({ savings }: { savings: FreeCheckSavings }) {
       <Zap aria-hidden className="mr-1.5 inline size-3.5 align-[-0.15em] text-go" />
       Free checks saved{" "}
       <span className="font-medium tabular-nums">
-        {minutes(savings.savedMinutes)} billed {savings.savedMinutes === 1 ? "minute" : "minutes"}
+        {minutes(savings.checks)} billed {savings.checks === 1 ? "minute" : "minutes"}
       </span>
       {savings.savedCost > 0 && <span className="tabular-nums"> ({money(savings.savedCost)})</span>}{" "}
       <span className="text-muted-foreground">
-        over {savings.checks.toLocaleString()} check {savings.checks === 1 ? "run" : "runs"} in the
-        last {savings.days} days.
+        in the last {savings.days} days, one per check run.
       </span>{" "}
       <Link to="/usage" className="text-muted-foreground hover:text-foreground hover:underline">
         See usage
@@ -975,12 +980,3 @@ function samplePage(filter: ActivityFilter | undefined): ActivityPage {
     items: filter ? items.filter((item) => item.type.startsWith(`${filter}.`)) : items,
   };
 }
-
-const sampleSavings: FreeCheckSavings = {
-  days: 30,
-  runner: { label: "Linux 2-core", perMinute: 0.006 },
-  checks: 200,
-  savedMinutes: 200,
-  savedCost: 0.84,
-  byRepository: [],
-};

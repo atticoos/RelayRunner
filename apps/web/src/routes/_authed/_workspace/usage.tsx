@@ -6,35 +6,44 @@ import { Card } from "@/components/ui/card";
 import { authDisabled } from "@/lib/auth-client";
 import {
   type FreeCheckSavings,
+  getCheckSavings,
   getUsage,
   minutes,
   money,
   type UsageReport,
   type UsageRow,
+  sampleCheckSavings,
 } from "@/lib/usage";
 
 const RANGES = [7, 30, 90] as const;
 
+type UsageData = { report: UsageReport; checks: FreeCheckSavings };
+
+// The job report and what the free checks saved, over the same range.
+function load(days: number): Promise<UsageData> {
+  if (authDisabled)
+    return Promise.resolve({ report: sampleReport(days), checks: sampleCheckSavings(days) });
+  return Promise.all([getUsage(days), getCheckSavings(days)]).then(([report, checks]) => ({
+    report,
+    checks,
+  }));
+}
+
 export const Route = createFileRoute("/_authed/_workspace/usage")({
-  loader: (): Promise<UsageReport> =>
-    authDisabled ? Promise.resolve(sampleReport(30)) : getUsage(30),
+  loader: () => load(30),
   component: UsagePage,
 });
 
 function UsagePage() {
   const first = Route.useLoaderData();
-  const [report, setReport] = useState(first);
-  const [days, setDays] = useState<number>(first.days);
+  const [{ report, checks }, setData] = useState(first);
+  const [days, setDays] = useState<number>(first.report.days);
 
   function chooseRange(next: number) {
     if (next === days) return;
     setDays(next);
-    if (authDisabled) {
-      setReport(sampleReport(next));
-      return;
-    }
-    getUsage(next)
-      .then(setReport)
+    load(next)
+      .then(setData)
       .catch(() => undefined);
   }
 
@@ -62,7 +71,7 @@ function UsagePage() {
           ))}
         </div>
 
-        {report.freeChecks.checks > 0 && <FreeChecks savings={report.freeChecks} />}
+        {checks.checks > 0 && <FreeChecks savings={checks} />}
 
         {totals.jobs === 0 ? (
           <p className="rounded-xl border bg-card px-4 py-6 text-sm text-muted-foreground">
@@ -145,7 +154,7 @@ function FreeChecks({ savings }: { savings: FreeCheckSavings }) {
         />
         <Stat
           label="Billed minutes saved"
-          value={minutes(savings.savedMinutes)}
+          value={minutes(savings.checks)}
           detail={`one ${runner.label} minute per check`}
         />
         <Stat
@@ -286,23 +295,6 @@ function sampleReport(days: number): UsageReport {
     byRepository: [
       { repository: "acme/app", private: true, jobs: 1800, shortJobs: 1100, shortCost: 8.9 },
       { repository: "acme/docs", private: false, jobs: 400, shortJobs: 380, shortCost: 0 },
-    ],
-    freeChecks: sampleChecks(days),
-  };
-}
-
-function sampleChecks(days: number): FreeCheckSavings {
-  const app = Math.round(140 * (days / 30));
-  const docs = Math.round(60 * (days / 30));
-  return {
-    days,
-    runner: { label: "Linux 2-core", perMinute: 0.006 },
-    checks: app + docs,
-    savedMinutes: app + docs,
-    savedCost: app * 0.006,
-    byRepository: [
-      { repository: "acme/app", private: true, checks: app, savedCost: app * 0.006 },
-      { repository: "acme/docs", private: false, checks: docs, savedCost: 0 },
     ],
   };
 }

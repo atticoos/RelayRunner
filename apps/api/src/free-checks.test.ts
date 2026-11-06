@@ -3,7 +3,6 @@ import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { createDb, schema } from "./db/index.ts";
 import type { Env } from "./env.ts";
 import { type FreeCheck, type FreeCheckSavings, recordFreeCheck } from "./free-checks.ts";
-import type { UsageReport } from "./job-timings.ts";
 import * as testing from "./testing.ts";
 
 let proxy: Awaited<ReturnType<typeof testing.startD1>>["proxy"];
@@ -54,7 +53,8 @@ function check(installationId: number, repo: "private" | "public" | "unmirrored"
   const offset = { private: 0, public: 1, unmirrored: 2 }[repo];
   return {
     check: "PR title",
-    repository: { id: installationId * 10 + offset, fullName: `acme/${repo}` },
+    repository: `acme/${repo}`,
+    repositoryId: installationId * 10 + offset,
     pullRequest: 12,
     headSha: "abc123",
     conclusion: "success",
@@ -83,7 +83,6 @@ describe("free check savings", () => {
       days: 30,
       runner: { label: "Linux 2-core", perMinute: 0.006 },
       checks: 4,
-      savedMinutes: 4,
       savedCost: 0.018,
     });
     expect(savings.byRepository).toEqual([
@@ -91,9 +90,6 @@ describe("free check savings", () => {
       { repository: "acme/unmirrored", private: null, checks: 1, savedCost: 0.006 },
       { repository: "acme/public", private: false, checks: 1, savedCost: 0 },
     ]);
-
-    const report = await get<UsageReport & { freeChecks: FreeCheckSavings }>("/usage", cookie);
-    expect(report.freeChecks).toEqual(savings);
   });
 
   test("logs each check run on the Activity page", async () => {
