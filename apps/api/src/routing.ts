@@ -15,6 +15,7 @@ import {
   type RunnerKey,
   type RunnerOrder,
 } from "@relayrunner/runner-order";
+import { context, scalar } from "./pipeline-context.ts";
 
 export const ROUTE_LABEL_PREFIX = "rr-";
 // 12 lowercase hex characters.
@@ -196,18 +197,17 @@ export interface JobContext {
   github: string[];
 }
 
-// The job message carries its expression contexts in `contextData`, as the runner's
-// PipelineContextData JSON: a dictionary is {t: 2, d: [{k, v}]}, a string is a bare JSON string,
-// and a number is {t: 4, n}. Returns null when `github.repository` or `github.run_id` is missing.
+// Reads the job message's `contextData` (src/pipeline-context.ts). Returns null when
+// `github.repository` or `github.run_id` is missing.
 // Missing `inputs` (a relay older than per-provider inputs) reads as no labels.
 export function jobContext(contextData: unknown): JobContext | null {
-  const github = dictionary(isRecord(contextData) ? contextData.github : undefined);
+  const github = context(contextData, "github");
   if (!github) return null;
   const repo = scalar(github.get("repository"));
   const runId = Number(scalar(github.get("run_id")));
   if (typeof repo !== "string" || !repo.includes("/") || !Number.isSafeInteger(runId) || runId <= 0)
     return null;
-  const inputs = dictionary(isRecord(contextData) ? contextData.inputs : undefined);
+  const inputs = context(contextData, "inputs");
   const runAttempt = Number(scalar(github.get("run_attempt")));
   const workflow = scalar(github.get("workflow"));
   return {
@@ -218,27 +218,6 @@ export function jobContext(contextData: unknown): JobContext | null {
     machine: parseLabels(scalar(inputs?.get("machine"))),
     github: parseLabels(scalar(inputs?.get("github"))),
   };
-}
-
-function dictionary(value: unknown): Map<string, unknown> | null {
-  if (!isRecord(value) || !Array.isArray(value.d)) return null;
-  const entries = new Map<string, unknown>();
-  for (const entry of value.d)
-    if (isRecord(entry) && typeof entry.k === "string") entries.set(entry.k, entry.v);
-  return entries;
-}
-
-function scalar(value: unknown): string | number | undefined {
-  if (typeof value === "string" || typeof value === "number") return value;
-  if (isRecord(value)) {
-    if (typeof value.s === "string") return value.s;
-    if (typeof value.n === "number") return value.n;
-  }
-  return undefined;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }
 
 // Why a step of the order didn't answer: not_configured (the relay left the provider's input

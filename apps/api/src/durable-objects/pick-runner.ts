@@ -14,6 +14,7 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import { createDb, schema } from "../db/index.ts";
 import { recordPick, type PickRecord } from "../route-decisions.ts";
 import { jobContext, NO_RUNNER, type RouteDecision } from "../routing.ts";
+import { nativeVerdict } from "../native-checks.ts";
 
 export interface PickWork {
   jobId: number;
@@ -29,6 +30,8 @@ const WAIT_FOR_JOB_MS = 4 * 60_000;
 // on the `relayrunner` label, claims a job, and reports the route as its `runner` output without
 // running any steps. GitHub hands a runner any pending job with its label, so the job it claims
 // may be another repo's in the same org. The route is for the claimed job's own repo and run.
+// A claimed job whose steps are RelayRunner checks (src/native-checks.ts) is answered here instead:
+// the check runs in this object and the job completes as passed or failed, with no route.
 export class PickRunner extends DurableObject<Env> {
   // Idempotent: a redelivered or retried `queued` webhook for the same job does nothing.
   async start(work: PickWork): Promise<void> {
@@ -64,45 +67,51 @@ export class PickRunner extends DurableObject<Env> {
       client = new RunnerClient(decodeJitConfig(jit.encodedJitConfig), await latestRunnerVersion());
       await client.openSession();
       const request = await waitForJob(client);
-      if (request) {
-        const job = await client.claim(request);
-        const { record, ...pick } = await pickRunner(
-          this.env,
-          work.installationId,
-          job.message.contextData,
-        );
-        if (pick.runner) {
-          await client.complete(job, "succeeded", { outputs: { runner: pick.runner } });
+      const job = request ? await client.claim(request) : null;
+      if (job) {
+        const native = nativeVerdict(job.message.steps, job.message.contextData);
+        if (native) {
+          // A native check: answer it here instead of routing it. Nothing runs on a VM.
+          const { result } = native;
+          await client.complete(job, result.ok ? "succeeded" : "failed", {
+            error: result.ok ? undefined : result.reason,
+          });
+          outcome = {
+            result: result.ok ? "check_passed" : "check_failed",
+            checks: native.checks,
+            reason: result.ok ? undefined : result.reason,
+          };
         } else {
-          // Fail fast: the job that needs the relay doesn't start. If GitHub turns the annotation
-          // down, fail without it rather than leave the relay running.
-          const failed = client;
-          await failed
-            .complete(job, "failed", { error: pick.reason })
-            .catch(() => failed.complete(job, "failed"));
-        }
-        outcome = {
-          result: pick.runner ? "routed" : "no_runner",
-          ...pick,
-          claimedJob: job.message.jobDisplayName,
-          runnerLabels: jit.labels,
-        };
-        runnerId = undefined; // GitHub removes a JIT runner once its job is done.
-        // For the Activity page. The relay is already answered, so a failure here only loses the
-        // explanation.
-        if (record)
-          await recordPick(createDb(this.env.DB), {
-            ...record,
-            jobName: job.message.jobDisplayName || null,
-          }).catch((error) =>
-            console.error(
-              JSON.stringify({
-                msg: "relayrunner pick not recorded",
-                jobId: work.jobId,
-                error: error instanceof Error ? error.message : String(error),
-              }),
-            ),
+          const { record, ...pick } = await pickRunner(
+            this.env,
+            work.installationId,
+            job.message.contextData,
           );
+          // Fail fast without a runner: the job that needs the relay doesn't start.
+          await client.complete(
+            job,
+            pick.runner ? "succeeded" : "failed",
+            pick.runner ? { outputs: { runner: pick.runner } } : { error: pick.reason },
+          );
+          outcome = { result: pick.runner ? "routed" : "no_runner", ...pick };
+          // For the Activity page. The relay is already answered, so a failure here only loses the
+          // explanation.
+          if (record)
+            await recordPick(createDb(this.env.DB), {
+              ...record,
+              jobName: job.message.jobDisplayName || null,
+            }).catch((error) =>
+              console.error(
+                JSON.stringify({
+                  msg: "relayrunner pick not recorded",
+                  jobId: work.jobId,
+                  error: error instanceof Error ? error.message : String(error),
+                }),
+              ),
+            );
+        }
+        outcome = { ...outcome, claimedJob: job.message.jobDisplayName, runnerLabels: jit.labels };
+        runnerId = undefined; // GitHub removes a JIT runner once its job is done.
       }
     } catch (error) {
       outcome = { result: "error", error: error instanceof Error ? error.message : String(error) };
