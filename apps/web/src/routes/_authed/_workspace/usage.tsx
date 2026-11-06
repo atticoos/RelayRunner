@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { type ReactNode, useState } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { authDisabled } from "@/lib/auth-client";
 import { getUsage, minutes, money, type UsageReport, type UsageRow } from "@/lib/usage";
 
@@ -128,11 +129,11 @@ function UsagePage() {
 
 function Stat({ label, value, detail }: { label: string; value: string; detail: string }) {
   return (
-    <div className="rounded-xl border bg-card px-4 py-3">
+    <Card className="gap-0 px-4 py-3">
       <div className="text-sm text-muted-foreground">{label}</div>
       <div className="mt-1 text-2xl font-bold tabular-nums">{value}</div>
       <div className="mt-0.5 text-sm text-muted-foreground">{detail}</div>
-    </div>
+    </Card>
   );
 }
 
@@ -173,6 +174,17 @@ function Table({ caption, head, rows }: { caption: string; head: string[]; rows:
   );
 }
 
+const TOTAL_KEYS = [
+  "jobs",
+  "shortJobs",
+  "runSeconds",
+  "billedMinutes",
+  "shortBilledMinutes",
+  "cost",
+  "shortCost",
+  "roundingCost",
+] as const satisfies (keyof UsageReport["totals"])[];
+
 // For local development without an API (auth disabled).
 function sampleReport(days: number): UsageReport {
   const scale = days / 30;
@@ -206,22 +218,12 @@ function sampleReport(days: number): UsageReport {
     row("linux-2-core", "Linux 2-core", 0.006, 2400, 1500, 6200),
     row("self-hosted", "Self-hosted", 0, 300, 90, 1400),
   ];
-  const sum = (key: keyof UsageReport["totals"]) =>
-    byRunner.reduce((total, r) => total + r[key], 0);
   return {
     days,
-    since: new Date(Date.now() - days * 86_400_000).toISOString(),
     shortJobSeconds: 60,
-    totals: {
-      jobs: sum("jobs"),
-      shortJobs: sum("shortJobs"),
-      runSeconds: sum("runSeconds"),
-      billedMinutes: sum("billedMinutes"),
-      shortBilledMinutes: sum("shortBilledMinutes"),
-      cost: sum("cost"),
-      shortCost: sum("shortCost"),
-      roundingCost: sum("roundingCost"),
-    },
+    totals: Object.fromEntries(
+      TOTAL_KEYS.map((key) => [key, byRunner.reduce((total, r) => total + r[key], 0)]),
+    ) as UsageReport["totals"],
     byRunner,
     byRepository: [
       { repository: "acme/app", private: true, jobs: 1800, shortJobs: 1100, shortCost: 8.9 },

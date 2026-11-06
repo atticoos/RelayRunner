@@ -296,19 +296,20 @@ export const jobTiming = sqliteTable(
     name: text("name").notNull(),
     // The job's runs-on labels, as a JSON array.
     labels: text("labels", { mode: "json" }).$type<string[]>().notNull(),
-    // Which GitHub rate the job pays, from its labels and runner group (see runnerClass). Rates
-    // are applied when the report is read, so a price change needs no backfill.
-    runnerClass: text("runner_class").notNull(),
-    // Always 'completed' today; kept so earlier states can be stored later.
-    status: text("status").notNull(),
     conclusion: text("conclusion"),
     runnerName: text("runner_name"),
+    // With labels, decides the job's GitHub rate when the report is read (runnerClass).
     runnerGroupName: text("runner_group_name"),
     startedAt: integer("started_at", { mode: "timestamp_ms" }),
     completedAt: integer("completed_at", { mode: "timestamp_ms" }),
     ...timestamps,
   },
-  (table) => [index("job_timing_installation_idx").on(table.installationId, table.completedAt)],
+  (table) => [
+    // The report: one workspace's installations over a time range.
+    index("job_timing_installation_idx").on(table.installationId, table.completedAt),
+    // The retention purge, across all installations.
+    index("job_timing_completed_idx").on(table.completedAt),
+  ],
 );
 
 // The workspace's audit log for the Activity page: one append-only row per event, typed by

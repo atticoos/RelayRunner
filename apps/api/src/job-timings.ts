@@ -2,10 +2,13 @@ import type { WebhookMessage } from "@relayrunner/github-webhooks";
 import { and, eq, gte, inArray, isNotNull, lt, ne, sql } from "drizzle-orm";
 import { type Db, schema } from "./db/index.ts";
 import { findInstallation } from "./installations.ts";
+import { parseDate } from "./jobs.ts";
+import { routeIdFromLabels } from "./routing.ts";
 
 type WorkflowJobMessage = Extract<WebhookMessage, { event: "workflow_job" }>;
 
 const table = schema.jobTiming;
+const DAY_MS = 86_400_000;
 
 // GitHub bills a job by the minute, rounded up. A job that finishes in under this is the free-checks
 // opportunity: it pays for a whole minute however little of it ran.
@@ -38,13 +41,14 @@ export const RUNNER_RATES: Record<RunnerClass, { label: string; perMinute: numbe
 
 const GITHUB_HOSTED_GROUP = "GitHub Actions";
 
-/** Classifies a job by its runs-on labels and, once a runner took it, the runner's group. */
+/**
+ * Classifies a job by its runs-on labels and, once a runner took it, the runner's group. Applied when
+ * the report is read, so changing the rules or the rates needs no backfill.
+ */
 export function runnerClass(labels: string[], runnerGroupName?: string | null): RunnerClass {
   const lower = labels.map((label) => label.toLowerCase());
-  if (
-    lower.some((label) => label === "self-hosted" || label === "relayrunner") ||
-    lower.some((label) => label.startsWith("rr-"))
-  )
+  // A pick (`runs-on: relayrunner`) or a route's machine is self-hosted too.
+  if (lower.includes("self-hosted") || lower.includes("relayrunner") || routeIdFromLabels(labels))
     return "self-hosted";
   // A runner group other than GitHub's own means the org's runners, unless the labels name a hosted
   // image (larger hosted runners can sit in custom groups).
@@ -80,8 +84,6 @@ export async function recordJobTiming(db: Db, message: WorkflowJobMessage): Prom
       workflowName: job.workflowName,
       name: job.name,
       labels: job.labels,
-      runnerClass: runnerClass(job.labels, job.runnerGroupName),
-      status: job.status,
       conclusion: job.conclusion,
       runnerName: job.runnerName,
       runnerGroupName: job.runnerGroupName ?? null,
@@ -99,7 +101,7 @@ const PURGE_BATCH = 5_000;
 
 /** Deletes job timings older than the retention window. Returns how many rows went. */
 export async function purgeOldJobTimings(db: Db, now = Date.now()): Promise<number> {
-  const cutoff = new Date(now - JOB_TIMING_RETENTION_DAYS * 86_400_000);
+  const cutoff = new Date(now - JOB_TIMING_RETENTION_DAYS * DAY_MS);
   let deleted = 0;
   for (let i = 0; i < 10; i += 1) {
     const result = await db
@@ -121,31 +123,35 @@ export async function purgeOldJobTimings(db: Db, now = Date.now()): Promise<numb
   return deleted;
 }
 
-export interface UsageRow {
+// The per-job sums a report row carries, all starting at zero.
+const COUNTERS = [
+  "jobs",
+  "shortJobs",
+  "runSeconds",
+  "billedMinutes",
+  "shortBilledMinutes",
+  "cost",
+  "shortCost",
+  "roundingCost",
+] as const;
+type Counters = Record<(typeof COUNTERS)[number], number>;
+
+export interface UsageRow extends Counters {
   runnerClass: RunnerClass;
   label: string;
   /** USD per minute in a private repo. */
   perMinute: number;
-  jobs: number;
-  shortJobs: number;
-  /** Seconds the jobs actually ran. */
-  runSeconds: number;
-  /** Whole minutes GitHub bills after rounding each job up. */
-  billedMinutes: number;
-  /** The billed minutes of jobs that ran under a minute (one each). */
-  shortBilledMinutes: number;
-  /** Estimated USD, after free public-repo minutes. */
-  cost: number;
-  shortCost: number;
-  /** What rounding up added on top of the time the jobs ran. */
-  roundingCost: number;
 }
 
 export interface UsageReport {
   days: number;
-  since: string;
   shortJobSeconds: number;
-  totals: Omit<UsageRow, "runnerClass" | "label" | "perMinute">;
+  /**
+   * runSeconds: time the jobs ran. billedMinutes: after rounding each job up. shortBilledMinutes:
+   * the billed minutes of jobs under a minute. cost, shortCost: estimated USD after free
+   * public-repo minutes. roundingCost: what rounding up added on top of the time run.
+   */
+  totals: Counters;
   byRunner: UsageRow[];
   /** Repos with the most short-job cost first. */
   byRepository: {
@@ -160,20 +166,20 @@ export interface UsageReport {
 /**
  * The workspace's finished jobs from the last `days` days: how many ran under a minute, and what
  * GitHub's round-up cost. Counts only jobs a runner ran (not skipped, not cancelled while queued).
+ * Sums are grouped by the columns runnerClass reads, so classification happens per group, not per
+ * job.
  */
 export async function usageReport(db: Db, workspaceId: string, days = 30): Promise<UsageReport> {
-  const since = new Date(Date.now() - days * 86_400_000);
+  const since = new Date(Date.now() - days * DAY_MS);
   const durationMs = sql`max(0, ${table.completedAt} - ${table.startedAt})`;
   const billed = sql`max(1, (${durationMs} + 59999) / 60000)`;
   const isShort = sql`(${durationMs} < ${SHORT_JOB_SECONDS * 1000})`;
-  // Unknown visibility counts as private, so a missing mirror row never hides a cost.
-  const isPublic = sql`coalesce(${schema.githubRepository.private}, 1) = 0`;
   const rows = await db
     .select({
-      runnerClass: table.runnerClass,
+      labels: table.labels,
+      runnerGroupName: table.runnerGroupName,
       repository: table.repositoryFullName,
       private: schema.githubRepository.private,
-      isPublic: sql<number>`${isPublic}`,
       jobs: sql<number>`count(*)`,
       shortJobs: sql<number>`sum(${isShort})`,
       runMs: sql<number>`sum(${durationMs})`,
@@ -192,29 +198,42 @@ export async function usageReport(db: Db, workspaceId: string, days = 30): Promi
         ne(sql`coalesce(${table.conclusion}, '')`, "skipped"),
       ),
     )
-    .groupBy(table.runnerClass, table.repositoryFullName, schema.githubRepository.private);
+    .groupBy(
+      table.labels,
+      table.runnerGroupName,
+      table.repositoryFullName,
+      schema.githubRepository.private,
+    );
 
+  const totals = zero();
   const byRunner = new Map<RunnerClass, UsageRow>();
   const byRepository = new Map<string, UsageReport["byRepository"][number]>();
   for (const row of rows) {
-    const cls = (row.runnerClass in RUNNER_RATES ? row.runnerClass : "other") as RunnerClass;
-    const rate = RUNNER_RATES[cls];
-    const perMinute = row.isPublic ? 0 : rate.perMinute;
+    const cls = runnerClass(row.labels, row.runnerGroupName);
+    // Unknown visibility counts as private, so a missing mirror row never hides a cost.
+    const perMinute = row.private === false ? 0 : RUNNER_RATES[cls].perMinute;
     const runSeconds = Number(row.runMs) / 1000;
     const billedMinutes = Number(row.billedMinutes);
     const shortBilledMinutes = Number(row.shortBilledMinutes);
-    const jobs = Number(row.jobs);
-    const shortJobs = Number(row.shortJobs);
-    const entry = byRunner.get(cls) ?? emptyRow(cls);
-    entry.jobs += jobs;
-    entry.shortJobs += shortJobs;
-    entry.runSeconds += runSeconds;
-    entry.billedMinutes += billedMinutes;
-    entry.shortBilledMinutes += shortBilledMinutes;
-    entry.cost += billedMinutes * perMinute;
-    entry.shortCost += shortBilledMinutes * perMinute;
-    entry.roundingCost += (billedMinutes - runSeconds / 60) * perMinute;
-    byRunner.set(cls, entry);
+    const sums: Counters = {
+      jobs: Number(row.jobs),
+      shortJobs: Number(row.shortJobs),
+      runSeconds,
+      billedMinutes,
+      shortBilledMinutes,
+      cost: billedMinutes * perMinute,
+      shortCost: shortBilledMinutes * perMinute,
+      roundingCost: (billedMinutes - runSeconds / 60) * perMinute,
+    };
+    add(totals, sums);
+    const runner = byRunner.get(cls) ?? {
+      runnerClass: cls,
+      label: RUNNER_RATES[cls].label,
+      perMinute: RUNNER_RATES[cls].perMinute,
+      ...zero(),
+    };
+    add(runner, sums);
+    byRunner.set(cls, runner);
 
     const repo = byRepository.get(row.repository) ?? {
       repository: row.repository,
@@ -223,43 +242,19 @@ export async function usageReport(db: Db, workspaceId: string, days = 30): Promi
       shortJobs: 0,
       shortCost: 0,
     };
-    repo.jobs += jobs;
-    repo.shortJobs += shortJobs;
-    repo.shortCost += shortBilledMinutes * perMinute;
+    repo.jobs += sums.jobs;
+    repo.shortJobs += sums.shortJobs;
+    repo.shortCost += sums.shortCost;
     byRepository.set(row.repository, repo);
   }
 
-  const runners = [...byRunner.values()]
-    .map(roundMoney)
-    .sort((a, b) => b.shortCost - a.shortCost || b.jobs - a.jobs);
-  const totals = runners.reduce(
-    (sum, row) => ({
-      jobs: sum.jobs + row.jobs,
-      shortJobs: sum.shortJobs + row.shortJobs,
-      runSeconds: sum.runSeconds + row.runSeconds,
-      billedMinutes: sum.billedMinutes + row.billedMinutes,
-      shortBilledMinutes: sum.shortBilledMinutes + row.shortBilledMinutes,
-      cost: sum.cost + row.cost,
-      shortCost: sum.shortCost + row.shortCost,
-      roundingCost: sum.roundingCost + row.roundingCost,
-    }),
-    {
-      jobs: 0,
-      shortJobs: 0,
-      runSeconds: 0,
-      billedMinutes: 0,
-      shortBilledMinutes: 0,
-      cost: 0,
-      shortCost: 0,
-      roundingCost: 0,
-    },
-  );
   return {
     days,
-    since: since.toISOString(),
     shortJobSeconds: SHORT_JOB_SECONDS,
-    totals: roundMoney(totals),
-    byRunner: runners,
+    totals: rounded(totals),
+    byRunner: [...byRunner.values()]
+      .map(rounded)
+      .sort((a, b) => b.shortCost - a.shortCost || b.jobs - a.jobs),
     byRepository: [...byRepository.values()]
       .map((repo) => ({ ...repo, shortCost: cents(repo.shortCost) }))
       .sort((a, b) => b.shortCost - a.shortCost || b.shortJobs - a.shortJobs)
@@ -267,20 +262,12 @@ export async function usageReport(db: Db, workspaceId: string, days = 30): Promi
   };
 }
 
-function emptyRow(cls: RunnerClass): UsageRow {
-  return {
-    runnerClass: cls,
-    label: RUNNER_RATES[cls].label,
-    perMinute: RUNNER_RATES[cls].perMinute,
-    jobs: 0,
-    shortJobs: 0,
-    runSeconds: 0,
-    billedMinutes: 0,
-    shortBilledMinutes: 0,
-    cost: 0,
-    shortCost: 0,
-    roundingCost: 0,
-  };
+function zero(): Counters {
+  return Object.fromEntries(COUNTERS.map((key) => [key, 0])) as Counters;
+}
+
+function add(into: Counters, sums: Counters) {
+  for (const key of COUNTERS) into[key] += sums[key];
 }
 
 // Keeps sub-cent precision (a 1-core minute is $0.002) without float noise.
@@ -288,9 +275,7 @@ function cents(value: number) {
   return Math.round(value * 1000) / 1000;
 }
 
-function roundMoney<
-  T extends { cost: number; shortCost: number; roundingCost: number; runSeconds: number },
->(row: T): T {
+function rounded<T extends Counters>(row: T): T {
   return {
     ...row,
     cost: cents(row.cost),
@@ -298,10 +283,4 @@ function roundMoney<
     roundingCost: cents(row.roundingCost),
     runSeconds: Math.round(row.runSeconds),
   };
-}
-
-function parseDate(value: string | null | undefined) {
-  if (!value) return null;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date;
 }

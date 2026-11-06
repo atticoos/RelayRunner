@@ -23,7 +23,7 @@ describe("runnerClass", () => {
     [["macOS-latest"], null, "macos"],
     [["self-hosted", "linux"], null, "self-hosted"],
     [["RelayRunner"], null, "self-hosted"],
-    [["rr-abc123"], null, "self-hosted"],
+    [["rr-0123456789ab"], null, "self-hosted"],
     [["build-box"], "Default", "self-hosted"],
     [["ubuntu-latest-8-cores"], "GitHub Actions", "other"],
     [["build-box"], null, "other"],

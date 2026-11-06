@@ -133,9 +133,12 @@ export async function processWebhook(env: Env, message: WebhookMessage): Promise
       // every other job the App sees is some other runner's, so recordWorkflowJob drops it.
       const isPick = usesRelayRunner(message.job.labels);
       const db = createDb(env.DB);
-      // Every job's timing, ours or not, for the short-jobs usage report.
-      await recordJobTiming(db, message);
-      await recordWorkflowJob(db, message, isPick);
+      // A finished job's timing, ours or not, goes to the usage report too. The two writes touch
+      // separate tables, so they run together.
+      await Promise.all([
+        recordWorkflowJob(db, message, isPick),
+        message.job.status === "completed" ? recordJobTiming(db, message) : null,
+      ]);
       // A job on a route's `rr-<id>` label: the run's pick chose a machine for it.
       const routeId = routeIdFromLabels(message.job.labels);
       if (routeId) return dispatchRoute(env, message, routeId, lagMs);

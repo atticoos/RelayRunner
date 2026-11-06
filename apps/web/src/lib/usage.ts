@@ -18,7 +18,6 @@ export type UsageRow = {
 
 export type UsageReport = {
   days: number;
-  since: string;
   shortJobSeconds: number;
   totals: Omit<UsageRow, "runnerClass" | "label" | "perMinute">;
   byRunner: UsageRow[];

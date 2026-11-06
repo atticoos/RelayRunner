@@ -110,7 +110,7 @@ async function runHasPick(db: Db, runId: number) {
   return Boolean(pick);
 }
 
-function parseDate(value: string | null | undefined) {
+export function parseDate(value: string | null | undefined) {
   if (!value) return null;
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;

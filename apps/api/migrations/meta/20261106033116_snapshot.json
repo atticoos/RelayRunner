@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "f40723fd-c64c-4255-aa46-f76522beca31",
+  "id": "f309d549-1f2d-488d-a031-f1532b1189d0",
   "prevId": "e65351f9-960f-47dc-b6ec-efe32de2491b",
   "tables": {
     "account": {
@@ -635,20 +635,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "runner_class": {
-          "name": "runner_class",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
         "conclusion": {
           "name": "conclusion",
           "type": "text",
@@ -704,6 +690,13 @@
           "name": "job_timing_installation_idx",
           "columns": [
             "installation_id",
+            "completed_at"
+          ],
+          "isUnique": false
+        },
+        "job_timing_completed_idx": {
+          "name": "job_timing_completed_idx",
+          "columns": [
             "completed_at"
           ],
           "isUnique": false

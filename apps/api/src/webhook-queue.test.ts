@@ -54,7 +54,7 @@ function workflowJob(labels: string[], action = "queued"): WebhookMessage {
       runAttempt: 1,
       name: "pick",
       workflowName: "RelayRunner dev",
-      status: "queued",
+      status: action,
       conclusion: null,
       labels,
       headBranch: "main",
@@ -123,7 +123,9 @@ describe("webhook queue consumer", () => {
     vi.mocked(recordJobTiming).mockClear();
     await consumer.processWebhook(env, workflowJob(["ubuntu-latest"]));
     expect(recordWorkflowJob).toHaveBeenCalledWith(expect.anything(), expect.anything(), false);
-    // Its timing is kept for the usage report even though RelayRunner didn't route it.
+    expect(recordJobTiming).not.toHaveBeenCalled();
+    // Once finished, its timing is kept for the usage report even though RelayRunner didn't route it.
+    await consumer.processWebhook(env, workflowJob(["ubuntu-latest"], "completed"));
     expect(recordJobTiming).toHaveBeenCalledOnce();
     expect(log).not.toHaveBeenCalled();
     expect(start).not.toHaveBeenCalled();
