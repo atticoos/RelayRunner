@@ -16,7 +16,7 @@ The API and webhooks Workers set `"preview_urls": false`, so they have no previe
 
 ## Admin views
 
-Paths under `/admin` and `/api/admin` on the dashboard Worker are for RelayRunner operators. Operators see an Admin section in the dashboard sidebar. Who counts as an operator is the `OPERATOR_GITHUB_IDS` var in `apps/api/wrangler.jsonc`, a comma-separated list of GitHub user IDs, which `GET /api/me` reports as `operator`. That list only decides who sees the links. Access decides who gets in. The old `/dev/*` paths redirect to `/admin/*`.
+Paths under `/admin` and `/api/admin` on the dashboard Worker are for RelayRunner operators. Operators see an Admin section in the dashboard sidebar. Operators are users whose `role` column in the D1 `user` table is `operator`, which `GET /api/me` reports as `operator: true`. Grant it with SQL, for example `wrangler d1 execute relayrunner --remote --command "update user set role = 'operator' where email = '...'"`. That list only decides who sees the links. Access decides who gets in. The old `/dev/*` paths redirect to `/admin/*`.
 
 `packages/access` checks the `Cf-Access-Jwt-Assertion` JWT that Access adds to each request it lets through:
 

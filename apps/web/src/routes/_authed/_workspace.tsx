@@ -42,7 +42,7 @@ const nav = [
   { to: "/usage", label: "Usage" },
 ] as const;
 
-// Operators only (OPERATOR_GITHUB_IDS in apps/api). Cloudflare Access still gates these pages.
+// Operators only (user.role = "operator", apps/api/src/operators.ts). Cloudflare Access still gates these pages.
 const adminNav = [{ to: "/admin/webhooks", label: "Webhooks" }] as const;
 
 const navLink =

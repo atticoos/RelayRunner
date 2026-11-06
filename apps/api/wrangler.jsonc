@@ -49,10 +49,6 @@
     // this Worker's own URLs, or from the dashboard's workers.dev host, carry no JWT and get 403.
     "ACCESS_TEAM_DOMAIN": "relayrunner.cloudflareaccess.com",
     "ACCESS_AUD": "bc8e87c4c78375b0b1e61b4a2a73354543030492e218d02a28c56bc0f95702f7, 45a666d9534b30a03ef5e04e9ce04da805afa430d00b6bffddeb245aef130460",
-    // GitHub user IDs of operators (src/operators.ts), who see the Admin section in the dashboard
-    // sidebar: zachdunn and atticoos. IDs, not logins, because logins can be renamed and reused.
-    // Access still gates /admin and /api/admin; this only decides who sees the link.
-    "OPERATOR_GITHUB_IDS": "138033, 656630",
     // Alert when at least this many webhook deliveries are dead-lettered in an hour
     // (src/dead-letter-alert.ts). Set DEAD_LETTER_ALERT_WEBHOOK_URL with `wrangler secret put` to
     // also post the alert to a Slack or Discord incoming webhook.

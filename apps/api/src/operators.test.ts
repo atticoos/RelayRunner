@@ -13,30 +13,18 @@ afterAll(async () => {
   await proxy?.dispose();
 });
 
-async function githubId(userId: string) {
-  const row = await env.DB.prepare(
-    "select account_id from account where user_id = ? and provider_id = 'github'",
-  )
-    .bind(userId)
-    .first<{ account_id: string }>();
-  return row!.account_id;
-}
+const operatorFlag = async (cookie: string) =>
+  ((await (await testing.call(env, "/me", cookie)).json()) as { operator: boolean }).operator;
 
 describe("GET /api/me operator", () => {
-  test("is true only for a user whose GitHub ID is in OPERATOR_GITHUB_IDS", async () => {
+  test("is true only for a user whose role is operator", async () => {
     const operator = await testing.signIn(env);
     const other = await testing.signIn(env);
-    const withOperators = {
-      ...env,
-      OPERATOR_GITHUB_IDS: ` 1, ${await githubId(operator.user.id)} `,
-    };
+    await env.DB.prepare("update user set role = 'operator' where id = ?")
+      .bind(operator.user.id)
+      .run();
 
-    const me = async (cookie: string, target: Env) =>
-      ((await (await testing.call(target, "/me", cookie)).json()) as { operator: boolean })
-        .operator;
-
-    expect(await me(operator.cookie, withOperators)).toBe(true);
-    expect(await me(other.cookie, withOperators)).toBe(false);
-    expect(await me(operator.cookie, { ...env, OPERATOR_GITHUB_IDS: undefined })).toBe(false);
+    expect(await operatorFlag(operator.cookie)).toBe(true);
+    expect(await operatorFlag(other.cookie)).toBe(false);
   });
 });

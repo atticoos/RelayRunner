@@ -24,8 +24,6 @@ export interface Env extends AccessEnv {
   EMAIL_FROM?: string;
   // Optional: where operator alerts (webhook dead letters) are emailed. Unset skips them.
   OPERATOR_ALERT_EMAIL?: string;
-  // Comma-separated GitHub user IDs who see the dashboard's Admin section (src/operators.ts).
-  OPERATOR_GITHUB_IDS?: string;
   // The dashboard origin links in emails point at. Falls back to BETTER_AUTH_URL.
   DASHBOARD_URL?: string;
 
