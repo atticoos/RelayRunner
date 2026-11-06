@@ -76,7 +76,7 @@ const jobMachine = alias(schema.machine, "job_machine");
 
 /**
  * The workspace's Activity log, newest first. `before` is an event id from a previous page.
- * `filter` keeps one kind of event ('job', 'machine' or 'member').
+ * `filter` keeps one kind of event ('job', 'check', 'machine' or 'member').
  */
 export async function listActivity(
   db: Db,
