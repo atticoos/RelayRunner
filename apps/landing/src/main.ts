@@ -145,113 +145,7 @@ function setupQuota() {
   observer.observe(ticks);
 }
 
-/* ---------- Route spine and page-wide route state ---------- */
-
-function setupSpine() {
-  const main = document.querySelector<HTMLElement>("main");
-  const svg = document.querySelector<SVGSVGElement>("[data-spine]");
-  const base = document.querySelector<SVGPathElement>("[data-spine-base]");
-  const live = document.querySelector<SVGPathElement>("[data-spine-live]");
-  const flow = document.querySelector<SVGPathElement>("[data-spine-flow]");
-  const start = document.querySelector<HTMLElement>('[data-panel="local"]');
-  const quota = document.querySelector<HTMLElement>(".quota");
-  const close = document.querySelector<HTMLElement>(".close");
-  const fork = document.querySelector<HTMLElement>("[data-close-fork]");
-  const wrap = document.querySelector<HTMLElement>(".how");
-  if (!main || !svg || !base || !live || !flow || !start || !quota || !close || !fork || !wrap)
-    return;
-  const [mainEl, svgEl, baseEl, liveEl, flowEl, startEl, quotaEl, closeEl, forkEl, wrapEl] = [
-    main,
-    svg,
-    base,
-    live,
-    flow,
-    start,
-    quota,
-    close,
-    fork,
-    wrap,
-  ] as const;
-
-  let total = 0;
-  let samples: { y: number; at: number }[] = [];
-
-  function draw() {
-    const m = mainEl.getBoundingClientRect();
-    const rel = (el: Element) => {
-      const r = el.getBoundingClientRect();
-      return { x: r.left - m.left, y: r.top - m.top, w: r.width, h: r.height };
-    };
-    svgEl.setAttribute("viewBox", `0 0 ${m.width} ${m.height}`);
-    const s = rel(startEl);
-    const q = rel(quotaEl);
-    const c = rel(closeEl);
-    const f = rel(forkEl);
-    const gutter = Number.parseFloat(getComputedStyle(wrapEl).paddingLeft);
-    const rail = rel(wrapEl).x + gutter / 2;
-    const r = Math.min(28, gutter / 2 + 8);
-    const sx = s.x + s.w / 2;
-    const sy = s.y + s.h;
-    const y1 = q.y + 4;
-    const y2 = c.y + 8;
-    const cx = c.x + c.w / 2;
-    const d = `M${sx} ${sy} V${y1 - r} Q${sx} ${y1} ${sx - r} ${y1} H${rail + r} Q${rail} ${y1} ${rail} ${y1 + r} V${y2 - r} Q${rail} ${y2} ${rail + r} ${y2} H${cx - r} Q${cx} ${y2} ${cx} ${y2 + r} V${f.y + 8}`;
-    for (const path of [baseEl, liveEl, flowEl]) path.setAttribute("d", d);
-
-    const jy = f.y + 8;
-    for (const key of ["hosted", "local"] as const) {
-      const dest = forkEl.querySelector(`[data-dest="${key}"]`);
-      const branch = svgEl.querySelector(`[data-spine-branch="${key}"]`);
-      if (!dest || !branch) continue;
-      const b = rel(dest);
-      const bx = b.x + b.w / 2;
-      const mid = (b.y - jy) * 0.55;
-      branch.setAttribute("d", `M${cx} ${jy} C${cx} ${jy + mid} ${bx} ${b.y - mid} ${bx} ${b.y}`);
-    }
-
-    total = liveEl.getTotalLength();
-    liveEl.style.strokeDasharray = `${total} ${total}`;
-    samples = [];
-    for (let at = 0; at <= total; at += 24) samples.push({ y: liveEl.getPointAtLength(at).y, at });
-    progress();
-  }
-
-  function progress() {
-    if (reducedMotion.matches) {
-      liveEl.style.strokeDashoffset = "0";
-      return;
-    }
-    const line =
-      window.scrollY +
-      window.innerHeight * 0.72 -
-      (mainEl.getBoundingClientRect().top + window.scrollY);
-    let reached = 0;
-    for (const sample of samples) {
-      if (sample.y > line) break;
-      reached = sample.at;
-    }
-    if (window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 4)
-      reached = total;
-    liveEl.style.strokeDashoffset = String(total - reached);
-  }
-
-  let queued = false;
-  window.addEventListener(
-    "scroll",
-    () => {
-      if (queued) return;
-      queued = true;
-      requestAnimationFrame(() => {
-        queued = false;
-        progress();
-      });
-    },
-    { passive: true },
-  );
-  new ResizeObserver(draw).observe(document.body);
-  draw();
-  document.fonts?.ready.then(draw);
-}
+/* ---------- Page-wide route state ---------- */
 
 function setupRouteControls() {
   const label = document.querySelector<HTMLElement>("[data-route-label]");
@@ -276,11 +170,6 @@ function setupRouteControls() {
       const current = button.dataset.setRoute === route;
       button.disabled = current;
       button.textContent = current ? "Current route" : "Run in the demo";
-    }
-    for (const dest of document.querySelectorAll<HTMLElement>("[data-dest]"))
-      dest.setAttribute("aria-current", String(dest.dataset.dest === route));
-    for (const branch of document.querySelectorAll<SVGPathElement>("[data-spine-branch]")) {
-      branch.classList.toggle("active", branch.dataset.spineBranch === route);
     }
   });
 }
@@ -580,4 +469,3 @@ setupHeader();
 setupQuota();
 setupRouteControls();
 setupDemo();
-setupSpine();
